@@ -6,7 +6,9 @@ import random
 from logic.item_logic import ITEM_DATABASE
 
 class ChessBoard:
-    def __init__(self):
+    def __init__(self, white_tribe='medieval', black_tribe='medieval'):
+        self.white_tribe = white_tribe
+        self.black_tribe = black_tribe
         self.board = self.create_initial_board()
         self.current_turn = 'white'
         self.last_move = None
@@ -82,17 +84,17 @@ class ChessBoard:
             elif getattr(defender, 'item', None) and defender.item.id == 5:
                 defender.item = None
                 # ทิ้ง Pawn ของฝ่ายรับไว้ที่ช่องเริ่มต้นของฝ่ายรุก (เพราะฝ่ายรุกกำลังจะเดินไปยึดช่องเป้าหมาย)
-                self.board[sr][sc] = Pawn(defender.color, 'medieval') 
+                self.board[sr][sc] = Pawn(defender.color, self.black_tribe) 
                 return "defender_died"
             else:
                 return "defender_died"
 
     def create_initial_board(self):
         b = [[None for _ in range(8)] for _ in range(8)]
-        b[0] = [Rook('black'), Knight('black', 'medieval'), Bishop('black'), Queen('black'), King('black'), Bishop('black'), Knight('black', 'medieval'), Rook('black')]
-        b[1] = [Pawn('black', 'medieval') for _ in range(8)]
-        b[6] = [Pawn('white', 'medieval') for _ in range(8)]
-        b[7] = [Rook('white'), Knight('white', 'medieval'), Bishop('white'), Queen('white'), King('white'), Bishop('white'), Knight('white', 'medieval'), Rook('white')]
+        b[0] = [Rook('black', self.black_tribe), Knight('black', self.black_tribe), Bishop('black', self.black_tribe), Queen('black', self.black_tribe), King('black', self.black_tribe), Bishop('black', self.black_tribe), Knight('black', self.black_tribe), Rook('black', self.black_tribe)]
+        b[1] = [Pawn('black', self.black_tribe) for _ in range(8)]
+        b[6] = [Pawn('white', self.white_tribe) for _ in range(8)]
+        b[7] = [Rook('white', self.white_tribe), Knight('white', self.white_tribe), Bishop('white', self.white_tribe), Queen('white', self.white_tribe), King('white', self.white_tribe), Bishop('white', self.white_tribe), Knight('white', self.white_tribe), Rook('white', self.white_tribe)]
         return b
 
     def simulate_move(self, sr, sc, er, ec, color):
