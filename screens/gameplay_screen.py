@@ -82,6 +82,19 @@ class GameplayScreen(Screen):
         self.item_tooltip = None
         self.selected_item = None
 
+    def get_tribe_name(self, color):
+        """แปลงชื่อ faction เป็นชื่อ tribe"""
+        app = App.get_running_app()
+        theme = getattr(app, f'selected_unit_{color}', 'Medieval Knights')
+        if theme == "Ayothaya": 
+            return "ayothaya"
+        elif theme == "Demon": 
+            return "demon"
+        elif theme == "Heaven": 
+            return "heaven"
+        else: 
+            return "medieval"
+
     def setup_game(self, mode):
         self.main_layout.clear_widgets()
         self.game_mode = mode
@@ -97,7 +110,10 @@ class GameplayScreen(Screen):
         elif selected_board == 'Frozen Tundra' and TundraMap is not None:
             self.game = TundraMap()
         else:
-            self.game = ChessBoard()
+            # ดึงค่า tribe จากการเลือกของผู้เล่น
+            white_tribe = self.get_tribe_name('white')
+            black_tribe = self.get_tribe_name('black')
+            self.game = ChessBoard(white_tribe, black_tribe)
             self.game.bg_image = 'assets/boards/classic.png'
             
         self.selected = None
