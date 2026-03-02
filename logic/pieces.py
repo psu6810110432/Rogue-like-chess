@@ -1,6 +1,7 @@
 # logic/pieces.py
 import random
 from components.passive.passive_manager import PassiveManager
+from components.hidden_passive import HiddenPassive
 
 class Piece:
     def __init__(self, color, name):
@@ -14,6 +15,12 @@ class Piece:
         # ----------------------------------
 
         self.has_moved = False
+        
+        # เพิ่มระบบ passive แฝง
+        self.hidden_passive = HiddenPassive()
+        # ปรับค่าพลังตาม passive แฝง
+        default_points, default_coins = 5, 3
+        self.base_points, self.coins = self.hidden_passive.apply_passive(default_points, default_coins)
 
     def is_path_clear(self, start, end, board):
         sr, sc, er, ec = start[0], start[1], end[0], end[1]
@@ -41,14 +48,13 @@ class Rook(Piece):
         passive = PassiveManager.get_passive_handler('rook', tribe)
         if passive:
             stats = passive['get_piece_stats']()
-            self.base_points = stats['dice']
-            self.coins = stats['coins']
-            self.max_stats = 12  # ค่าคงที่สำหรับ Rook
+            tribe_points, tribe_coins = stats['dice'], stats['coins']
         else:
-            # ค่าเริ่มต้นสำหรับเผ่าที่ยังไม่ implement
-            self.base_points = 0
-            self.coins = 0
-            self.max_stats = 12
+            tribe_points, tribe_coins = 0, 0
+        
+        # ใช้ passive แฝงปรับค่า
+        self.base_points, self.coins = self.hidden_passive.apply_passive(tribe_points, tribe_coins)
+        self.max_stats = 12  # ค่าคงที่สำหรับ Rook
         
     def is_valid_move(self, start, end, board):
         #  9: Pegasus Boots
@@ -70,14 +76,13 @@ class Knight(Piece):
         
         if passive:
             stats = passive['get_piece_stats']()
-            self.base_points = stats['dice']
-            self.coins = stats['coins']
-            self.max_stats = 12  # ค่าคงที่สำหรับ Knight
+            tribe_points, tribe_coins = stats['dice'], stats['coins']
         else:
-            # ค่าเริ่มต้นสำหรับเผ่าที่ยังไม่ implement
-            self.base_points = 0
-            self.coins = 0
-            self.max_stats = 12
+            tribe_points, tribe_coins = 0, 0
+        
+        # ใช้ passive แฝงปรับค่า
+        self.base_points, self.coins = self.hidden_passive.apply_passive(tribe_points, tribe_coins)
+        self.max_stats = 12  # ค่าคงที่สำหรับ Knight
         
     def is_valid_move(self, start, end, board):
         # Knight มาตรฐาน: เดินแบบ L-shape (ไม่ใช้ passive)
@@ -109,14 +114,13 @@ class Bishop(Piece):
         passive = PassiveManager.get_passive_handler('bishop', tribe)
         if passive:
             stats = passive['get_piece_stats']()
-            self.base_points = stats['dice']
-            self.coins = stats['coins']
-            self.max_stats = 12  # ค่าคงที่สำหรับ Bishop
+            tribe_points, tribe_coins = stats['dice'], stats['coins']
         else:
-            # ค่าเริ่มต้นสำหรับเผ่าที่ยังไม่ implement
-            self.base_points = 0
-            self.coins = 0
-            self.max_stats = 12
+            tribe_points, tribe_coins = 0, 0
+        
+        # ใช้ passive แฝงปรับค่า
+        self.base_points, self.coins = self.hidden_passive.apply_passive(tribe_points, tribe_coins)
+        self.max_stats = 12  # ค่าคงที่สำหรับ Bishop
         
     def is_valid_move(self, start, end, board):
         #  9: Pegasus Boots
@@ -136,14 +140,13 @@ class Queen(Piece):
         passive = PassiveManager.get_passive_handler('queen', tribe)
         if passive:
             stats = passive['get_piece_stats']()
-            self.base_points = stats['dice']
-            self.coins = stats['coins']
-            self.max_stats = 12  # ค่าคงที่สำหรับ Queen
+            tribe_points, tribe_coins = stats['dice'], stats['coins']
         else:
-            # ค่าเริ่มต้นสำหรับเผ่าที่ยังไม่ implement
-            self.base_points = 0
-            self.coins = 0
-            self.max_stats = 12
+            tribe_points, tribe_coins = 0, 0
+        
+        # ใช้ passive แฝงปรับค่า
+        self.base_points, self.coins = self.hidden_passive.apply_passive(tribe_points, tribe_coins)
+        self.max_stats = 12  # ค่าคงที่สำหรับ Queen
         
     def is_valid_move(self, start, end, board):
         # ✨ Item 9: เดินทะลุ
@@ -161,14 +164,13 @@ class King(Piece):
         passive = PassiveManager.get_passive_handler('king', tribe)
         if passive:
             stats = passive['get_piece_stats']()
-            self.base_points = stats['dice']
-            self.coins = stats['coins']
-            self.max_stats = 12  # ค่าคงที่สำหรับ King
+            tribe_points, tribe_coins = stats['dice'], stats['coins']
         else:
-            # ค่าเริ่มต้นสำหรับเผ่าที่ยังไม่ implement
-            self.base_points = 0
-            self.coins = 0
-            self.max_stats = 12
+            tribe_points, tribe_coins = 0, 0
+        
+        # ใช้ passive แฝงปรับค่า
+        self.base_points, self.coins = self.hidden_passive.apply_passive(tribe_points, tribe_coins)
+        self.max_stats = 12  # ค่าคงที่สำหรับ King
         
     def is_valid_move(self, start, end, board):
         #  9: Pegasus Boots
@@ -186,14 +188,13 @@ class Pawn(Piece):
         passive = PassiveManager.get_passive_handler('pawn', tribe)
         if passive:
             stats = passive['get_piece_stats']()
-            self.base_points = stats['dice']
-            self.coins = stats['coins']
-            self.max_stats = 12  # ค่าคงที่สำหรับ Pawn
+            tribe_points, tribe_coins = stats['dice'], stats['coins']
         else:
-            # ค่าเริ่มต้นสำหรับเผ่าที่ยังไม่ implement
-            self.base_points = 0
-            self.coins = 0
-            self.max_stats = 12
+            tribe_points, tribe_coins = 0, 0
+        
+        # ใช้ passive แฝงปรับค่า
+        self.base_points, self.coins = self.hidden_passive.apply_passive(tribe_points, tribe_coins)
+        self.max_stats = 12  # ค่าคงที่สำหรับ Pawn
         
         self.variant = random.randint(6, 9)
         
@@ -223,11 +224,15 @@ class Pawn(Piece):
 
 class Obstacle(Piece):
     def __init__(self, name, lifespan):
-        # ให้สีเป็น 'neutral' (เป็นกลาง) เพื่อไม่ให้ถูกมองว่าเป็นหมากของฝ่ายใดฝ่ายหนึ่ง
-        super().__init__('neutral', name)
+        # สิ่งกีดขวางไม่มี passive แฝง - ไม่เรียก super().__init__
+        self.color = 'neutral'  # เป็นกลางเพื่อไม่ให้ถูกมองว่าเป็นหมากของฝ่ายใดฝ่ายหนึ่ง
+        self.name = name
+        self.item = None
         self.lifespan = lifespan # อายุของสิ่งกีดขวาง (จำนวนเทิร์น)
         self.base_points = 0
         self.coins = 0
+        self.has_moved = False
+        # ไม่สร้าง hidden_passive สำหรับ Obstacle
 
     def is_valid_move(self, start, end, board):
         # สิ่งกีดขวางไม่สามารถเดินได้
