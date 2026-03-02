@@ -1,11 +1,13 @@
 from .medieval_tribe import MedievalTribe
+from .demon_tribe import DemonTribe
 
 class PassiveManager:
     """Manager for handling passive abilities of different tribes"""
     
     def __init__(self):
         self.tribes = {
-            'medieval': MedievalTribe()
+            'medieval': MedievalTribe(),
+            'demon': DemonTribe()
         }
     
     @classmethod
