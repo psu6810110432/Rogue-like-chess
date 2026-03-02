@@ -107,9 +107,9 @@ class HiddenPassive:
         
         modifier_text = ''
         if 'coins' in self.passive_value:
-            modifier_text = f"{'+' if self.passive_value['coins'] > 0 else ''}{self.passive_value['coins']} เหรียญ"
+            modifier_text = f"{self.passive_value['coins']} เหรียญ"
         elif 'points' in self.passive_value:
-            modifier_text = f"{'+' if self.passive_value['points'] > 0 else ''}{self.passive_value['points']} แต้ม"
+            modifier_text = f"{self.passive_value['points']} แต้ม"
         
         return {
             'type': self.passive_type,
