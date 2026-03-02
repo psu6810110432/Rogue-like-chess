@@ -1,5 +1,5 @@
 # Passive Manager - จัดการ passive abilities ของทุกเผ่า
-from components.passive.medieval_tribe import medieval_pawn_passive, medieval_knight_passive
+from components.passive.medieval_tribe import medieval_knight_passive
 
 class PassiveManager:
     """จัดการ passive abilities ของแต่ละเผ่า"""
@@ -8,7 +8,6 @@ class PassiveManager:
     def get_passive_handler(piece_type, tribe):
         """คืนค่า passive handler สำหรับ piece และ tribe ที่กำหนด"""
         passive_map = {
-            ('pawn', 'medieval'): medieval_pawn_passive,
             ('knight', 'medieval'): medieval_knight_passive
         }
         
@@ -30,6 +29,5 @@ class PassiveManager:
             # ค่าเริ่มต้นสำหรับ piece ทั่วไป
             return {
                 'dice': 2,
-                'coins': 2,
-                'max_stats': 12
+                'coins': 2
             }
