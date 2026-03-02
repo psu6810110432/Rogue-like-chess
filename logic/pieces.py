@@ -55,18 +55,19 @@ class Knight(Piece):
         
         # ใช้ PassiveManager จัดการ passive abilities
         passive = PassiveManager.get_passive_handler('knight', tribe)
+        
         if passive:
             stats = passive['get_piece_stats']()
             self.base_points = stats['dice']
             self.coins = stats['coins']
-            self.max_stats = stats['max_stats']
+            self.max_stats = 12  # ค่าคงที่สำหรับ Knight
             self.passive_handler = passive['get_valid_moves']
         else:
             # ค่าเริ่มต้นสำหรับเผ่าที่ยังไม่ implement
             default_stats = PassiveManager.get_default_stats('knight', tribe)
             self.base_points = default_stats['dice']
             self.coins = default_stats['coins']
-            self.max_stats = default_stats['max_stats']
+            self.max_stats = 12
             self.passive_handler = None
         
     def is_valid_move(self, start, end, board):
@@ -124,7 +125,7 @@ class Pawn(Piece):
         super().__init__(color, 'P' if color == 'white' else 'p')
         self.tribe = tribe
         
-        # ใช้ PassiveManager จัดการ passive abilities
+        # ใช้ PassiveManager จัดการ passive abilities (สำหรับ future tribes)
         passive = PassiveManager.get_passive_handler('pawn', tribe)
         if passive:
             stats = passive['get_piece_stats']()
@@ -143,14 +144,7 @@ class Pawn(Piece):
         self.variant = random.randint(6, 9)
         
     def is_valid_move(self, start, end, board, ep_target=None):
-        # ถ้ามี passive handler ให้ใช้การเดินแบบ passive
-        if self.passive_handler:
-            return self.passive_handler(start, end, board)
-            
-        # การเดินแบบปกติ (สำหรับเผ่าอื่นๆ ที่ยังไม่ implement)
-        if getattr(self, 'item', None) and self.item.id == 9:
-            rd, cd = abs(start[0]-end[0]), abs(start[1]-end[1])
-            if (rd == 2 and cd == 1) or (rd == 1 and cd == 2): return True
+        # Pawn มาตรฐาน: ครั้งแรกเดิน 2 ช่อง, หลังนั้น 1 ช่อง
         sr, sc, er, ec = start[0], start[1], end[0], end[1]
         dir = -1 if self.color == 'white' else 1
         target = board[er][ec]
