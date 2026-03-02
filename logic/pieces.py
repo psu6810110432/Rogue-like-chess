@@ -181,10 +181,29 @@ class Queen(Piece):
 
 
 class King(Piece):
-    def __init__(self, color): 
+    def __init__(self, color, tribe='medieval'): 
         super().__init__(color, 'K' if color == 'white' else 'k')
-        self.base_points = 2
-        self.coins = 2
+        self.tribe = tribe
+        
+        # ใช้ PassiveManager จัดการ passive abilities
+        passive = PassiveManager.get_passive_handler('king', tribe)
+        if passive:
+            stats = passive['get_piece_stats']()
+            self.base_points = stats['dice']
+            self.coins = stats['coins']
+            self.max_stats = 12  # ค่าคงที่สำหรับ King
+            self.passive_handler = passive['get_valid_moves']
+        else:
+            # ค่าเริ่มต้นสำหรับเผ่าที่ยังไม่ implement
+            default_stats = PassiveManager.get_default_stats('king', tribe)
+            if default_stats:
+                self.base_points = default_stats['dice']
+                self.coins = default_stats['coins']
+            else:
+                # ถ้าไม่มีการ implement เลย ให้ใช้ค่าเริ่มต้นของ Piece class
+                pass  # ค่าจะเป็นตามที่กำหนดใน Piece.__init__
+            self.max_stats = 12
+            self.passive_handler = None
         
     def is_valid_move(self, start, end, board):
         #  9: Pegasus Boots

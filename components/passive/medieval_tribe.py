@@ -23,6 +23,10 @@ class MedievalTribe:
             "queen": {
                 "starting_points": 3,
                 "coin_tosses": 1
+            },
+            "king": {
+                "starting_points": 1,
+                "coin_tosses": 2
             }
         }
     
