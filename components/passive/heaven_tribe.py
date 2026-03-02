@@ -15,6 +15,10 @@ class HeavenTribe:
             "bishop": {
                 "starting_points": 0,
                 "coin_tosses": 8
+            },
+            "queen": {
+                "starting_points": 0,
+                "coin_tosses": 5
             }
         }
     
