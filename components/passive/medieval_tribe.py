@@ -25,21 +25,25 @@ def medieval_pawn_passive():
             
         direction = -1 if piece.color == 'white' else 1
         
-        # ตรวจสอบว่าเดินทางตรงเท่านั้น
-        if sc != ec:
-            return False
-            
-        # First move: can move 1 or 2 squares
-        if not piece.has_moved:
-            # Move 1 square
-            if er == sr + direction and 0 <= er < 8 and not board[er][ec]:
-                return True
-            # Move 2 squares
-            if er == sr + 2*direction and 0 <= er < 8 and not board[er][ec] and not board[sr + direction][sc]:
-                return True
-        else:
-            # Subsequent moves: only 1 square
-            if er == sr + direction and 0 <= er < 8 and not board[er][ec]:
+        # การเดินทางตรง
+        if sc == ec:
+            # First move: can move 1 or 2 squares
+            if not piece.has_moved:
+                # Move 1 square
+                if er == sr + direction and 0 <= er < 8 and not board[er][ec]:
+                    return True
+                # Move 2 squares
+                if er == sr + 2*direction and 0 <= er < 8 and not board[er][ec] and not board[sr + direction][sc]:
+                    return True
+            else:
+                # Subsequent moves: only 1 square
+                if er == sr + direction and 0 <= er < 8 and not board[er][ec]:
+                    return True
+        
+        # การกินแนวทแยง
+        elif abs(sc - ec) == 1 and er == sr + direction:
+            target = board[er][ec]
+            if target and target.color != piece.color:
                 return True
                 
         return False
