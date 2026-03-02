@@ -82,17 +82,17 @@ class ChessBoard:
             elif getattr(defender, 'item', None) and defender.item.id == 5:
                 defender.item = None
                 # ทิ้ง Pawn ของฝ่ายรับไว้ที่ช่องเริ่มต้นของฝ่ายรุก (เพราะฝ่ายรุกกำลังจะเดินไปยึดช่องเป้าหมาย)
-                self.board[sr][sc] = Pawn(defender.color, getattr(defender, 'tribe', 'medieval')) 
+                self.board[sr][sc] = Pawn(defender.color) 
                 return "defender_died"
             else:
                 return "defender_died"
 
     def create_initial_board(self):
         b = [[None for _ in range(8)] for _ in range(8)]
-        b[0] = [Rook('black'), Knight('black'), Bishop('black'), Queen('black'), King('black'), Bishop('black'), Knight('black'), Rook('black')]
-        b[1] = [Pawn('black', 'medieval') for _ in range(8)]
-        b[6] = [Pawn('white', 'medieval') for _ in range(8)]
-        b[7] = [Rook('white'), Knight('white'), Bishop('white'), Queen('white'), King('white'), Bishop('white'), Knight('white'), Rook('white')]
+        b[0] = [Rook('black'), Knight('black', 'medieval'), Bishop('black'), Queen('black'), King('black'), Bishop('black'), Knight('black', 'medieval'), Rook('black')]
+        b[1] = [Pawn('black') for _ in range(8)]
+        b[6] = [Pawn('white') for _ in range(8)]
+        b[7] = [Rook('white'), Knight('white', 'medieval'), Bishop('white'), Queen('white'), King('white'), Bishop('white'), Knight('white', 'medieval'), Rook('white')]
         return b
 
     def simulate_move(self, sr, sc, er, ec, color):
