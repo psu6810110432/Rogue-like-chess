@@ -16,6 +16,10 @@ class HeavenTribe:
                 "starting_points": 0,
                 "coin_tosses": 8
             },
+            "rook": {
+                "starting_points": 0,
+                "coin_tosses": 6
+            },
             "queen": {
                 "starting_points": 0,
                 "coin_tosses": 5
