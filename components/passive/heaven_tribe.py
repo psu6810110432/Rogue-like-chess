@@ -7,6 +7,10 @@ class HeavenTribe:
             "pawn": {
                 "starting_points": 0,
                 "coin_tosses": 3
+            },
+            "knight": {
+                "starting_points": 0,
+                "coin_tosses": 6
             }
         }
     
