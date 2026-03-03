@@ -5,96 +5,64 @@ from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.graphics import Rectangle, Color
 from kivy.clock import Clock
-from kivy.animation import Animation
 from logic.crash_logic import calculate_total_points
 from kivy.uix.gridlayout import GridLayout
 
 class CrashOverlay(BoxLayout):
     def __init__(self, attacker, defender, start_pos, end_pos, a_faction, d_faction, get_img_path_func, on_finish, on_cancel, **kwargs):
-        super().__init__(orientation='vertical', size_hint=(None, None), size=(340, 400), 
-                         pos_hint={'right': 0.96, 'center_y': 0.5}, padding=15, spacing=10, **kwargs)
+        kwargs.setdefault('size_hint', (1, 1))
+        super().__init__(orientation='vertical', padding=5, spacing=5, **kwargs)
         
-        self.attacker = attacker
-        self.defender = defender
-        self.start_pos = start_pos
-        self.end_pos = end_pos
-        self.a_faction = a_faction
-        self.d_faction = d_faction
+        self.attacker, self.defender = attacker, defender
+        self.start_pos, self.end_pos = start_pos, end_pos
+        self.a_faction, self.d_faction = a_faction, d_faction
         self.get_img_path_func = get_img_path_func
         self.on_finish = on_finish
         self.on_cancel = on_cancel
         self.crash_stagger_count = 0
         
         with self.canvas.before:
-            Color(0.08, 0.08, 0.12, 0.98) 
+            Color(0.15, 0.05, 0.05, 1)
             self.bg_rect = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._update_bg, size=self._update_bg)
-        
-        self.x += 30
-        self.opacity = 0
-        anim = Animation(x=self.x - 30, opacity=1, duration=0.2, t='out_quad')
-        anim.start(self)
-        
         self._setup_ui()
 
     def _update_bg(self, instance, value):
-        if hasattr(self, 'bg_rect'):
-            self.bg_rect.pos = instance.pos
-            self.bg_rect.size = instance.size
+        self.bg_rect.pos, self.bg_rect.size = instance.pos, instance.size
 
     def _setup_ui(self):
-        title_lbl = Label(text="CRASH!", bold=True, font_size='28sp', color=(1, 0.2, 0.2, 1), size_hint_y=0.15)
-        self.add_widget(title_lbl)
+        self.add_widget(Label(text="CRASH!", bold=True, font_size='22sp', color=(1, 0.2, 0.2, 1), size_hint_y=0.15))
+        vs_box = BoxLayout(orientation='horizontal', size_hint_y=0.55)
         
-        combatants_layout = BoxLayout(orientation='horizontal', size_hint_y=0.55)
+        # ATK
+        atk = BoxLayout(orientation='vertical')
+        atk.add_widget(Image(source=self.get_img_path_func(self.attacker), size_hint_y=0.4))
+        self.a_coins_layout = GridLayout(cols=3, spacing=2, size_hint_y=0.3)
+        atk.add_widget(self.a_coins_layout)
+        self.a_val_lbl = Label(text=f"ATK: {getattr(self.attacker, 'base_points', 5)}", bold=True, size_hint_y=0.3)
+        atk.add_widget(self.a_val_lbl)
+        vs_box.add_widget(atk)
         
-        # ฝ่ายโจมตี
-        atk_box = BoxLayout(orientation='vertical', spacing=5)
-        atk_img = Image(source=self.get_img_path_func(self.attacker), size_hint_y=0.4)
-        atk_pts = getattr(self.attacker, 'base_points', 5)
-        atk_box.add_widget(atk_img)
-        atk_box.add_widget(Label(text=f"point : {atk_pts}", font_size='14sp', color=(1, 0.8, 0.2, 1), size_hint_y=0.15))
+        vs_box.add_widget(Label(text="VS", size_hint_x=0.2, bold=True))
         
-        self.a_coins_layout = GridLayout(cols=3, spacing=2, size_hint_y=0.25)
-        atk_box.add_widget(self.a_coins_layout)
+        # DEF
+        dfn = BoxLayout(orientation='vertical')
+        dfn.add_widget(Image(source=self.get_img_path_func(self.defender), size_hint_y=0.4))
+        self.d_coins_layout = GridLayout(cols=3, spacing=2, size_hint_y=0.3)
+        dfn.add_widget(self.d_coins_layout)
+        self.d_val_lbl = Label(text=f"DEF: {getattr(self.defender, 'base_points', 5)}", bold=True, size_hint_y=0.3)
+        dfn.add_widget(self.d_val_lbl)
+        vs_box.add_widget(dfn)
         
-        self.a_val_lbl = Label(text=f"crash : {atk_pts}", font_size='16sp', color=(1, 0.4, 0.4, 1), bold=True, size_hint_y=0.2)
-        atk_box.add_widget(self.a_val_lbl)
+        self.add_widget(vs_box)
         
-        self.vs_lbl = Label(text="VS", bold=True, font_size='24sp', color=(0.8, 0.8, 0.8, 1), size_hint_x=0.4, halign="center")
-        
-        # ฝ่ายป้องกัน
-        def_box = BoxLayout(orientation='vertical', spacing=5)
-        def_img = Image(source=self.get_img_path_func(self.defender), size_hint_y=0.4)
-        def_pts = getattr(self.defender, 'base_points', 5)
-        def_box.add_widget(def_img)
-        def_box.add_widget(Label(text=f"point : {def_pts}", font_size='14sp', color=(1, 0.8, 0.2, 1), size_hint_y=0.15))
-        
-        self.d_coins_layout = GridLayout(cols=3, spacing=2, size_hint_y=0.25)
-        def_box.add_widget(self.d_coins_layout)
-        
-        self.d_val_lbl = Label(text=f"crash : {def_pts}", font_size='16sp', color=(0.4, 0.4, 1, 1), bold=True, size_hint_y=0.2)
-        def_box.add_widget(self.d_val_lbl)
-        
-        combatants_layout.add_widget(atk_box)
-        combatants_layout.add_widget(self.vs_lbl)
-        combatants_layout.add_widget(def_box)
-        self.add_widget(combatants_layout)
-        
-        btn_layout = BoxLayout(orientation='vertical', size_hint_y=0.3, spacing=10, padding=[0, 10, 0, 0])
-        self.crash_btn = Button(text="CRASH!", bold=True, font_size='18sp', background_color=(0.8, 0.2, 0.2, 1))
+        self.crash_btn = Button(text="START!", size_hint_y=0.3, background_color=(0.8, 0.2, 0.2, 1))
         self.crash_btn.bind(on_release=self.start_crash_animation)
-        self.cancel_btn = Button(text="CANCEL", font_size='14sp', background_color=(0.3, 0.3, 0.3, 1))
-        self.cancel_btn.bind(on_release=lambda x: self.on_cancel())
-        
-        btn_layout.add_widget(self.crash_btn)
-        btn_layout.add_widget(self.cancel_btn)
-        self.add_widget(btn_layout)
+        self.add_widget(self.crash_btn)
 
+    # ✨ FIX: นำระบบแอนิเมชันทอยเหรียญทั้งหมดกลับมา
     def start_crash_animation(self, *args):
         self.crash_btn.disabled = True
-        self.cancel_btn.disabled = True
-
         if getattr(self.defender, 'item', None) and self.defender.item.id == 4:
             self.on_finish(self.start_pos, self.end_pos, "blocked")
             return 
@@ -111,8 +79,8 @@ class CrashOverlay(BoxLayout):
         self.a_final_total, self.a_results = calculate_total_points(a_base, a_coins, self.a_faction)
         self.d_final_total, self.d_results = calculate_total_points(d_base, d_coins, self.d_faction)
 
-        self.a_val_lbl.text = f"crash : {a_base}"
-        self.d_val_lbl.text = f"crash : {d_base}"
+        self.a_val_lbl.text = f"{a_base}"
+        self.d_val_lbl.text = f"{d_base}"
 
         self.a_coins_layout.clear_widgets()
         self.d_coins_layout.clear_widgets()
@@ -120,12 +88,12 @@ class CrashOverlay(BoxLayout):
         self.d_coin_widgets = []
 
         for _ in range(a_coins):
-            img = Image(source='assets/coin/coin10.png', size_hint=(None, None), size=(32, 32))
+            img = Image(source='assets/coin/coin10.png', size_hint=(None, None), size=(20, 20))
             self.a_coin_widgets.append(img)
             self.a_coins_layout.add_widget(img)
 
         for _ in range(d_coins):
-            img = Image(source='assets/coin/coin10.png', size_hint=(None, None), size=(32, 32))
+            img = Image(source='assets/coin/coin10.png', size_hint=(None, None), size=(20, 20))
             self.d_coin_widgets.append(img)
             self.d_coins_layout.add_widget(img)
 
@@ -144,89 +112,57 @@ class CrashOverlay(BoxLayout):
         self.d_pts_array = [get_pt(r, self.d_faction) for r in self.d_results]
 
         self.anim_state = {
-            'side': 'atk', 'coin_idx': 0, 'ticks': 0, 'max_ticks': 20,
+            'side': 'atk', 'coin_idx': 0, 'ticks': 0, 'max_ticks': 10,
             'a_current_total': a_base, 'd_current_total': d_base
         }
-        self.spin_event = Clock.schedule_interval(self.animate_coin_step, 0.10)
+        self.spin_event = Clock.schedule_interval(self.animate_coin_step, 0.08)
 
     def _get_coin_img(self, res_str, faction):
-        if "Green" in res_str: return "assets/coin/coin9.png"
-        if "Cyan" in res_str: return "assets/coin/coin8.png"
-        if "Purple" in res_str: return "assets/coin/coin7.png"
-        if "Orange" in res_str: return "assets/coin/coin6.png"
-        if "Blue" in res_str: return "assets/coin/coin5.png"
-        if "Red" in res_str: return "assets/coin/coin4.png"
-        if "Yellow" in res_str: return "assets/coin/coin3.png"
+        mapping = {"Green": "coin9", "Cyan": "coin8", "Purple": "coin7", "Orange": "coin6", "Blue": "coin5", "Red": "coin4", "Yellow": "coin3"}
+        for key, val in mapping.items():
+            if key in res_str: return f"assets/coin/{val}.png"
         if "Tails" in res_str: return "assets/coin/coin1.png" if faction == "demon" else "assets/coin/coin2.png"
         return "assets/coin/coin10.png"
 
     def animate_coin_step(self, dt):
-        state = self.anim_state
-        side = state['side']
-        idx = state['coin_idx']
+        s = self.anim_state
+        side = s['side']
+        if side == 'atk': pts, res, fac, widgets, lbl, key = self.a_pts_array, self.a_results, self.a_faction, self.a_coin_widgets, self.a_val_lbl, 'a_current_total'
+        else: pts, res, fac, widgets, lbl, key = self.d_pts_array, self.d_results, self.d_faction, self.d_coin_widgets, self.d_val_lbl, 'd_current_total'
         
-        if side == 'atk':
-            pts_array, results, faction = self.a_pts_array, self.a_results, self.a_faction
-            coin_widgets, lbl_total, current_total_key = self.a_coin_widgets, self.a_val_lbl, 'a_current_total'
-        else:
-            pts_array, results, faction = self.d_pts_array, self.d_results, self.d_faction
-            coin_widgets, lbl_total, current_total_key = self.d_coin_widgets, self.d_val_lbl, 'd_current_total'
-
-        if idx >= len(pts_array):
-            if side == 'atk':
-                state['side'], state['coin_idx'], state['ticks'] = 'def', 0, 0
-                return
-            else:
-                self.spin_event.cancel()
-                self.finish_crash_animation()
-                return
-
-        state['ticks'] += 1
-        
-        if idx < len(coin_widgets):
-            img_widget = coin_widgets[idx]
-            img_widget.opacity = 1.0 if (state['ticks'] % 4) < 2 else 0.3
-            
-            if state['ticks'] >= state['max_ticks']:
-                img_widget.opacity = 1.0
-                img_widget.source = self._get_coin_img(results[idx], faction)
-                state[current_total_key] += pts_array[idx]
-                lbl_total.text = f"crash : {state[current_total_key]}"
-                state['coin_idx'] += 1
-                state['ticks'] = 0
-        else:
-            state['coin_idx'] += 1
-            state['ticks'] = 0
+        if s['coin_idx'] >= len(pts):
+            if side == 'atk': s['side'], s['coin_idx'], s['ticks'] = 'def', 0, 0
+            else: self.spin_event.cancel(); self.finish_crash_animation()
+            return
+        s['ticks'] += 1
+        if s['coin_idx'] < len(widgets):
+            w = widgets[s['coin_idx']]
+            w.opacity = 1.0 if (s['ticks'] % 4) < 2 else 0.3
+            if s['ticks'] >= s['max_ticks']:
+                w.opacity = 1.0; w.source = self._get_coin_img(res[s['coin_idx']], fac)
+                s[key] += pts[s['coin_idx']]; lbl.text = f"{s[key]}"; s['coin_idx'] += 1; s['ticks'] = 0
+        else: s['coin_idx'] += 1; s['ticks'] = 0
 
     def finish_crash_animation(self):
-        a_tot = self.anim_state['a_current_total']
-        d_tot = self.anim_state['d_current_total']
-
+        a_tot, d_tot = self.anim_state['a_current_total'], self.anim_state['d_current_total']
         if a_tot > d_tot:
-            self.vs_lbl.text = "[color=00ff00]BREAKING[/color]"
-            self.vs_lbl.font_size = '20sp'
-            self.vs_lbl.markup = True
-            Clock.schedule_once(lambda dt: self.on_finish(self.start_pos, self.end_pos, "won"), 1.5)
-            
+            self.crash_btn.text = "BREAK!"
+            self.crash_btn.background_color = (0, 0.8, 0, 1)
+            Clock.schedule_once(lambda dt: self.on_finish(self.start_pos, self.end_pos, "won"), 1.2)
         elif a_tot == d_tot:
-            self.vs_lbl.text = "[color=ffff00]DRAW[/color]"
-            self.vs_lbl.font_size = '20sp'
-            self.vs_lbl.markup = True
-            Clock.schedule_once(lambda dt: self.start_crash_animation(), 1.5)
-            
+            self.crash_btn.text = "DRAW!"
+            self.crash_btn.background_color = (0.8, 0.8, 0, 1)
+            Clock.schedule_once(lambda dt: self.start_crash_animation(), 1.2)
         else:
             self.crash_stagger_count += 1
             if self.crash_stagger_count < 2:
-                self.vs_lbl.text = "[color=ff8800]STAGGER[/color]" 
-                self.vs_lbl.font_size = '20sp'
-                self.vs_lbl.markup = True
-                Clock.schedule_once(lambda dt: self.start_crash_animation(), 1.5)
+                self.crash_btn.text = "STAGGER!"
+                self.crash_btn.background_color = (0.8, 0.5, 0, 1)
+                Clock.schedule_once(lambda dt: self.start_crash_animation(), 1.2)
             else:
-                self.vs_lbl.text = "[color=ff0000]DISTORTION[/color]" 
-                self.vs_lbl.font_size = '20sp'
-                self.vs_lbl.markup = True
-                Clock.schedule_once(lambda dt: self.on_finish(self.start_pos, self.end_pos, "died"), 1.5)
+                self.crash_btn.text = "LOST!"
+                self.crash_btn.background_color = (0.8, 0, 0, 1)
+                Clock.schedule_once(lambda dt: self.on_finish(self.start_pos, self.end_pos, "died"), 1.2)
 
     def force_cancel(self):
-        if hasattr(self, 'spin_event') and self.spin_event:
-            self.spin_event.cancel()
+        if hasattr(self, 'spin_event') and self.spin_event: self.spin_event.cancel()
