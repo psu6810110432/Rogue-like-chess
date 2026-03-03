@@ -6,15 +6,33 @@ from kivy.graphics import Rectangle, Color
 from kivy.animation import Animation
 
 class UnitCard(BoxLayout):
-    def __init__(self, piece, img_path, **kwargs):
+    def __init__(self, piece=None, img_path=None, **kwargs):
+        
+        # ดึง text ออกมาจาก kwargs
+        text_to_show = kwargs.pop('text', '') 
+        
         super().__init__(orientation='horizontal', size_hint=(None, None), size=(420, 300),
                          pos_hint={'right': 0.95, 'center_y': 0.5}, padding=10, spacing=10, **kwargs)
         
+        self.text = text_to_show 
+        self.is_selected = False # ✨ เก็บสถานะการเลือก
+        
         with self.canvas.before:
-            Color(0.1, 0.1, 0.1, 0.98) 
+            # ✨ เก็บตัวแปรสีไว้ใน self.bg_color จะได้สั่งเปลี่ยนสีสว่าง/มืดได้ตอนตั้งค่า
+            self.bg_color = Color(0.1, 0.1, 0.1, 0.98) 
             self.bg_rect = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._update_bg, size=self._update_bg)
         
+        # -----------------------------------------------------
+        # โหมด 1: หน้า Setup Screen
+        # -----------------------------------------------------
+        if piece is None:
+            self.add_widget(Label(text=text_to_show, color=(1, 1, 1, 1), font_size='18sp', markup=True))
+            return 
+            
+        # -----------------------------------------------------
+        # โหมด 2: ตอนเล่นเกมปกติ (Gameplay)
+        # -----------------------------------------------------
         img = Image(source=img_path, size_hint_x=0.4)
         self.add_widget(img)
         text_layout = BoxLayout(orientation='vertical', size_hint_x=0.6)
@@ -49,7 +67,7 @@ class UnitCard(BoxLayout):
         text_layout.add_widget(item_container)
         self.add_widget(text_layout)
 
-        # Animation ให้สไลด์เข้ามา
+        # Animation
         self.x += 20
         self.opacity = 0
         anim = Animation(x=self.x - 20, opacity=1, duration=0.15)
@@ -59,3 +77,12 @@ class UnitCard(BoxLayout):
         if hasattr(self, 'bg_rect'):
             self.bg_rect.pos = instance.pos
             self.bg_rect.size = instance.size
+
+    # ✨ เพิ่มฟังก์ชันนี้กลับเข้าไป เพื่อให้หน้า Setup Screen เรียกเปลี่ยนสีการ์ดได้!
+    def set_selected(self, is_selected):
+        self.is_selected = is_selected
+        if hasattr(self, 'bg_color'):
+            if is_selected:
+                self.bg_color.rgba = (0.2, 0.4, 0.2, 0.98) # เปลี่ยนเป็นสีเขียวมืดๆ เวลาถูกกดเลือก
+            else:
+                self.bg_color.rgba = (0.1, 0.1, 0.1, 0.98) # สีเทาปกติ
