@@ -12,14 +12,18 @@ class RogueChessApp(App):
 
     selected_unit_white = StringProperty('Medieval Knights') 
     selected_unit_black = StringProperty('Demon')
+    
     def build(self):
         # สร้าง ScreenManager พร้อมเอฟเฟกต์เฟดตอนเปลี่ยนหน้า
         sm = ScreenManager(transition=FadeTransition())
         
         # เพิ่มหน้าจอต่างๆ เข้าไปในระบบ
-        sm.add_widget(MainMenuScreen(name='menu'))
+        sm.add_widget(MainMenuScreen(name='main_menu')) # แนะนำให้เปลี่ยนเป็น main_menu ให้ตรงกับ setup_screen.py ที่เรียกหาตอนกด Back
         sm.add_widget(MatchSetupScreen(name='setup'))
-        sm.add_widget(GameplayScreen(name='game'))
+        
+        # 🚨 FIX: เปลี่ยนชื่อจาก 'game' เป็น 'gameplay' ให้ตรงกับที่ปุ่ม START BATTLE เรียกหา
+        sm.add_widget(GameplayScreen(name='gameplay')) 
+        
         sm.add_widget(OptionsScreen(name='options')) # เพิ่มหน้า Options เข้าระบบ
         
         return sm
