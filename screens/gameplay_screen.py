@@ -91,27 +91,36 @@ class GameplayScreen(Screen):
         self.selected = None
         
         # ==========================================
-        # 1. ฝั่งซ้าย: กระดานเกม (กินพื้นที่ 75%)
+        # 1. ฝั่งซ้าย: พื้นที่เล่นเกมหลัก (75%)
         # ==========================================
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
         
         self.info_label = Label(text="WHITE'S TURN", size_hint_y=0.08, color=(1, 0.8, 0.2, 1), bold=True, font_size='22sp', markup=True)        
         self.board_area.add_widget(self.info_label)
         
-        self.container = BoxLayout(orientation='horizontal', size_hint_y=0.77)
-        self.board_area.add_widget(self.container)
+        self.play_area = BoxLayout(orientation='vertical', size_hint_y=0.92)
         
-        self.inventory_layout = BoxLayout(orientation='horizontal', size_hint_y=0.15, padding=[10, 5, 10, 10], spacing=10)
+        # กระดานหมากรุก 
+        self.board_anchor = AnchorLayout(anchor_x='center', anchor_y='center', size_hint_y=0.82)
+        self.play_area.add_widget(self.board_anchor)
+        
+        # พื้นที่ Inventory
+        self.inv_anchor = AnchorLayout(anchor_x='center', anchor_y='top', size_hint_y=0.18, padding=[0, dp(10), 0, dp(20)])
+        self.inventory_layout = BoxLayout(orientation='horizontal', size_hint_x=0.85, spacing=dp(10), padding=dp(10))
+        
         with self.inventory_layout.canvas.before:
             Color(0.07, 0.07, 0.09, 1) 
             self.inv_bg = Rectangle(pos=self.inventory_layout.pos, size=self.inventory_layout.size)
         self.inventory_layout.bind(pos=self._update_inv_bg, size=self._update_inv_bg)
-        self.board_area.add_widget(self.inventory_layout)
         
+        self.inv_anchor.add_widget(self.inventory_layout)
+        self.play_area.add_widget(self.inv_anchor)
+        
+        self.board_area.add_widget(self.play_area)
         self.main_layout.add_widget(self.board_area)
 
         # ==========================================
-        # 2. ฝั่งขวา: Unified Sidebar (กินพื้นที่ 25%)
+        # 2. ฝั่งขวา: Unified Sidebar (25%)
         # ==========================================
         self.sidebar_panel = BoxLayout(orientation='vertical', size_hint_x=0.25, padding=10, spacing=10)
         
@@ -120,7 +129,6 @@ class GameplayScreen(Screen):
             self.sb_bg = Rectangle(pos=self.sidebar_panel.pos, size=self.sidebar_panel.size)
         self.sidebar_panel.bind(pos=self._update_sb_bg, size=self._update_sb_bg)
         
-        # ✨ ปรับสัดส่วนเป็น 40% สำหรับข้อมูลด้านบน
         self.info_zone = BoxLayout(orientation='vertical', size_hint_y=0.40) 
         self.sidebar_panel.add_widget(self.info_zone)
         
@@ -131,7 +139,6 @@ class GameplayScreen(Screen):
         self.divider.bind(pos=self._update_div_bg, size=self._update_div_bg)
         self.sidebar_panel.add_widget(self.divider)
 
-        # ✨ ปรับสัดส่วนเป็น 60% สำหรับประวัติและปุ่มด้านล่าง
         self.sidebar = SidebarUI(on_undo_callback=self.on_undo_click, on_quit_callback=self.on_quit)
         self.sidebar.size_hint_y = 0.60
         self.sidebar_panel.add_widget(self.sidebar)
@@ -141,10 +148,8 @@ class GameplayScreen(Screen):
 
     def _update_inv_bg(self, instance, value):
         self.inv_bg.pos = instance.pos; self.inv_bg.size = instance.size
-        
     def _update_sb_bg(self, instance, value):
         self.sb_bg.pos = instance.pos; self.sb_bg.size = instance.size
-        
     def _update_div_bg(self, instance, value):
         self.div_rect.pos = instance.pos; self.div_rect.size = instance.size
 
@@ -205,21 +210,19 @@ class GameplayScreen(Screen):
         self.manager.current = 'setup'
 
     def init_board_ui(self):
-        self.container.clear_widgets()
+        self.board_anchor.clear_widgets()
         vp = 'white' if getattr(self, 'game_mode', 'PVP') == 'PVE' else self.game.current_turn
         
-        ranks = GridLayout(cols=1, size_hint_x=0.05)
-        ro = range(8, 0, -1) if vp == 'white' else range(1, 9)
-        for i in ro:
-            ranks.add_widget(Label(text=str(i), color=(0.8, 0.7, 0.4, 1), bold=True))
-        self.container.add_widget(ranks)
-        
-        self.board_anchor = AnchorLayout(anchor_x='center', anchor_y='center')
         self.grid = GridLayout(cols=8, rows=8, size_hint=(None, None), spacing=0, padding=0)
         self.board_anchor.add_widget(self.grid)
-        self.container.add_widget(self.board_anchor)
         
+        # ✨ FIX: ล้าง Event เก่าและใส่ใหม่ เพื่อไม่ให้ทับซ้อนกัน 
+        self.board_anchor.unbind(size=self._keep_grid_square)
         self.board_anchor.bind(size=self._keep_grid_square)
+        
+        # ✨ FIX: บังคับให้กระดานคำนวณและขยายขนาดตัวเอง "ทันที" ไม่ต้องรอ
+        if self.board_anchor.width > 0 and self.board_anchor.height > 0:
+            self._keep_grid_square(self.board_anchor, self.board_anchor.size)
         
         if hasattr(self.game, 'bg_image') and self.game.bg_image != '':
             with self.grid.canvas.before:
@@ -237,8 +240,10 @@ class GameplayScreen(Screen):
         self.refresh_ui()
 
     def _keep_grid_square(self, instance, value):
+        # instance คือ self.board_anchor
         side = (int(min(instance.width, instance.height)) // 8) * 8
-        self.grid.size = (side, side)
+        if hasattr(self, 'grid') and self.grid:
+            self.grid.size = (side, side)
 
     def _update_bg(self, instance, value):
         if hasattr(self, 'bg_rect'):
@@ -360,9 +365,16 @@ class GameplayScreen(Screen):
     def update_inventory_ui(self):
         self.inventory_layout.clear_widgets()
         
-        info_box = BoxLayout(orientation='vertical', size_hint_x=0.15)
-        info_box.add_widget(Label(text="INVENTORY", bold=True, font_size='14sp', color=(0.8, 0.8, 0.8, 1)))
-        info_box.add_widget(Label(text=f"[{self.game.current_turn.upper()}]", bold=True, font_size='16sp', color=(1, 0.8, 0.2, 1)))
+        info_box = BoxLayout(orientation='vertical', size_hint_x=None, width=dp(120))
+        
+        lbl_title = Label(text="INVENTORY", bold=True, font_size='14sp', color=(0.8, 0.8, 0.8, 1), halign='center', valign='middle')
+        lbl_title.bind(size=lbl_title.setter('text_size'))
+        
+        lbl_team = Label(text=f"[{self.game.current_turn.upper()}]", bold=True, font_size='16sp', color=(1, 0.8, 0.2, 1), halign='center', valign='middle')
+        lbl_team.bind(size=lbl_team.setter('text_size'))
+        
+        info_box.add_widget(lbl_title)
+        info_box.add_widget(lbl_team)
         self.inventory_layout.add_widget(info_box)
         
         inv = getattr(self.game, f'inventory_{self.game.current_turn}', [])
