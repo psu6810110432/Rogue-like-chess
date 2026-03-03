@@ -7,7 +7,8 @@ from logic.item_logic import ITEM_DATABASE
 from logic.item_effects import apply_post_crash_effects # ✨ นำเข้า Logic ของ Item
 
 class ChessBoard:
-    def __init__(self, white_tribe='medieval', black_tribe='medieval'):
+    # ✨ เพิ่มพารามิเตอร์ map_name เพื่อรับชื่อด่านมาตั้งค่า
+    def __init__(self, white_tribe='medieval', black_tribe='medieval', map_name='Classic Board'):
         self.white_tribe = white_tribe
         self.black_tribe = black_tribe
         self.board = self.create_initial_board()
@@ -20,6 +21,20 @@ class ChessBoard:
         self.freeze_timer = 0  
         self.inventory_white = [] 
         self.inventory_black = [] 
+        
+        # ✨ เรียกใช้ฟังก์ชันตั้งค่าธีมด่าน
+        self.set_map_theme(map_name)
+
+    # ✨ ฟังก์ชันใหม่สำหรับเปลี่ยนรูปภาพพื้นหลังตามชื่อด่าน
+    def set_map_theme(self, map_name):
+        map_assets = {
+            'Classic Board': 'assets/boards/classic.png',
+            'Enchanted Forest': 'assets/boards/forest.png',
+            'Desert Ruins': 'assets/boards/desert.png',
+            'Frozen Tundra': 'assets/boards/tundra.png'
+        }
+        # ถ้าหาชื่อด่านไม่เจอจะใช้ classic.png เป็นค่าเริ่มต้น
+        self.bg_image = map_assets.get(map_name, 'assets/boards/classic.png')
 
     def handle_item_drop(self, attacker, defender):
         """จัดการการได้รับไอเทมเมื่อมีการกินหมาก"""

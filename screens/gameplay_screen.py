@@ -1,4 +1,5 @@
 # screens/gameplay_screen.py
+import random # ✨ เพิ่มนำเข้า random
 from kivy.app import App
 from kivy.graphics import Rectangle, Color
 from kivy.uix.screenmanager import Screen
@@ -92,16 +93,25 @@ class GameplayScreen(Screen):
         self.main_layout.clear_widgets()
         self.game_mode = mode
         app = App.get_running_app()
-        selected_board = getattr(app, 'selected_board', 'Classic Board')
         
-        if selected_board == 'Enchanted Forest' and ForestMap is not None: self.game = ForestMap()
-        elif selected_board == 'Desert Ruins' and DesertMap is not None: self.game = DesertMap()
-        elif selected_board == 'Frozen Tundra' and TundraMap is not None: self.game = TundraMap()
+        # ✨ รับชื่อด่านที่เลือกมาจากตัวแปรส่วนกลาง
+        chosen_map = getattr(app, 'selected_board', 'Classic Board')
+        
+        # 🎲 Logic การสุ่มด่าน: ถ้าเลือก Random Board ให้สุ่มด่านจริงๆ ขึ้นมาแทน
+        if chosen_map == "Random Board":
+            actual_maps = ['Classic Board', 'Enchanted Forest', 'Desert Ruins', 'Frozen Tundra']
+            chosen_map = random.choice(actual_maps)
+            print(f"DEBUG: Randomly selected map -> {chosen_map}")
+
+        # ตรวจสอบและเลือกด่าน (ถ้ามีไฟล์คลาสเฉพาะ)
+        if chosen_map == 'Enchanted Forest' and ForestMap is not None: self.game = ForestMap()
+        elif chosen_map == 'Desert Ruins' and DesertMap is not None: self.game = DesertMap()
+        elif chosen_map == 'Frozen Tundra' and TundraMap is not None: self.game = TundraMap()
         else:
             white_tribe = self.get_tribe_name('white')
             black_tribe = self.get_tribe_name('black')
-            self.game = ChessBoard(white_tribe, black_tribe)
-            self.game.bg_image = 'assets/boards/classic.png'
+            # ✨ ส่งค่า chosen_map เข้าไปใน ChessBoard เพื่อเปลี่ยนรูปพื้นหลัง
+            self.game = ChessBoard(white_tribe, black_tribe, map_name=chosen_map)
             
         self.selected = None
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
