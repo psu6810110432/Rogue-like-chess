@@ -15,7 +15,7 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.animation import Animation
 from kivy.metrics import dp
 
-# ✨ นำเข้าตัวจัดการปุ่มและรูปภาพเพื่อไม่ให้ภาพไอเทมยืด
+# นำเข้าตัวจัดการปุ่มและรูปภาพเพื่อไม่ให้ภาพไอเทมยืด
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.image import Image
 
@@ -42,7 +42,7 @@ except ImportError:
     TundraMap = None
 
 
-# ✨ คลาสใหม่: สร้างช่องเก็บไอเทมแบบรักษาสัดส่วนรูปภาพ (ไม่ยืด)
+# คลาสใหม่: สร้างช่องเก็บไอเทมแบบรักษาสัดส่วนรูปภาพ (ไม่ยืด)
 class InventorySlot(ButtonBehavior, BoxLayout):
     def __init__(self, img_path='', is_selected=False, **kwargs):
         super().__init__(padding=dp(5), **kwargs)
@@ -96,6 +96,7 @@ class GameplayScreen(Screen):
         self.crash_popup = None 
         self.item_tooltip = None
         self.selected_item = None 
+        self._game_over_scheduled = False # ดักจับการเด้งซ้อนทับกัน
 
     def get_tribe_name(self, color):
         app = App.get_running_app()
@@ -105,6 +106,7 @@ class GameplayScreen(Screen):
     def setup_game(self, mode):
         self.main_layout.clear_widgets()
         self.game_mode = mode
+        self._game_over_scheduled = False # รีเซ็ตสถานะเกมจบเมื่อเริ่มเกมใหม่
         app = App.get_running_app()
         chosen_map = getattr(app, 'selected_board', 'Classic Board')
         
@@ -274,7 +276,18 @@ class GameplayScreen(Screen):
 
     def refresh_ui(self, legal_moves=[]):
         self.update_inventory_ui()
-        self.info_label.text = self.game.game_result if self.game.game_result else f"{self.game.current_turn.upper()}'S TURN"
+        
+        # ✨ FIX: ตรวจสอบและแสดงผลคนชนะ พร้อมเด้งกลับหน้า Setup อัตโนมัติ
+        if self.game.game_result:
+            self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
+            # ป้องกันไม่ให้ตั้งเวลาเด้งซ้ำซ้อน
+            if not self._game_over_scheduled:
+                self._game_over_scheduled = True
+                # ดีเลย์ 2.5 วินาที เพื่อให้ผู้เล่นได้เห็นข้อความใครชนะก่อน แล้วค่อยเปลี่ยนหน้า
+                Clock.schedule_once(self.auto_quit_to_setup, 2.5)
+        else:
+            self.info_label.text = f"{self.game.current_turn.upper()}'S TURN"
+            
         cp = self.game.find_king(self.game.current_turn) if self.game.is_in_check(self.game.current_turn) else None
         
         for (r, c), sq in self.squares.items():
@@ -285,6 +298,10 @@ class GameplayScreen(Screen):
             sq.set_piece_icon(self.get_piece_image_path(p) if p else None, is_frozen=is_f, piece=p)
             
         self.sidebar.update_history_text(self.game.history.move_text_history)
+
+    # ✨ ฟังก์ชันใหม่เพื่อเด้งกลับไปหน้า Setup โดยเฉพาะ
+    def auto_quit_to_setup(self, dt):
+        self.manager.current = 'setup'
 
     def on_undo_click(self):
         if self.game.undo_move():
@@ -385,7 +402,6 @@ class GameplayScreen(Screen):
             self.refresh_ui()
             self.check_ai_turn()
 
-    # ✨ จุดที่เปลี่ยน: อัปเดต Inventory UI ให้ใช้คลาส InventorySlot 
     def update_inventory_ui(self):
         self.inventory_layout.clear_widgets()
         
@@ -405,13 +421,11 @@ class GameplayScreen(Screen):
         
         for i in range(5):
             if i < len(inv):
-                # ใช้คลาส InventorySlot ที่สร้างไว้ด้านบน
                 is_sel = (self.selected_item == inv[i])
                 slot = InventorySlot(img_path=inv[i].image_path, is_selected=is_sel)
                 slot.bind(on_release=lambda x, it=inv[i]: self.on_item_click(it))
                 self.inventory_layout.add_widget(slot)
             else:
-                # สร้างช่องว่างเปล่าๆ
                 self.inventory_layout.add_widget(InventorySlot())
 
     def on_item_click(self, item):
