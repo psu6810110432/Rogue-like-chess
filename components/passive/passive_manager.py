@@ -20,6 +20,7 @@ class PassiveManager:
             'get_piece_stats': lambda: {
                 'dice': handler.get_starting_points(piece_type),
                 'coins': handler.get_coin_tosses(piece_type),
-                'max': handler.get_max_points(piece_type)
+                'max': handler.get_max_points(piece_type),
+                'desc': handler.get_description(piece_type) # ดึงคำอธิบายมาโชว์ในเกม
             }
         }
