@@ -1,24 +1,32 @@
 # components/unit_card.py
+from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.graphics import Rectangle, Color
 from kivy.animation import Animation
 
-class UnitCard(BoxLayout):
+# เพิ่ม ButtonBehavior เพื่อให้มันคลิกได้เหมือนปุ่ม
+class UnitCard(ButtonBehavior, BoxLayout):
     def __init__(self, piece=None, img_path=None, **kwargs):
         
-        # ดึง text ออกมาจาก kwargs
         text_to_show = kwargs.pop('text', '') 
         
-        super().__init__(orientation='horizontal', size_hint=(None, None), size=(420, 300),
-                         pos_hint={'right': 0.95, 'center_y': 0.5}, padding=10, spacing=10, **kwargs)
+        if piece is None:
+            # โหมด 1: หน้า Setup (ให้ยืดหดตาม Grid ของหน้าจอ)
+            kwargs.setdefault('size_hint', (1, 1))
+            super().__init__(orientation='vertical', padding=10, spacing=10, **kwargs)
+        else:
+            # โหมด 2: หน้าเล่นเกม (บังคับขนาดตายตัวและให้ลอยอยู่ขวาจอ)
+            kwargs['size_hint'] = (None, None)
+            kwargs['size'] = (420, 300)
+            kwargs['pos_hint'] = {'right': 0.95, 'center_y': 0.5}
+            super().__init__(orientation='horizontal', padding=10, spacing=10, **kwargs)
         
         self.text = text_to_show 
-        self.is_selected = False # ✨ เก็บสถานะการเลือก
+        self.is_selected = False 
         
         with self.canvas.before:
-            # ✨ เก็บตัวแปรสีไว้ใน self.bg_color จะได้สั่งเปลี่ยนสีสว่าง/มืดได้ตอนตั้งค่า
             self.bg_color = Color(0.1, 0.1, 0.1, 0.98) 
             self.bg_rect = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._update_bg, size=self._update_bg)
@@ -27,7 +35,9 @@ class UnitCard(BoxLayout):
         # โหมด 1: หน้า Setup Screen
         # -----------------------------------------------------
         if piece is None:
-            self.add_widget(Label(text=text_to_show, color=(1, 1, 1, 1), font_size='18sp', markup=True))
+            lbl = Label(text=text_to_show, color=(1, 1, 1, 1), font_size='20sp', markup=True, halign='center', valign='middle')
+            lbl.bind(size=lbl.setter('text_size'))
+            self.add_widget(lbl)
             return 
             
         # -----------------------------------------------------
@@ -67,7 +77,7 @@ class UnitCard(BoxLayout):
         text_layout.add_widget(item_container)
         self.add_widget(text_layout)
 
-        # Animation
+        # Animation (สไลด์เข้ามาเฉพาะตอนอยู่ในเกม)
         self.x += 20
         self.opacity = 0
         anim = Animation(x=self.x - 20, opacity=1, duration=0.15)
@@ -78,11 +88,10 @@ class UnitCard(BoxLayout):
             self.bg_rect.pos = instance.pos
             self.bg_rect.size = instance.size
 
-    # ✨ เพิ่มฟังก์ชันนี้กลับเข้าไป เพื่อให้หน้า Setup Screen เรียกเปลี่ยนสีการ์ดได้!
     def set_selected(self, is_selected):
         self.is_selected = is_selected
         if hasattr(self, 'bg_color'):
             if is_selected:
-                self.bg_color.rgba = (0.2, 0.4, 0.2, 0.98) # เปลี่ยนเป็นสีเขียวมืดๆ เวลาถูกกดเลือก
+                self.bg_color.rgba = (0.2, 0.4, 0.2, 0.98) # เปลี่ยนสีเป็นสีเขียวเมื่อถูกเลือก
             else:
-                self.bg_color.rgba = (0.1, 0.1, 0.1, 0.98) # สีเทาปกติ
+                self.bg_color.rgba = (0.1, 0.1, 0.1, 0.98)
