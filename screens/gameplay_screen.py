@@ -15,7 +15,6 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.animation import Animation
 from kivy.metrics import dp
 
-# นำเข้าตัวจัดการปุ่มและรูปภาพเพื่อไม่ให้ภาพไอเทมยืด
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.image import Image
 
@@ -42,7 +41,6 @@ except ImportError:
     TundraMap = None
 
 
-# คลาสใหม่: สร้างช่องเก็บไอเทมแบบรักษาสัดส่วนรูปภาพ (ไม่ยืด)
 class InventorySlot(ButtonBehavior, BoxLayout):
     def __init__(self, img_path='', is_selected=False, **kwargs):
         super().__init__(padding=dp(5), **kwargs)
@@ -50,13 +48,12 @@ class InventorySlot(ButtonBehavior, BoxLayout):
         
         with self.canvas.before:
             if self.is_selected:
-                self.bg_color = Color(0.2, 0.5, 0.2, 1) # สีเขียวเมื่อถูกคลิกเลือก
+                self.bg_color = Color(0.2, 0.5, 0.2, 1)
             else:
-                self.bg_color = Color(0.15, 0.15, 0.15, 1) # สีเทาเข้มปกติ
+                self.bg_color = Color(0.15, 0.15, 0.15, 1)
             self.bg_rect = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._update_bg, size=self._update_bg)
         
-        # ใช้ Image ปกติ และตั้ง keep_ratio=True ภาพจะไม่เบี้ยว
         if img_path:
             self.add_widget(Image(source=img_path, allow_stretch=True, keep_ratio=True))
 
@@ -96,7 +93,7 @@ class GameplayScreen(Screen):
         self.crash_popup = None 
         self.item_tooltip = None
         self.selected_item = None 
-        self._game_over_scheduled = False # ดักจับการเด้งซ้อนทับกัน
+        self._game_over_scheduled = False
 
     def get_tribe_name(self, color):
         app = App.get_running_app()
@@ -106,7 +103,7 @@ class GameplayScreen(Screen):
     def setup_game(self, mode):
         self.main_layout.clear_widgets()
         self.game_mode = mode
-        self._game_over_scheduled = False # รีเซ็ตสถานะเกมจบเมื่อเริ่มเกมใหม่
+        self._game_over_scheduled = False
         app = App.get_running_app()
         chosen_map = getattr(app, 'selected_board', 'Classic Board')
         
@@ -120,44 +117,35 @@ class GameplayScreen(Screen):
             
         self.selected = None
         
-        # ==========================================
-        # 1. ฝั่งซ้าย: พื้นที่เล่นเกมหลัก (75%)
-        # ==========================================
+        # Left Area (75%)
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
-        
         self.info_label = Label(text="WHITE'S TURN", size_hint_y=0.08, color=(1, 0.8, 0.2, 1), bold=True, font_size='22sp', markup=True)        
         self.board_area.add_widget(self.info_label)
         
         self.play_area = BoxLayout(orientation='vertical', size_hint_y=0.92)
-        
         self.board_anchor = AnchorLayout(anchor_x='center', anchor_y='center', size_hint_y=0.82)
         self.play_area.add_widget(self.board_anchor)
         
         self.inv_anchor = AnchorLayout(anchor_x='center', anchor_y='top', size_hint_y=0.18, padding=[0, dp(10), 0, dp(20)])
         self.inventory_layout = BoxLayout(orientation='horizontal', size_hint_x=0.85, spacing=dp(10), padding=dp(10))
-        
         with self.inventory_layout.canvas.before:
             Color(0.07, 0.07, 0.09, 1) 
             self.inv_bg = Rectangle(pos=self.inventory_layout.pos, size=self.inventory_layout.size)
         self.inventory_layout.bind(pos=self._update_inv_bg, size=self._update_inv_bg)
-        
         self.inv_anchor.add_widget(self.inventory_layout)
         self.play_area.add_widget(self.inv_anchor)
-        
         self.board_area.add_widget(self.play_area)
         self.main_layout.add_widget(self.board_area)
 
-        # ==========================================
-        # 2. ฝั่งขวา: Unified Sidebar (25%)
-        # ==========================================
+        # Right Sidebar (25%)
         self.sidebar_panel = BoxLayout(orientation='vertical', size_hint_x=0.25, padding=10, spacing=10)
-        
         with self.sidebar_panel.canvas.before:
             Color(0.05, 0.05, 0.07, 1) 
             self.sb_bg = Rectangle(pos=self.sidebar_panel.pos, size=self.sidebar_panel.size)
         self.sidebar_panel.bind(pos=self._update_sb_bg, size=self._update_sb_bg)
         
-        self.info_zone = BoxLayout(orientation='vertical', size_hint_y=0.40) 
+        # Info Zone: จะถูกขยายพื้นที่เพื่อให้แสดง UnitCard พร้อมคำอธิบาย Passive ได้เต็มที่
+        self.info_zone = BoxLayout(orientation='vertical', size_hint_y=0.45) 
         self.sidebar_panel.add_widget(self.info_zone)
         
         self.divider = Widget(size_hint_y=None, height=dp(2))
@@ -168,7 +156,7 @@ class GameplayScreen(Screen):
         self.sidebar_panel.add_widget(self.divider)
 
         self.sidebar = SidebarUI(on_undo_callback=self.on_undo_click, on_quit_callback=self.on_quit)
-        self.sidebar.size_hint_y = 0.60
+        self.sidebar.size_hint_y = 0.55
         self.sidebar_panel.add_widget(self.sidebar)
         
         self.main_layout.add_widget(self.sidebar_panel)
@@ -182,11 +170,12 @@ class GameplayScreen(Screen):
         self.div_rect.pos = instance.pos; self.div_rect.size = instance.size
 
     def show_piece_status(self, piece):
+        """อัปเดตเพื่อโชว์ UnitCard ใหม่ที่มีคำอธิบาย Passive"""
         if self.crash_popup: return 
         self.info_zone.clear_widgets()
+        # UnitCard จะดึง piece.passive_desc มาแสดงผลอัตโนมัติ
         self.status_popup = UnitCard(piece, self.get_piece_image_path(piece))
         self.status_popup.size_hint = (1, 1) 
-        self.status_popup.pos_hint = {}
         self.info_zone.add_widget(self.status_popup)
 
     def hide_piece_status(self):
@@ -203,7 +192,6 @@ class GameplayScreen(Screen):
             self.get_piece_image_path, self.execute_board_move, self.cancel_crash
         )
         self.crash_popup.size_hint = (1, 1) 
-        self.crash_popup.pos_hint = {}
         self.info_zone.add_widget(self.crash_popup)
 
     def cancel_crash(self):
@@ -240,22 +228,17 @@ class GameplayScreen(Screen):
     def init_board_ui(self):
         self.board_anchor.clear_widgets()
         vp = 'white' if getattr(self, 'game_mode', 'PVP') == 'PVE' else self.game.current_turn
-        
         self.grid = GridLayout(cols=8, rows=8, size_hint=(None, None), spacing=0, padding=0)
         self.board_anchor.add_widget(self.grid)
-        
         self.board_anchor.unbind(size=self._keep_grid_square)
         self.board_anchor.bind(size=self._keep_grid_square)
-        
         if self.board_anchor.width > 0 and self.board_anchor.height > 0:
             self._keep_grid_square(self.board_anchor, self.board_anchor.size)
-        
         if hasattr(self.game, 'bg_image') and self.game.bg_image != '':
             with self.grid.canvas.before:
                 Color(1, 1, 1, 1)
                 self.bg_rect = Rectangle(source=self.game.bg_image, pos=self.grid.pos, size=self.grid.size)
             self.grid.bind(pos=self._update_bg, size=self._update_bg)
-
         self.squares = {}
         for r in (range(8) if vp == 'white' else range(7, -1, -1)):
             for c in (range(8) if vp == 'white' else range(7, -1, -1)):
@@ -276,30 +259,23 @@ class GameplayScreen(Screen):
 
     def refresh_ui(self, legal_moves=[]):
         self.update_inventory_ui()
-        
-        # ✨ FIX: ตรวจสอบและแสดงผลคนชนะ พร้อมเด้งกลับหน้า Setup อัตโนมัติ
         if self.game.game_result:
             self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
-            # ป้องกันไม่ให้ตั้งเวลาเด้งซ้ำซ้อน
             if not self._game_over_scheduled:
                 self._game_over_scheduled = True
-                # ดีเลย์ 2.5 วินาที เพื่อให้ผู้เล่นได้เห็นข้อความใครชนะก่อน แล้วค่อยเปลี่ยนหน้า
                 Clock.schedule_once(self.auto_quit_to_setup, 2.5)
         else:
             self.info_label.text = f"{self.game.current_turn.upper()}'S TURN"
             
         cp = self.game.find_king(self.game.current_turn) if self.game.is_in_check(self.game.current_turn) else None
-        
         for (r, c), sq in self.squares.items():
             il = (r, c) in self.game.last_move if self.game.last_move else False
             sq.update_square_style(highlight=(self.selected == (r, c)), is_legal=((r,c) in legal_moves), is_check=((r,c) == cp), is_last=il)
             p = self.game.board[r][c]
             is_f = getattr(p, 'freeze_timer', 0) > 0 if p else False
             sq.set_piece_icon(self.get_piece_image_path(p) if p else None, is_frozen=is_f, piece=p)
-            
         self.sidebar.update_history_text(self.game.history.move_text_history)
 
-    # ✨ ฟังก์ชันใหม่เพื่อเด้งกลับไปหน้า Setup โดยเฉพาะ
     def auto_quit_to_setup(self, dt):
         self.manager.current = 'setup'
 
@@ -312,7 +288,6 @@ class GameplayScreen(Screen):
     def on_square_tap(self, instance):
         if self.game.game_result: return
         if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black': return
-        
         r, c = instance.row, instance.col
         piece = self.game.board[r][c]
         
@@ -324,10 +299,8 @@ class GameplayScreen(Screen):
                     piece.base_points = max(0, piece.base_points - 1)
                 elif piece.item.id == 10 and piece.__class__.__name__.lower() == 'pawn': 
                     piece.base_points, piece.coins = 5, 3
-                    
                 inv = getattr(self.game, f'inventory_{self.game.current_turn}')
                 if self.selected_item in inv: inv.remove(self.selected_item)
-                
                 self.selected_item = None
                 self.hide_item_tooltip()
                 self.refresh_ui()
@@ -346,11 +319,9 @@ class GameplayScreen(Screen):
         else:
             sr, sc = self.selected
             res = self.game.move_piece(sr, sc, r, c)
-            
             if isinstance(res, tuple) and res[0] == "crash":
                 self.show_crash_overlay(res[1], res[2], (sr, sc), (r, c))
                 return
-                
             if res == "promote":
                 self.hide_piece_status()
                 def do_p(cls):
@@ -382,9 +353,7 @@ class GameplayScreen(Screen):
             self.refresh_ui()
             self.check_ai_turn()
             return
-            
         res = self.game.move_piece(start_pos[0], start_pos[1], end_pos[0], end_pos[1], resolve_crash=True, crash_won=(crash_status if crash_status == "died" else (crash_status=="won")))
-        
         if res == "promote":
             def do_p(cls):
                 self.game.promote_pawn(end_pos[0], end_pos[1], cls)
@@ -404,21 +373,15 @@ class GameplayScreen(Screen):
 
     def update_inventory_ui(self):
         self.inventory_layout.clear_widgets()
-        
         info_box = BoxLayout(orientation='vertical', size_hint_x=None, width=dp(120))
-        
         lbl_title = Label(text="INVENTORY", bold=True, font_size='14sp', color=(0.8, 0.8, 0.8, 1), halign='center', valign='middle')
         lbl_title.bind(size=lbl_title.setter('text_size'))
-        
         lbl_team = Label(text=f"[{self.game.current_turn.upper()}]", bold=True, font_size='16sp', color=(1, 0.8, 0.2, 1), halign='center', valign='middle')
         lbl_team.bind(size=lbl_team.setter('text_size'))
-        
         info_box.add_widget(lbl_title)
         info_box.add_widget(lbl_team)
         self.inventory_layout.add_widget(info_box)
-        
         inv = getattr(self.game, f'inventory_{self.game.current_turn}', [])
-        
         for i in range(5):
             if i < len(inv):
                 is_sel = (self.selected_item == inv[i])
@@ -446,25 +409,17 @@ class GameplayScreen(Screen):
         if move:
             (sr, sc), (er, ec) = move
             res = self.game.move_piece(sr, sc, er, ec)
-            
             if isinstance(res, tuple) and res[0] == "crash":
-                atk = res[1]
-                df = res[2]
+                atk = res[1]; df = res[2]
                 if not atk or not df: return
-                
                 if getattr(df, 'item', None) and df.item.id == 4:
-                    df.item = None
-                    atk.has_moved = True
+                    df.item = None; atk.has_moved = True
                     self.game.history.save_state(self.game, "Shield Blocked!")
-                    self.game.complete_turn()
-                    self.init_board_ui()
+                    self.game.complete_turn(); self.init_board_ui()
                     return 
-                    
                 r = simulate_ai_crash_result(atk, df, self.get_tribe_name(atk.color), self.get_tribe_name(df.color))
                 res = self.game.move_piece(sr, sc, er, ec, resolve_crash=True, crash_won=(r if r == "died" else (r == "win")))
-                
             if res == "promote":
                 from logic.pieces import Queen
                 self.game.promote_pawn(er, ec, Queen)
-                
             self.init_board_ui()

@@ -5,6 +5,7 @@ from .heaven_tribe import HeavenTribe
 from .ayothaya_tribe import AyothayaTribe
 
 class PassiveManager:
+    # Pre-loading instances to avoid re-creation
     _instances = {
         'medieval': MedievalTribe(),
         'demon': DemonTribe(),
@@ -21,6 +22,6 @@ class PassiveManager:
                 'dice': handler.get_starting_points(piece_type),
                 'coins': handler.get_coin_tosses(piece_type),
                 'max': handler.get_max_points(piece_type),
-                'desc': handler.get_description(piece_type) # ดึงคำอธิบายมาโชว์ในเกม
+                'desc': handler.get_description(piece_type)
             }
         }
