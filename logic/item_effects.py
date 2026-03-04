@@ -1,14 +1,15 @@
 # logic/item_effects.py
+import random
 
 def apply_equip_effect(piece):
     """เรียกใช้ทันทีเมื่อหมากสวมใส่ไอเทม (ใช้ตอนกดใช้ไอเทมจากกระเป๋า)"""
     if not piece or not getattr(piece, 'item', None):
         return
     
-    # Item 6: Gambler's Coin (+1 Coin, -1 Base Point)
+    # Item 6: Gambler's Coin (+1 Coin, -2 Base Point)
     if piece.item.id == 6:
         piece.coins += 1
-        piece.base_points = max(0, piece.base_points - 1)
+        piece.base_points = max(0, piece.base_points - 2)
         
     # Item 10: Crown of the Usurper (สำหรับเบี้ยเท่านั้น เปลี่ยน Base=5, Coin=3)
     elif piece.item.id == 10 and piece.__class__.__name__.lower() == 'pawn':
@@ -42,7 +43,17 @@ def get_pre_crash_modifiers(attacker, defender):
 def apply_post_crash_effects(board_obj, attacker, defender, attacker_died, sr, sc, er, ec):
     """คำนวณเอฟเฟกต์หลังจากรู้ผลแพ้ชนะแล้ว (เช่น ตายเกิดใหม่, หักแต้มถาวร, โบนัสชนะ)"""
     from logic.pieces import Pawn
+    import random
     
+    # ✨ ฟังก์ชันย่อยสำหรับสุ่มหาช่องว่างบนกระดาน (ไม่เอาช่องที่กำลังตีกัน)
+    def get_random_empty_square():
+        empty_squares = []
+        for r in range(8):
+            for c in range(8):
+                if board_obj.board[r][c] is None and (r, c) not in [(sr, sc), (er, ec)]:
+                    empty_squares.append((r, c))
+        return random.choice(empty_squares) if empty_squares else None
+
     # --- กรณีฝ่ายรุกตาย (Attacker died) ---
     if attacker_died:
         board_obj.handle_item_drop(defender, attacker)
@@ -50,6 +61,7 @@ def apply_post_crash_effects(board_obj, attacker, defender, attacker_died, sr, s
         # Item 3: Bloodlust Emblem (ฝ่ายรับชนะ ได้ Base Point +5 ถาวร)
         if getattr(defender, 'item', None) and defender.item.id == 3:
             defender.base_points += 5
+            defender.item = None
             
         # Item 7: Armor of Thorns (ฝ่ายรุกตาย ฝ่ายรับโดนหัก Coin ถาวร)
         if getattr(attacker, 'item', None) and attacker.item.id == 7:
@@ -61,10 +73,13 @@ def apply_post_crash_effects(board_obj, attacker, defender, attacker_died, sr, s
             attacker.base_points = 0
             return "survived"
             
-        # Item 5: Scythe of the Substitute (ตายแล้วทิ้งเบี้ยตัวแทนไว้)
+        # Item 5: Scythe of the Substitute (ตายแล้วทิ้งเบี้ยตัวแทนไว้ในพื้นที่ว่าง)
         elif getattr(attacker, 'item', None) and attacker.item.id == 5:
             attacker.item = None
-            board_obj.board[sr][sc] = Pawn(attacker.color, getattr(attacker, 'tribe', 'medieval'))
+            rand_pos = get_random_empty_square()
+            if rand_pos:
+                rr, rc = rand_pos
+                board_obj.board[rr][rc] = Pawn(attacker.color, getattr(attacker, 'tribe', 'medieval'))
             return "died"
         else:
             board_obj.board[sr][sc] = None # ตายปกติ
@@ -77,6 +92,7 @@ def apply_post_crash_effects(board_obj, attacker, defender, attacker_died, sr, s
         # Item 3: Bloodlust Emblem
         if getattr(attacker, 'item', None) and attacker.item.id == 3:
             attacker.base_points += 5
+            attacker.item = None
             
         # Item 7: Armor of Thorns 
         if getattr(defender, 'item', None) and defender.item.id == 7:
@@ -88,10 +104,13 @@ def apply_post_crash_effects(board_obj, attacker, defender, attacker_died, sr, s
             defender.base_points = 0
             return "defender_survived" 
             
-        # Item 5: Scythe of the Substitute
+        # Item 5: Scythe of the Substitute (ตายแล้วทิ้งเบี้ยตัวแทนไว้ในพื้นที่ว่าง)
         elif getattr(defender, 'item', None) and defender.item.id == 5:
             defender.item = None
-            board_obj.board[sr][sc] = Pawn(defender.color, getattr(defender, 'tribe', 'medieval')) 
+            rand_pos = get_random_empty_square()
+            if rand_pos:
+                rr, rc = rand_pos
+                board_obj.board[rr][rc] = Pawn(defender.color, getattr(defender, 'tribe', 'medieval')) 
             return "defender_died"
         else:
             return "defender_died"
