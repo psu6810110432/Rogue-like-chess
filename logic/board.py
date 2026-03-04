@@ -7,7 +7,6 @@ from logic.item_logic import ITEM_DATABASE
 from logic.item_effects import apply_post_crash_effects # นำเข้า Logic ของ Item
 
 class ChessBoard:
-    # เพิ่มพารามิเตอร์ map_name เพื่อรับชื่อด่านมาตั้งค่า
     def __init__(self, white_tribe='medieval', black_tribe='medieval', map_name='Classic Board'):
         self.white_tribe = white_tribe
         self.black_tribe = black_tribe
@@ -22,10 +21,9 @@ class ChessBoard:
         self.inventory_white = [] 
         self.inventory_black = [] 
         
-        # เรียกใช้ฟังก์ชันตั้งค่าธีมด่าน
+        # ตั้งค่าธีมด่าน
         self.set_map_theme(map_name)
 
-    # ฟังก์ชันใหม่สำหรับเปลี่ยนรูปภาพพื้นหลังตามชื่อด่าน
     def set_map_theme(self, map_name):
         map_assets = {
             'Classic Board': 'assets/boards/classic.png',
@@ -33,23 +31,32 @@ class ChessBoard:
             'Desert Ruins': 'assets/boards/desert.png',
             'Frozen Tundra': 'assets/boards/tundra.png'
         }
-        # ถ้าหาชื่อด่านไม่เจอจะใช้ classic.png เป็นค่าเริ่มต้น
         self.bg_image = map_assets.get(map_name, 'assets/boards/classic.png')
 
-    def handle_item_drop(self, attacker, defender):
-        """จัดการการได้รับไอเทมเมื่อมีการกินหมาก"""
-        valid_harvesters = ['rook', 'bishop', 'knight']
-        attacker_type = attacker.__class__.__name__.lower()
+    # ✨ อัปเดต: ระบบการแจกไอเทมตามเงื่อนไขใหม่
+    def handle_item_drop(self, winner, is_defender=False):
+        """จัดการการได้รับไอเทมเมื่อชนะการปะทะ (Crash)"""
+        piece_type = winner.__class__.__name__.lower()
+        should_receive = False
         
-        if attacker_type in valid_harvesters:
-            target_inv = self.inventory_white if attacker.color == 'white' else self.inventory_black
+        if not is_defender:
+            # ⚔️ ฝ่ายรุก (Attacker): เฉพาะ Rook, Bishop, Knight เท่านั้นที่ได้ไอเทม
+            if piece_type in ['rook', 'bishop', 'knight']:
+                should_receive = True
+        else:
+            # 🛡️ ฝ่ายรับ (Defender): Knight, Rook, Bishop จะ *ไม่ได้* ไอเทมตามเงื่อนไขที่แก้บัค
+            if piece_type not in ['knight', 'rook', 'bishop']:
+                should_receive = True
+        
+        if should_receive:
+            target_inv = self.inventory_white if winner.color == 'white' else self.inventory_black
             
             if len(target_inv) < 5:
-                if random.random() < 1.00:
-                    random_item_id = random.randint(1, 10)
-                    item = ITEM_DATABASE[random_item_id]
-                    target_inv.append(item)
-                    print(f"{attacker.color} received {item.name}!")
+                # สุ่มไอเทมจากคลัง (ID 1-10)
+                random_item_id = random.randint(1, 10)
+                item = ITEM_DATABASE[random_item_id]
+                target_inv.append(item)
+                print(f"DEBUG: {winner.color} {piece_type} received {item.name} from {'Defense' if is_defender else 'Attack'}!")
 
     def create_initial_board(self):
         b = [[None for _ in range(8)] for _ in range(8)]
@@ -70,9 +77,7 @@ class ChessBoard:
         sr, sc = pos
         piece = self.board[sr][sc]
         if not piece: return []
-        
-        if getattr(piece, 'freeze_timer', 0) > 0:
-            return []
+        if getattr(piece, 'freeze_timer', 0) > 0: return []
 
         moves = []
         for r in range(8):
@@ -80,87 +85,76 @@ class ChessBoard:
                 target = self.board[r][c]
                 if target and (target.color == piece.color or getattr(target, 'color', '') == 'neutral'): 
                     continue
-                
                 valid = piece.is_valid_move((sr, sc), (r, c), self.board, self.en_passant_target) if isinstance(piece, Pawn) else piece.is_valid_move((sr, sc), (r, c), self.board)
                 if valid and not self.simulate_move(sr, sc, r, c, piece.color):
                     moves.append((r, c))
-                    
         if isinstance(piece, King) and not piece.has_moved and not self.is_in_check(piece.color):
             for tc in [2, 6]:
-                if self.check_castling_logic(sr, sc, sr, tc): 
-                    moves.append((sr, tc))
+                if self.check_castling_logic(sr, sc, sr, tc): moves.append((sr, tc))
         return moves
 
     def check_castling_logic(self, sr, sc, er, ec):
         p = self.board[sr][sc]
         rc = 0 if ec == 2 else 7
         rook = self.board[sr][rc]
-        if not rook or not isinstance(rook, Rook) or rook.has_moved: 
-            return False
+        if not rook or not isinstance(rook, Rook) or rook.has_moved: return False
         step = 1 if ec == 6 else -1
         for col in range(sc + step, rc, step):
-            if self.board[sr][col]: 
-                return False
+            if self.board[sr][col]: return False
         for col in [sc + step, sc + 2*step]:
-            if self.simulate_move(sr, sc, sr, col, p.color): 
-                return False
+            if self.simulate_move(sr, sc, sr, col, p.color): return False
         return True
 
     def move_piece(self, sr, sc, er, ec, resolve_crash=False, crash_won=True):
         p = self.board[sr][sc]
-        if not p or p.color != self.current_turn or self.game_result: 
-            return False
+        if not p or p.color != self.current_turn or self.game_result: return False
             
         is_castle = isinstance(p, King) and abs(sc-ec) == 2
         is_ep = isinstance(p, Pawn) and (er, ec) == self.en_passant_target
         legal_moves = self.get_legal_moves((sr, sc))
         
-        if (er, ec) not in legal_moves: 
-            return False
+        if (er, ec) not in legal_moves: return False
             
         target = self.board[er][ec]
         is_capture = (target is not None) or is_ep
-        
         captured_piece = target if not is_ep else self.board[sr][ec]
 
-        # ---------------------------------------------------------
-        # ระบบ CRASH
-        # ---------------------------------------------------------
+        # --- อัปเดต: ระบบ CRASH พร้อมการแจกไอเทมตามเงื่อนไขใหม่ ---
         if is_capture and not resolve_crash:
             return ("crash", p, captured_piece)
             
         if is_capture and resolve_crash:
-            if crash_won == "died":
+            if crash_won == "died": # 🛡️ ฝ่ายรับ (Defender) ชนะการปะทะ
                 effect_result = apply_post_crash_effects(self, p, captured_piece, True, sr, sc, er, ec)
                 p.has_moved = True
-                status_text = "survived" if effect_result == "survived" else "died"
                 
-                # 1. ลบหมากฝ่าย ATK ออกจากกระดานหากไม่ได้รับเอฟเฟกต์รอดชีวิตจากไอเทม
+                # ✨ เรียกใช้การแจกไอเทมให้ฝ่ายรับ (หมากที่ยืนอยู่ที่ช่องเป้าหมาย)
+                self.handle_item_drop(captured_piece, is_defender=True)
+                
                 if effect_result != "survived":
                     self.board[sr][sc] = None
-                    
-                self.history.save_state(self, f"{p.name} attacked but {status_text} at {sr},{sc}")
+                self.history.save_state(self, f"{p.name} attacked but died against {captured_piece.name}")
                 self.complete_turn()
-                
-                # 2. แก้การ Return ให้ส่ง "died" กลับไปเสมอหากไม่รอด เพื่อไม่ให้ UI เผลอจับกิน
                 return "survived" if effect_result == "survived" else "died"
             elif not crash_won:
                 return False
-            else:
+            else: # ⚔️ ฝ่ายรุก (Attacker) ชนะการปะทะ
                 effect_result = apply_post_crash_effects(self, p, captured_piece, False, sr, sc, er, ec)
+                
+                # ✨ เรียกใช้การแจกไอเทมให้ฝ่ายรุก
+                self.handle_item_drop(p, is_defender=False)
+                
                 if effect_result == "defender_survived":
                     p.has_moved = True
-                    self.history.save_state(self, f"{p.name} attacked but {captured_piece.name} survived at {er},{ec}")
+                    self.history.save_state(self, f"{p.name} attacked but {captured_piece.name} survived")
                     self.complete_turn()
                     return True 
-        # ---------------------------------------------------------
+        # ---------------------------------------------------
         
         move_text = self.history.generate_move_text(p, sr, sc, er, ec, is_capture, is_castle)
         self.history.save_state(self, move_text)
         
-        if is_ep: 
-            self.board[sr][ec] = None 
-            
+        if is_ep: self.board[sr][ec] = None 
         if is_castle:
             rc, nrc = (0, 3) if ec == 2 else (7, 5)
             self.board[sr][nrc], self.board[sr][rc] = self.board[sr][rc], None
@@ -168,17 +162,14 @@ class ChessBoard:
             
         if isinstance(p, Pawn) and abs(sr - er) == 2: 
             self.en_passant_target = ((sr + er) // 2, sc)
-        else: 
-            self.en_passant_target = None
+        else: self.en_passant_target = None
             
         self.last_move = ((sr, sc), (er, ec))
         self.board[er][ec] = p
-        if self.board[sr][sc] == p:
-            self.board[sr][sc] = None
+        if self.board[sr][sc] == p: self.board[sr][sc] = None
         p.has_moved = True
         
-        if isinstance(p, Pawn) and (er == 0 or er == 7): 
-            return "promote"
+        if isinstance(p, Pawn) and (er == 0 or er == 7): return "promote"
             
         self.complete_turn()
         return True
@@ -191,19 +182,15 @@ class ChessBoard:
         self.last_move = state['last_move']
         self.en_passant_target = state['en_passant_target']
         self.game_result = state['game_result']
-        
-        # ✨ FIX: ดึงไอเทมของทั้ง 2 ฝ่ายกลับมาจากการเซฟ
         self.inventory_white = state.get('inventory_white', [])
         self.inventory_black = state.get('inventory_black', [])
-        
         return True
 
     def find_king(self, color):
         for r in range(8):
             for c in range(8):
                 p = self.board[r][c]
-                if p and isinstance(p, King) and p.color == color: 
-                    return (r, c)
+                if p and isinstance(p, King) and p.color == color: return (r, c)
         return None
 
     def is_in_check(self, color):
@@ -212,8 +199,7 @@ class ChessBoard:
         for r in range(8):
             for c in range(8):
                 p = self.board[r][c]
-                if p and p.color != color and p.is_valid_move((r, c), kp, self.board): 
-                    return True
+                if p and p.color != color and p.is_valid_move((r, c), kp, self.board): return True
         return False
 
     def check_insufficient_material(self):
@@ -228,18 +214,13 @@ class ChessBoard:
     def complete_turn(self):
         if not self.find_king('white'):
             self.game_result = "BLACK WINS! (WHITE KING DESTROYED)"
-            self.history.save_state(self, "White King was destroyed.")
             return
-            
         if not self.find_king('black'):
             self.game_result = "WHITE WINS! (BLACK KING DESTROYED)"
-            self.history.save_state(self, "Black King was destroyed.")
             return
             
         self.current_turn = 'black' if self.current_turn == 'white' else 'white'
-        
         self.update_map_events()
-        self.apply_map_effects()
 
         has_moves = False
         for r in range(8):
@@ -252,10 +233,8 @@ class ChessBoard:
             if has_moves: break
             
         is_check = self.is_in_check(self.current_turn)
-        
         if not has_moves:
             is_frozen_locked = any(getattr(p, 'freeze_timer', 0) > 0 for row in self.board for p in row if p and getattr(p, 'color', '') == self.current_turn)
-            
             if is_frozen_locked and not is_check:
                 self.complete_turn()
                 return
@@ -263,28 +242,19 @@ class ChessBoard:
                 winner = 'black' if self.current_turn == 'white' else 'white'
                 self.game_result = f"CHECKMATE! {winner.upper()} WINS"
                 self.history.add_suffix_to_last_move("#") 
-            else: 
-                self.game_result = "DRAW - STALEMATE" 
-        elif self.check_insufficient_material(): 
-            self.game_result = "DRAW - INSUFFICIENT MATERIAL"
-        elif is_check: 
-            self.history.add_suffix_to_last_move("+")
+            else: self.game_result = "DRAW - STALEMATE" 
+        elif self.check_insufficient_material(): self.game_result = "DRAW - INSUFFICIENT MATERIAL"
+        elif is_check: self.history.add_suffix_to_last_move("+")
 
     def update_map_events(self):
         for r in range(8):
             for c in range(8):
                 p = self.board[r][c]
                 if p:
-                    if getattr(p, 'color', '') == 'neutral':
+                    if getattr(p, 'color', '') == 'neutral' and hasattr(p, 'lifespan'):
                         p.lifespan -= 1
-                        if p.lifespan <= 0:
-                            self.board[r][c] = None 
-                    
-                    if getattr(p, 'freeze_timer', 0) > 0:
-                        p.freeze_timer -= 1
-
-    def apply_map_effects(self):
-        pass
+                        if p.lifespan <= 0: self.board[r][c] = None 
+                    if getattr(p, 'freeze_timer', 0) > 0: p.freeze_timer -= 1
 
     def promote_pawn(self, r, c, cls):
         color = self.board[r][c].color

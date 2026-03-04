@@ -1,7 +1,7 @@
 # screens/gameplay_screen.py
 import random
 from kivy.app import App
-from kivy.graphics import Rectangle, Color, Line, RoundedRectangle # ✨ เพิ่ม Line และ RoundedRectangle
+from kivy.graphics import Rectangle, Color, Line, RoundedRectangle 
 from kivy.uix.screenmanager import Screen
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.boxlayout import BoxLayout
@@ -36,7 +36,6 @@ class InventorySlot(ButtonBehavior, BoxLayout):
     def __init__(self, img_path='', is_selected=False, **kwargs):
         super().__init__(padding=dp(5), **kwargs)
         with self.canvas.before:
-            # ✨ อัปเกรดเป็น Glassmorphism ขอบทอง
             self.bg_color = Color(0.15, 0.2, 0.15, 0.85) if is_selected else Color(0.1, 0.1, 0.12, 0.7)
             self.bg_rect = RoundedRectangle(radius=[10])
             self.border_color = Color(0.83, 0.68, 0.21, 1) if is_selected else Color(0.3, 0.3, 0.35, 1)
@@ -70,11 +69,10 @@ class GameplayScreen(Screen):
         super().__init__(**kwargs)
         self.root_layout = FloatLayout()
         
-        # ✨ 1. เพิ่มพื้นหลังของเกมเพลย์ให้เป็นรูปลานประลองแบบเบลอมืดๆ
         with self.root_layout.canvas.before:
             Color(1, 1, 1, 1)
             self.main_bg_image = Rectangle(source='assets/ui/backgrounds/menu_bg.png', pos=self.pos, size=self.size)
-            Color(0.02, 0.02, 0.04, 0.9) # ทับให้มืดลง 90% ดันกระดานให้เด่น
+            Color(0.02, 0.02, 0.04, 0.9) 
             self.main_bg_overlay = Rectangle(pos=self.pos, size=self.size)
             
         self.bind(pos=self._update_main_bg, size=self._update_main_bg)
@@ -108,7 +106,6 @@ class GameplayScreen(Screen):
         else: self.game = ChessBoard(self.get_tribe_name('white'), self.get_tribe_name('black'), map_name=chosen_map)
 
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
-        # ✨ เปลี่ยนสีจากเหลืองสว่างเป็นสีทอง (0.83, 0.68, 0.21, 1)
         self.info_label = Label(text="WHITE'S TURN", size_hint_y=0.08, color=(0.83, 0.68, 0.21, 1), bold=True, font_size='22sp', markup=True)
         self.board_area.add_widget(self.info_label)
         self.play_area = BoxLayout(orientation='vertical', size_hint_y=0.92)
@@ -173,7 +170,6 @@ class GameplayScreen(Screen):
         self.update_inventory_ui()
         if self.game.game_result:
             self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
-            
             if not getattr(self, '_end_played', False):
                 if "WHITE WINS" in self.game.game_result.upper() and getattr(self, 'game_mode', 'PVP') == 'PVE':
                     App.get_running_app().play_victory_sound()
@@ -235,8 +231,18 @@ class GameplayScreen(Screen):
         if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black': return
         
         r, c = instance.row, instance.col; piece = self.game.board[r][c]
+        
+        # ✨ 🚫 ระบบไอเทมล็อก (Item Slot Lock)
         if self.selected_item:
             if piece and piece.color == self.game.current_turn:
+                # ตรวจสอบว่าหมากมีไอเทมอยู่แล้วหรือไม่
+                if getattr(piece, 'item', None) is not None:
+                    # ถ้ามีไอเทมอยู่แล้ว ห้ามใส่ทับ (ยกเลิกการเลือก)
+                    self.selected_item = None
+                    self.hide_item_tooltip()
+                    self.refresh_ui()
+                    return
+
                 if self.selected_item.id == 9 and piece.__class__.__name__.lower() == 'knight':
                     self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); return
                 if self.selected_item.id == 10 and piece.__class__.__name__.lower() != 'pawn':
@@ -305,7 +311,6 @@ class GameplayScreen(Screen):
         self.inventory_layout.clear_widgets()
         info_box = BoxLayout(orientation='vertical', size_hint_x=None, width=dp(120))
         info_box.add_widget(Label(text="INVENTORY", bold=True, font_size='14sp', color=(0.8, 0.8, 0.8, 1)))
-        # ✨ เปลี่ยนสี [WHITE] / [BLACK] ให้เป็นทอง
         info_box.add_widget(Label(text=f"[{self.game.current_turn.upper()}]", bold=True, font_size='16sp', color=(0.83, 0.68, 0.21, 1)))
         self.inventory_layout.add_widget(info_box)
         inv = getattr(self.game, f'inventory_{self.game.current_turn}', [])
