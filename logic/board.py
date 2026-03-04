@@ -134,9 +134,16 @@ class ChessBoard:
                 effect_result = apply_post_crash_effects(self, p, captured_piece, True, sr, sc, er, ec)
                 p.has_moved = True
                 status_text = "survived" if effect_result == "survived" else "died"
+                
+                # 1. ลบหมากฝ่าย ATK ออกจากกระดานหากไม่ได้รับเอฟเฟกต์รอดชีวิตจากไอเทม
+                if effect_result != "survived":
+                    self.board[sr][sc] = None
+                    
                 self.history.save_state(self, f"{p.name} attacked but {status_text} at {sr},{sc}")
                 self.complete_turn()
-                return "died" if effect_result == "died" else True
+                
+                # 2. แก้การ Return ให้ส่ง "died" กลับไปเสมอหากไม่รอด เพื่อไม่ให้ UI เผลอจับกิน
+                return "survived" if effect_result == "survived" else "died"
             elif not crash_won:
                 return False
             else:

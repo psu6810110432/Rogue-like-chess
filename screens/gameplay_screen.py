@@ -227,8 +227,8 @@ class GameplayScreen(Screen):
             self.game.history.save_state(self.game, "Shield Blocked!"); self.game.complete_turn(); self.refresh_ui(); self.check_ai_turn()
             return
             
-        res = self.game.move_piece(start_pos[0], start_pos[1], end_pos[0], end_pos[1], resolve_crash=True, crash_won=(crash_status in ["won", "died"]))
-        
+        res = self.game.move_piece(start_pos[0], start_pos[1], end_pos[0], end_pos[1], resolve_crash=True, crash_won=crash_status)    
+            
         # ✨ RESTORE: เอาระบบ Promotion หลังต่อสู้กลับมา
         if res == "promote":
             def do_p(cls): 
@@ -273,9 +273,9 @@ class GameplayScreen(Screen):
                 # ✨ RESTORE: AI เจาะโล่กัน
                 if getattr(df, 'item', None) and df.item.id == 4:
                     df.item = None; atk.has_moved = True; self.game.history.save_state(self.game, "Shield Blocked!"); self.game.complete_turn(); self.init_board_ui(); return 
-                    
+                
                 r = simulate_ai_crash_result(atk, df, self.get_tribe_name(atk.color), self.get_tribe_name(df.color))
-                res = self.game.move_piece(sr, sc, er, ec, resolve_crash=True, crash_won=(r in ["win", "died"]))
+                res = self.game.move_piece(sr, sc, er, ec, resolve_crash=True, crash_won=r)
                 
             # ✨ RESTORE: AI โปรโมทหมาก
             if res == "promote":
