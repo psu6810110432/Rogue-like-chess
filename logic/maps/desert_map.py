@@ -17,8 +17,8 @@ class DesertMap(ChessBoard):
             
         # ✨ FIX: ตรวจสอบว่าถึงเทิร์นที่ 3 หรือยังก่อนจะเริ่มสุ่มพายุทราย
         if self.desert_turn_count >= 3:
-            # โอกาส 15% ที่จะเกิดพายุทราย
-            if random.random() < 0.15:
+            # โอกาส 25% ที่จะเกิดพายุทราย
+            if random.random() < 0.25:
                 # หาแถวแนวนอนที่ว่าง 100%
                 empty_rows = []
                 for r in range(8):
