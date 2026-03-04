@@ -1,38 +1,58 @@
 # screens/match_setup/setup_screen.py
 from kivy.uix.screenmanager import Screen
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
-from kivy.app import App # ✨ Import App เพื่อดึงเสียงมาใช้
+from kivy.app import App 
+from kivy.graphics import Rectangle, Color
 from screens.match_setup.setup_section import SetupSection
+# ✨ ดึงคลาสปุ่มขอบมน 3D จากหน้า main_menu มาใช้งาน
+from screens.main_menu import RoundedButton 
 
 class MatchSetupScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-        main_layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
+        # ✨ เพิ่มพื้นหลังให้คุมโทนกับหน้าหลัก แต่ปรับให้มืดลง (0.85) เพื่อให้อ่านตัวหนังสือชัด
+        with self.canvas.before:
+            Color(1, 1, 1, 1)
+            self.bg_image = Rectangle(source='assets/ui/backgrounds/menu_bg.png', pos=self.pos, size=self.size)
+            Color(0.02, 0.02, 0.04, 0.85) 
+            self.bg_overlay = Rectangle(pos=self.pos, size=self.size)
+
+        self.bind(pos=self.update_bg, size=self.update_bg)
         
-        top_bar = BoxLayout(size_hint_y=0.1)
-        back_btn = Button(text="< Back", size_hint_x=0.15, background_color=(0.2, 0.2, 0.2, 1))
-        # ✨ เพิ่ม on_press เพื่อให้เล่นเสียงทันทีที่จิ้ม
+        main_layout = BoxLayout(orientation='vertical', padding=[30, 20, 30, 20], spacing=15)
+        
+        top_bar = BoxLayout(size_hint_y=0.1, spacing=20)
+        # ✨ เปลี่ยนปุ่ม Back เป็นปุ่ม 3D สีเทาเข้ม
+        back_btn = RoundedButton(text="< Back", normal_color=(0.2, 0.2, 0.25, 0.9), size_hint_x=0.15, font_size='18sp')
         back_btn.bind(on_press=self.play_sound, on_release=self.go_back)
         top_bar.add_widget(back_btn)
         
-        title_lbl = Label(text="Make Match", font_size='28sp', bold=True, size_hint_x=0.85)
+        title_lbl = Label(text="BATTLE SETUP", font_size='32sp', bold=True, color=(1, 0.8, 0.4, 1))
         top_bar.add_widget(title_lbl)
+        
+        # ใส่กล่องเปล่าด้านขวาเพื่อดันให้ Title อยู่ตรงกลางเป๊ะๆ
+        top_bar.add_widget(BoxLayout(size_hint_x=0.15))
         main_layout.add_widget(top_bar)
         
         self.setup_ui = SetupSection(size_hint_y=0.75)
         main_layout.add_widget(self.setup_ui)
         
-        start_btn = Button(text="START BATTLE", size_hint_y=0.15, bold=True, font_size='24sp', background_color=(0.1, 0.5, 0.2, 1))
-        # ✨ เพิ่ม on_press ให้ปุ่ม Start
+        # ✨ เปลี่ยนปุ่มเริ่มเกมเป็นปุ่ม 3D สีแดงเข้มเท่ๆ
+        start_btn = RoundedButton(text="ENGAGE BATTLE", normal_color=(0.55, 0.15, 0.05, 1), size_hint_y=0.15, bold=True, font_size='28sp')
         start_btn.bind(on_press=self.play_sound, on_release=self.start_game)
         main_layout.add_widget(start_btn)
         
         self.add_widget(main_layout)
 
-    # ✨ สร้างฟังก์ชันเรียกเสียงตอนจิ้มปุ่ม
+    def update_bg(self, *args):
+        self.bg_image.pos = self.pos
+        self.bg_image.size = self.size
+        self.bg_overlay.pos = self.pos
+        self.bg_overlay.size = self.size
+
     def play_sound(self, instance):
         app = App.get_running_app()
         if hasattr(app, 'play_click_sound'):
@@ -44,13 +64,11 @@ class MatchSetupScreen(Screen):
     def start_game(self, instance):
         app = self.setup_ui.app
         
-        # ดักคนใจร้อน! ถ้ากดปุ่มเริ่มก่อนที่จะเลือกครบ จะใส่ค่าเริ่มต้นให้ จะได้ไม่ค้าง
         if not app.game_mode: app.game_mode = 'PVE'
         if not app.selected_board: app.selected_board = 'Classic Board'
         if not app.selected_unit_white: app.selected_unit_white = 'Medieval Knights'
         if not app.selected_unit_black: app.selected_unit_black = 'Demon'
 
-        # โหลดเกม
         gameplay_screen = self.manager.get_screen('gameplay')
         gameplay_screen.setup_game(app.game_mode)
         self.manager.current = 'gameplay'
