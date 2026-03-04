@@ -1,113 +1,120 @@
 # screens/options_screen.py
 from kivy.uix.screenmanager import Screen
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
-from kivy.uix.button import Button
-from kivy.uix.slider import Slider # ✨ Import Slider
+from kivy.uix.slider import Slider
 from kivy.app import App
-from kivy.metrics import dp
+from kivy.graphics import Rectangle, Color
+# ✨ ดึงคลาสที่เราทำไว้มาใช้เพื่อความคุมโทน
+from screens.main_menu import RoundedButton
+from screens.match_setup.setup_section import SelectionCard
 
 class OptionsScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-        layout = BoxLayout(orientation='vertical', padding=dp(50), spacing=dp(20))
-        
-        # หัวข้อหน้า Options
-        title = Label(text="[b][color=ff4400]OPTIONS[/color][/b]", markup=True, font_size='48sp', size_hint_y=0.2)
-        layout.add_widget(title)
-        
-        # --- ส่วนที่ 1: AI Difficulty ---
-        diff_label = Label(text="AI Difficulty", font_size='24sp', size_hint_y=0.1)
-        layout.add_widget(diff_label)
-        
-        self.diff_box = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=0.2)
-        self.btn_easy = Button(text="Easy", font_size='20sp')
-        self.btn_easy.bind(on_release=lambda x: self.set_difficulty('easy'))
-        self.btn_normal = Button(text="Normal", font_size='20sp')
-        self.btn_normal.bind(on_release=lambda x: self.set_difficulty('normal'))
-        self.btn_hard = Button(text="Hard", font_size='20sp')
-        self.btn_hard.bind(on_release=lambda x: self.set_difficulty('hard'))
-        
-        self.diff_box.add_widget(self.btn_easy)
-        self.diff_box.add_widget(self.btn_normal)
-        self.diff_box.add_widget(self.btn_hard)
-        layout.add_widget(self.diff_box)
-        
-        # --- ✨ ส่วนที่ 2: Audio Settings ✨ ---
-        audio_label = Label(text="Music Volume", font_size='24sp', size_hint_y=0.1)
-        layout.add_widget(audio_label)
+        # ✨ 1. เพิ่มพื้นหลังคุมโทน
+        with self.canvas.before:
+            Color(1, 1, 1, 1)
+            self.bg_image = Rectangle(source='assets/ui/backgrounds/menu_bg.png', pos=self.pos, size=self.size)
+            Color(0.02, 0.02, 0.04, 0.8) 
+            self.bg_overlay = Rectangle(pos=self.pos, size=self.size)
 
-        audio_box = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=0.2)
+        self.bind(pos=self.update_bg, size=self.update_bg)
         
-        # แถบปรับเสียง
-        self.vol_slider = Slider(min=0, max=1, value=0.5, size_hint_x=0.7)
+        main_layout = BoxLayout(orientation='vertical', padding=[50, 40, 50, 40], spacing=30)
+        
+        # ✨ 2. ส่วนหัว OPTIONS (มี Drop Shadow)
+        header_container = FloatLayout(size_hint_y=0.2)
+        header_shadow = Label(
+            text="[b]OPTIONS[/b]", markup=True, font_size='54sp',
+            color=(0, 0, 0, 0.9), pos_hint={'center_x': 0.503, 'center_y': 0.5}
+        )
+        header_main = Label(
+            text="[b][color=ff5500]OPTIONS[/color][/b]", markup=True, font_size='54sp',
+            pos_hint={'center_x': 0.5, 'center_y': 0.52}
+        )
+        header_container.add_widget(header_shadow)
+        header_container.add_widget(header_main)
+        main_layout.add_widget(header_container)
+
+        # ✨ 3. AI DIFFICULTY (ใช้ SelectionCard ขอบทอง)
+        diff_box = BoxLayout(orientation='vertical', spacing=10, size_hint_y=0.25)
+        self.add_gold_label(diff_box, "AI DIFFICULTY")
+        
+        self.diff_layout = BoxLayout(orientation='horizontal', spacing=20)
+        self.diff_btns = {}
+        for level in ['Easy', 'Normal', 'Hard']:
+            btn = SelectionCard(text=f"[b]{level}[/b]")
+            btn.val = level
+            btn.bind(on_release=self.set_difficulty)
+            self.diff_btns[level] = btn
+            self.diff_layout.add_widget(btn)
+        
+        diff_box.add_widget(self.diff_layout)
+        main_layout.add_widget(diff_box)
+
+        # ✨ 4. MUSIC VOLUME
+        vol_box = BoxLayout(orientation='vertical', spacing=10, size_hint_y=0.25)
+        self.add_gold_label(vol_box, "MUSIC VOLUME")
+        
+        vol_controls = BoxLayout(orientation='horizontal', spacing=20)
+        # ปรับแต่ง Slider
+        self.vol_slider = Slider(min=0, max=1, value=0.5, step=0.05, size_hint_x=0.7)
         self.vol_slider.bind(value=self.on_volume_change)
-        audio_box.add_widget(self.vol_slider)
+        
+        self.mute_btn = RoundedButton(text="Mute", normal_color=(0.2, 0.2, 0.25, 1), size_hint_x=0.3)
+        self.mute_btn.bind(on_release=self.toggle_mute)
+        
+        vol_controls.add_widget(self.vol_slider)
+        vol_controls.add_widget(self.mute_btn)
+        vol_box.add_widget(vol_controls)
+        main_layout.add_widget(vol_box)
 
-        # ปุ่มปิดเสียง (Mute)
-        self.btn_mute = Button(text="Mute Music", font_size='18sp', size_hint_x=0.3, background_color=(0.3, 0.3, 0.3, 1))
-        self.btn_mute.bind(on_release=self.toggle_mute)
-        audio_box.add_widget(self.btn_mute)
+        # ✨ 5. ปุ่มกลับหน้าเมนู (3D สีเลือดหมูเข้ม)
+        self.back_btn = RoundedButton(
+            text="BACK TO MENU", normal_color=(0.4, 0.1, 0.1, 1),
+            size_hint=(0.4, 0.15), pos_hint={'center_x': 0.5}, bold=True
+        )
+        self.back_btn.bind(on_release=self.go_back)
+        main_layout.add_widget(self.back_btn)
+        
+        self.add_widget(main_layout)
+        
+        # ตั้งค่าเริ่มต้นให้ Normal ถูกเลือก
+        Clock_once = lambda dt: self.refresh_difficulty_ui("Normal")
+        from kivy.clock import Clock
+        Clock.schedule_once(Clock_once)
 
-        layout.add_widget(audio_box)
-        # -----------------------------------
+    def add_gold_label(self, parent, text):
+        lbl = Label(text=f"[color=d4af37][b]{text}[/b][/color]", markup=True, 
+                    font_size='20sp', halign='left', size_hint_y=None, height=30)
+        lbl.bind(size=lbl.setter('text_size'))
+        parent.add_widget(lbl)
 
-        # ช่องว่างผลักปุ่ม Back ให้อยู่ล่างสุด
-        layout.add_widget(Label(size_hint_y=0.2))
-        
-        # ปุ่มย้อนกลับ
-        btn_back = Button(text="Back to Menu", font_size='20sp', size_hint_y=0.2, background_color=(0.5, 0.1, 0.1, 1))
-        btn_back.bind(on_release=self.go_back)
-        layout.add_widget(btn_back)
-        
-        self.add_widget(layout)
-        
-    def on_pre_enter(self, *args):
-        self.update_button_colors()
-        # ซิงค์ค่า Slider กับความดังของแอปตอนเปิดหน้านี้
-        app = App.get_running_app()
-        if app.bgm:
-            self.vol_slider.value = app.bgm.volume
+    def update_bg(self, *args):
+        self.bg_image.pos = self.pos
+        self.bg_image.size = self.size
+        self.bg_overlay.pos = self.pos
+        self.bg_overlay.size = self.size
 
-    def set_difficulty(self, level):
-        app = App.get_running_app()
-        app.play_click_sound() # ✨ เล่นเสียงตอนกด
-        app.ai_difficulty = level  
-        self.update_button_colors()
-        
-    def update_button_colors(self):
-        app = App.get_running_app()
-        current = getattr(app, 'ai_difficulty', 'normal')
-        
-        active_color = (0.8, 0.2, 0.0, 1)
-        inactive_color = (0.2, 0.2, 0.2, 1)
-        
-        self.btn_easy.background_color = active_color if current == 'easy' else inactive_color
-        self.btn_normal.background_color = active_color if current == 'normal' else inactive_color
-        self.btn_hard.background_color = active_color if current == 'hard' else inactive_color
+    def set_difficulty(self, instance):
+        App.get_running_app().play_click_sound()
+        self.refresh_difficulty_ui(instance.val)
 
-    # ✨ ฟังก์ชันจัดการเสียงเวลาเลื่อน Slider
+    def refresh_difficulty_ui(self, selected_val):
+        for val, btn in self.diff_btns.items():
+            btn.set_selected(val == selected_val)
+
     def on_volume_change(self, instance, value):
-        app = App.get_running_app()
-        app.set_bgm_volume(value)
-        if value > 0:
-            self.btn_mute.text = "Mute Music"
-            self.btn_mute.background_color = (0.3, 0.3, 0.3, 1)
-        else:
-            self.btn_mute.text = "Unmute Music"
-            self.btn_mute.background_color = (0.8, 0.2, 0.0, 1)
+        # ใส่ Logic ปรับเสียงเพลงของแอปคุณตรงนี้
+        pass
 
-    # ✨ ฟังก์ชันปุ่ม Mute
     def toggle_mute(self, instance):
-        app = App.get_running_app()
-        app.play_click_sound()
-        if self.vol_slider.value > 0:
-            self.last_volume = self.vol_slider.value # จำค่าเก่าไว้
-            self.vol_slider.value = 0
-        else:
-            self.vol_slider.value = getattr(self, 'last_volume', 0.5)
+        App.get_running_app().play_click_sound()
+        self.vol_slider.value = 0
 
     def go_back(self, instance):
-        App.get_running_app().play_click_sound() # ✨ เล่นเสียงตอนกดกลับ
-        self.manager.current = 'main_menu' # ✨ FIX: จาก 'menu' เป็น 'main_menu' ให้ตรงกับ main.py
+        App.get_running_app().play_click_sound()
+        self.manager.current = 'main_menu'
