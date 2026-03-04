@@ -1,84 +1,123 @@
 # screens/match_setup/setup_section.py
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.animation import Animation
-from components.unit_card import UnitCard
+from kivy.graphics import Color, RoundedRectangle, Line
+from kivy.metrics import dp
+
+class SelectionCard(Button):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_color = (0, 0, 0, 0)
+        self.background_normal = ''
+        self.background_down = ''
+        self.markup = True
+        self.val = ''
+        self.is_selected = False
+        
+        with self.canvas.before:
+            # ✨ เปลี่ยนชื่อตัวแปรให้มีคำว่า card_ นำหน้าทั้งหมด หนีตัวแปรระบบ Kivy
+            self.card_bg_color = Color(0.1, 0.1, 0.12, 0.7) 
+            self.card_rect = RoundedRectangle(radius=[12])
+            
+            self.card_border_color = Color(0.3, 0.3, 0.35, 1) 
+            self.card_border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, 12], width=1.2)
+            
+        self.bind(pos=self.update_graphics, size=self.update_graphics, state=self.update_state)
+
+    def update_graphics(self, *args):
+        self.card_rect.pos = self.pos
+        self.card_rect.size = self.size
+        self.card_border_line.rounded_rectangle = [self.x, self.y, self.width, self.height, 12]
+
+    def update_state(self, *args):
+        if not self.is_selected:
+            if self.state == 'down':
+                self.card_bg_color.rgba = (0.2, 0.2, 0.25, 0.8)
+            else:
+                self.card_bg_color.rgba = (0.1, 0.1, 0.12, 0.7)
+
+    def set_selected(self, selected):
+        self.is_selected = selected
+        if selected:
+            self.card_bg_color.rgba = (0.15, 0.2, 0.15, 0.85) 
+            self.card_border_color.rgba = (0.83, 0.68, 0.21, 1) 
+            self.card_border_line.width = 2.0
+        else:
+            self.card_bg_color.rgba = (0.1, 0.1, 0.12, 0.7)
+            self.card_border_color.rgba = (0.3, 0.3, 0.35, 1)
+            self.card_border_line.width = 1.2
+
 
 class SetupSection(BoxLayout):
     def __init__(self, **kwargs):
-        super().__init__(orientation='vertical', padding=[60, 20, 60, 20], spacing=20, **kwargs)
+        super().__init__(orientation='vertical', padding=[20, 10, 20, 10], spacing=15, **kwargs)
         self.app = App.get_running_app()
-        # รีเซ็ตค่าเริ่มต้นในแอป
         self.app.game_mode = ''
         self.app.selected_board = ''
         self.app.selected_unit_white = ''
         self.app.selected_unit_black = ''
 
         # 1. SELECT GAME MODE
-        self.mode_box = BoxLayout(orientation='vertical', size_hint_y=0.25, spacing=10)
-        lbl1 = Label(text="[color=f1c40f][b]1. SELECT GAME MODE[/b][/color]", markup=True, font_size='22sp', halign='left', size_hint_y=None, height=35)
-        lbl1.bind(size=lbl1.setter('text_size'))
-        self.mode_box.add_widget(lbl1)
+        self.mode_box = BoxLayout(orientation='vertical', size_hint_y=0.25, spacing=5)
+        self.add_header(self.mode_box, "1. SELECT GAME MODE")
         
         mode_grid = GridLayout(cols=2, spacing=20)
         self.mode_cards = []
         for m in ['PVE', 'PVP']:
-            card = UnitCard(text=f"[b]{m} Mode[/b]\n[size=14sp]{'Play vs AI' if m=='PVE' else '2 Players'}[/size]")
+            desc = "COMMANDER vs AI" if m=='PVE' else "DUEL BETWEEN LORDS"
+            card = SelectionCard(text=f"[b]{m} MODE[/b]\n[size=14sp][color=a0a0a0]{desc}[/color][/size]")
             card.val = m
-            # ✨ เพิ่ม on_press=self.play_sound
             card.bind(on_press=self.play_sound, on_release=self.on_mode_select)
             self.mode_cards.append(card)
             mode_grid.add_widget(card)
         self.mode_box.add_widget(mode_grid)
         self.add_widget(self.mode_box)
 
-        # 2. SELECT MAP (ซ่อนไว้ก่อน)
-        self.map_box = BoxLayout(orientation='vertical', size_hint_y=0.25, spacing=10, opacity=0, disabled=True)
-        lbl2 = Label(text="[color=f1c40f][b]2. SELECT MAP[/b][/color]", markup=True, font_size='22sp', halign='left', size_hint_y=None, height=35)
-        lbl2.bind(size=lbl2.setter('text_size'))
-        self.map_box.add_widget(lbl2)
+        # 2. SELECT MAP
+        self.map_box = BoxLayout(orientation='vertical', size_hint_y=0.25, spacing=5, opacity=0, disabled=True)
+        self.add_header(self.map_box, "2. STRATEGIC BATTLEFIELD")
         
-        map_grid = GridLayout(cols=5, spacing=15)
+        map_grid = GridLayout(cols=5, spacing=12)
         self.map_cards = []
         for mp in ['Classic Board', 'Enchanted Forest', 'Desert Ruins', 'Frozen Tundra', 'Random Board']:
-            card = UnitCard(text=f"[b][size=16sp]{mp}[/size][/b]")
+            display_name = mp.replace(" Board", "")
+            card = SelectionCard(text=f"[b][size=15sp]{display_name}[/size][/b]")
             card.val = mp
-            # ✨ เพิ่ม on_press=self.play_sound
             card.bind(on_press=self.play_sound, on_release=self.on_map_select)
             self.map_cards.append(card)
             map_grid.add_widget(card)
         self.map_box.add_widget(map_grid)
         self.add_widget(self.map_box)
 
-        # 3. SELECT FACTIONS (ซ่อนไว้ก่อน)
-        self.fac_box = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=10, opacity=0, disabled=True)
-        lbl3 = Label(text="[color=f1c40f][b]3. SELECT FACTIONS[/b][/color]", markup=True, font_size='22sp', halign='left', size_hint_y=None, height=35)
-        lbl3.bind(size=lbl3.setter('text_size'))
-        self.fac_box.add_widget(lbl3)
+        # 3. SELECT FACTIONS
+        self.fac_box = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=5, opacity=0, disabled=True)
+        self.add_header(self.fac_box, "3. CHOOSE YOUR LEGION")
         
-        self.fac_split = BoxLayout(orientation='horizontal', spacing=40)
-        # ฝั่งขาว
-        self.w_box = BoxLayout(orientation='vertical', spacing=10, opacity=0)
-        self.w_box.add_widget(Label(text="WHITE", bold=True, size_hint_y=None, height=30))
+        self.fac_split = BoxLayout(orientation='horizontal', spacing=30)
+        
+        # WHITE
+        self.w_box = BoxLayout(orientation='vertical', spacing=8, opacity=0)
+        self.w_box.add_widget(Label(text="DIVINE ORDER (WHITE)", font_size='14sp', color=(0.8, 0.8, 0.8, 1), bold=True, size_hint_y=None, height=20))
         self.white_cards = []
         for f in ['Medieval Knights', 'Ayothaya', 'Demon', 'Heaven']:
-            card = UnitCard(text=f"[b][size=18sp]{f}[/size][/b]")
+            card = SelectionCard(text=f"[b][size=16sp]{f}[/size][/b]")
             card.val = f
-            # ✨ เพิ่ม on_press=self.play_sound
             card.bind(on_press=self.play_sound, on_release=self.on_white_select)
             self.white_cards.append(card)
             self.w_box.add_widget(card)
-        # ฝั่งดำ
-        self.b_box = BoxLayout(orientation='vertical', spacing=10, opacity=0)
-        self.b_box.add_widget(Label(text="BLACK", bold=True, size_hint_y=None, height=30))
+            
+        # BLACK
+        self.b_box = BoxLayout(orientation='vertical', spacing=8, opacity=0)
+        self.b_box.add_widget(Label(text="DARK ABYSS (BLACK)", font_size='14sp', color=(0.8, 0.8, 0.8, 1), bold=True, size_hint_y=None, height=20))
         self.black_cards = []
         for f in ['Medieval Knights', 'Ayothaya', 'Demon', 'Heaven']:
-            card = UnitCard(text=f"[b][size=18sp]{f}[/size][/b]")
+            card = SelectionCard(text=f"[b][size=16sp]{f}[/size][/b]")
             card.val = f
-            # ✨ เพิ่ม on_press=self.play_sound
             card.bind(on_press=self.play_sound, on_release=self.on_black_select)
             self.black_cards.append(card)
             self.b_box.add_widget(card)
@@ -90,7 +129,11 @@ class SetupSection(BoxLayout):
 
         self.update_selections()
 
-    # ✨ ฟังก์ชันช่วยดึงคำสั่งเสียงจากตัวแอปมาเล่น
+    def add_header(self, parent_box, text):
+        lbl = Label(text=f"[color=d4af37][b]{text}[/b][/color]", markup=True, font_size='20sp', halign='left', size_hint_y=None, height=35)
+        lbl.bind(size=lbl.setter('text_size'))
+        parent_box.add_widget(lbl)
+
     def play_sound(self, instance):
         if hasattr(self.app, 'play_click_sound'):
             self.app.play_click_sound()
