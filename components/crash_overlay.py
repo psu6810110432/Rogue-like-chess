@@ -31,7 +31,7 @@ class CrashOverlay(BoxLayout):
         self.bg_rect.pos, self.bg_rect.size = instance.pos, instance.size
 
     def _setup_ui(self):
-        self.add_widget(Label(text="CRASH!", bold=True, font_size='22sp', color=(1, 0.2, 0.2, 1), size_hint_y=0.15))
+        self.add_widget(Label(text="CRASH!", bold=True, font_size='28sp', color=(1, 0.2, 0.2, 1), size_hint_y=0.15))
         vs_box = BoxLayout(orientation='horizontal', size_hint_y=0.55)
         
         # ATK
@@ -56,7 +56,7 @@ class CrashOverlay(BoxLayout):
         
         self.add_widget(vs_box)
         
-        self.crash_btn = Button(text="START!", size_hint_y=0.3, background_color=(0.8, 0.2, 0.2, 1))
+        self.crash_btn = Button(text="START!", bold=True, font_size='20sp', size_hint_y=0.3, background_color=(0.8, 0.2, 0.2, 1))
         self.crash_btn.bind(on_release=self.start_crash_animation)
         self.add_widget(self.crash_btn)
 
@@ -113,7 +113,8 @@ class CrashOverlay(BoxLayout):
 
         self.anim_state = {
             'side': 'atk', 'coin_idx': 0, 'ticks': 0, 'max_ticks': 10,
-            'a_current_total': a_base, 'd_current_total': d_base
+            'a_current_total': a_base, 'd_current_total': d_base,
+            'a_heads': 0, 'd_heads': 0
         }
         self.spin_event = Clock.schedule_interval(self.animate_coin_step, 0.08)
 
@@ -134,34 +135,58 @@ class CrashOverlay(BoxLayout):
             if side == 'atk': s['side'], s['coin_idx'], s['ticks'] = 'def', 0, 0
             else: self.spin_event.cancel(); self.finish_crash_animation()
             return
+            
         s['ticks'] += 1
         if s['coin_idx'] < len(widgets):
             w = widgets[s['coin_idx']]
             w.opacity = 1.0 if (s['ticks'] % 4) < 2 else 0.3
             if s['ticks'] >= s['max_ticks']:
                 w.opacity = 1.0; w.source = self._get_coin_img(res[s['coin_idx']], fac)
-                s[key] += pts[s['coin_idx']]; lbl.text = f"{s[key]}"; s['coin_idx'] += 1; s['ticks'] = 0
-        else: s['coin_idx'] += 1; s['ticks'] = 0
+                
+                # 1. บวกแต้มหน้าเหรียญปกติ
+                s[key] += pts[s['coin_idx']]
+                
+                # 2. ✨ FIX: ระบบนับจำนวนหัวและโบนัสเผ่า Heaven
+                heads_key = 'a_heads' if side == 'atk' else 'd_heads'
+                if "Heads" in res[s['coin_idx']]:
+                    s[heads_key] += 1
+                    if fac == "heaven":
+                        if s[heads_key] == 3:  # ครบ 3 หัวแรก บวก 3 แต้ม
+                            s[key] += 3
+                        elif s[heads_key] == 6: # ครบ 6 หัว บวกอีก 3 แต้ม
+                            s[key] += 3
+                            
+                # 3. อัปเดตตัวเลขขึ้นหน้าจอ
+                lbl.text = f"{s[key]}"
+                s['coin_idx'] += 1
+                s['ticks'] = 0
+        else: 
+            s['coin_idx'] += 1
+            s['ticks'] = 0
 
     def finish_crash_animation(self):
         a_tot, d_tot = self.anim_state['a_current_total'], self.anim_state['d_current_total']
         if a_tot > d_tot:
-            self.crash_btn.text = "BREAK!"
-            self.crash_btn.background_color = (0, 0.8, 0, 1)
+            self.crash_btn.text = "BREAKING!"
+            self.crash_btn.font_size = '24sp'
+            self.crash_btn.background_color = (0, 0.8, 0, 1)  # เขียว
             Clock.schedule_once(lambda dt: self.on_finish(self.start_pos, self.end_pos, "won"), 1.2)
         elif a_tot == d_tot:
             self.crash_btn.text = "DRAW!"
-            self.crash_btn.background_color = (0.8, 0.8, 0, 1)
+            self.crash_btn.font_size = '24sp'
+            self.crash_btn.background_color = (1, 1, 0, 1)  # เหลือง
             Clock.schedule_once(lambda dt: self.start_crash_animation(), 1.2)
         else:
             self.crash_stagger_count += 1
             if self.crash_stagger_count < 2:
                 self.crash_btn.text = "STAGGER!"
-                self.crash_btn.background_color = (0.8, 0.5, 0, 1)
+                self.crash_btn.font_size = '24sp'
+                self.crash_btn.background_color = (1, 0.5, 0, 1)  # ส้ม
                 Clock.schedule_once(lambda dt: self.start_crash_animation(), 1.2)
             else:
-                self.crash_btn.text = "LOST!"
-                self.crash_btn.background_color = (0.8, 0, 0, 1)
+                self.crash_btn.text = "DISTORTION!"
+                self.crash_btn.font_size = '24sp'
+                self.crash_btn.background_color = (1, 0, 0, 1)  # แดง
                 Clock.schedule_once(lambda dt: self.on_finish(self.start_pos, self.end_pos, "died"), 1.2)
 
     def force_cancel(self):

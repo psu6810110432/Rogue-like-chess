@@ -225,7 +225,26 @@ class GameplayScreen(Screen):
         r, c = instance.row, instance.col; piece = self.game.board[r][c]
         if self.selected_item:
             if piece and piece.color == self.game.current_turn:
+                
+                # 🚫 ✨ FIX: ดักจับไม่ให้สวมใส่ Item 9 ให้กับหมาก Knight
+                if self.selected_item.id == 9 and piece.__class__.__name__.lower() == 'knight':
+                    # ยกเลิกการเลือกไอเทมไปเลย (หรือจะใส่ Popup แจ้งเตือนผู้เล่นเพิ่มก็ได้)
+                    self.selected_item = None
+                    self.hide_item_tooltip()
+                    self.refresh_ui()
+                    return
+                
+                # 🚫 ✨ FIX: ดักจับไม่ให้สวมใส่ Item 10 ให้กับหมากที่ "ไม่ใช่" Pawn
+                if self.selected_item.id == 10 and piece.__class__.__name__.lower() != 'pawn':
+                    self.selected_item = None
+                    self.hide_item_tooltip()
+                    self.refresh_ui()
+                    return
+                
+                # ถ้าไม่ใช่ Knight ค่อยให้สวมใส่ไอเทมตามปกติ
                 piece.item = self.selected_item
+                
+                # ✨ RESTORE: เอาระบบคำนวณ Stat พิเศษของไอเทมกลับมา
                 if piece.item.id == 6: 
                     piece.coins += 1; piece.base_points = max(0, piece.base_points - 1)
                 elif piece.item.id == 10 and piece.__class__.__name__.lower() == 'pawn': 
@@ -233,7 +252,7 @@ class GameplayScreen(Screen):
                     
                 inv = getattr(self.game, f'inventory_{self.game.current_turn}')
                 if self.selected_item in inv: inv.remove(self.selected_item)
-                self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); self.show_piece_status(piece) 
+                self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); self.show_piece_status(piece)
             else: self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui()
             return
             
@@ -279,10 +298,15 @@ class GameplayScreen(Screen):
             atk, df = self.game.board[start_pos[0]][start_pos[1]], self.game.board[end_pos[0]][end_pos[1]]
             if df: df.item = None
             if atk: atk.has_moved = True
-            self.game.history.save_state(self.game, "Shield Blocked!"); self.game.complete_turn(); self.refresh_ui(); self.check_ai_turn()
+            self.game.history.save_state(self.game, "Shield Blocked!")
+            self.game.complete_turn()
+            
+            # ✨ FIX: เปลี่ยนมาใช้ init_board_ui() เพื่อบังคับให้ระบบวาดกระดานใหม่และพลิกหน้าจอตามเทิร์น
+            self.init_board_ui() 
+            self.check_ai_turn()
             return
             
-        res = self.game.move_piece(start_pos[0], start_pos[1], end_pos[0], end_pos[1], resolve_crash=True, crash_won=(crash_status in ["won", "died"]))
+        res = self.game.move_piece(start_pos[0], start_pos[1], end_pos[0], end_pos[1], resolve_crash=True, crash_won=crash_status)
         
         # ✨ เล่นเสียงเดินหมากหลังต่อสู้เสร็จ
         if res in [True, "promote", "died"]:
@@ -292,10 +316,16 @@ class GameplayScreen(Screen):
             def do_p(cls): 
                 self.game.promote_pawn(end_pos[0], end_pos[1], cls); pop.dismiss(); self.init_board_ui(); self.check_ai_turn()
             pop = PromotionPopup(self.game.board[end_pos[0]][end_pos[1]].color, do_p); pop.open()
-        elif res in [True, "died"]: 
-            self.selected = None; self.init_board_ui(); self.check_ai_turn()
+            
+        # ✨ FIX: เพิ่ม "survived" และ "defender_survived" เข้าไป เพื่อให้ระบบเรียก init_board_ui() เพื่อพลิกกระดาน
+        elif res in [True, "died", "survived", "defender_survived"]: 
+            self.selected = None
+            self.init_board_ui() 
+            self.check_ai_turn()
         else: 
-            self.selected = None; self.refresh_ui(); self.check_ai_turn()
+            self.selected = None
+            self.refresh_ui()
+            self.check_ai_turn()
 
     def update_inventory_ui(self):
         self.inventory_layout.clear_widgets()
@@ -335,9 +365,9 @@ class GameplayScreen(Screen):
                 
                 if getattr(df, 'item', None) and df.item.id == 4:
                     df.item = None; atk.has_moved = True; self.game.history.save_state(self.game, "Shield Blocked!"); self.game.complete_turn(); self.init_board_ui(); return 
-                    
+                
                 r = simulate_ai_crash_result(atk, df, self.get_tribe_name(atk.color), self.get_tribe_name(df.color))
-                res = self.game.move_piece(sr, sc, er, ec, resolve_crash=True, crash_won=(r in ["win", "died"]))
+                res = self.game.move_piece(sr, sc, er, ec, resolve_crash=True, crash_won=r)
                 
                 # ✨ เพิ่มเสียง Draw สำหรับ Crash ฝั่งบอท
                 if r in ["win", "died"]:
