@@ -18,9 +18,15 @@ class RogueChessApp(App):
     selected_unit_black = StringProperty('Demon')
     
     def build(self):
-        # ✨ โหลดไฟล์เสียง BGM และ SFX
+        # ✨ โหลดไฟล์เสียง BGM 
         self.bgm = SoundLoader.load('assets/audio/bgm/main_theme.mp3')
-        self.sfx_click = SoundLoader.load('assets/audio/sfx/click.wav')
+        
+        # ✨ โหลดไฟล์เสียง SFX ใหม่ (เป็น .mp3 ตามที่คุณโหลดมา)
+        self.sfx_click = SoundLoader.load('assets/audio/sfx/click.mp3')
+        self.sfx_coin = SoundLoader.load('assets/audio/sfx/coin.mp3')
+        self.sfx_victory = SoundLoader.load('assets/audio/sfx/victory.mp3')
+        
+        # (เก็บของเดิมไว้เผื่อใช้)
         self.sfx_capture = SoundLoader.load('assets/audio/sfx/capture.wav')
 
         # เริ่มเล่น BGM ทันทีเมื่อเปิดเกม
@@ -46,9 +52,18 @@ class RogueChessApp(App):
         if self.bgm:
             self.bgm.volume = volume
 
+    # ✨ ฟังก์ชันสั่งเล่นเสียงเอฟเฟกต์ต่างๆ
     def play_click_sound(self):
         if self.sfx_click:
             self.sfx_click.play()
+
+    def play_coin_sound(self):
+        if self.sfx_coin:
+            self.sfx_coin.play()
+
+    def play_victory_sound(self):
+        if self.sfx_victory:
+            self.sfx_victory.play()
 
     def play_capture_sound(self):
         if self.sfx_capture:

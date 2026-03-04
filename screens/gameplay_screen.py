@@ -54,7 +54,9 @@ class PromotionPopup(ModalView):
             tf = "ayothaya" if theme=="Ayothaya" else "demon" if theme=="Demon" else "heaven" if theme=="Heaven" else "medieval"
             mapping = {'queen': '2', 'rook': '3', 'knight': '4', 'bishop': '5'}
             path = f"assets/pieces/{tf}/{color}/chess {tf}{mapping[n]}.png"
-            btn = Button(background_normal=path); btn.bind(on_release=lambda b, c=cls: callback(c))
+            btn = Button(background_normal=path)
+            # ✨ เพิ่มเสียงคลิกเวลากดเลือกหมากที่จะโปรโมท
+            btn.bind(on_release=lambda b, c=cls: (App.get_running_app().play_click_sound(), callback(c)))
             layout.add_widget(btn)
         self.add_widget(layout)
 
@@ -123,7 +125,6 @@ class GameplayScreen(Screen):
 
     def init_board_ui(self):
         self.board_anchor.clear_widgets()
-        # ✨ FIX: PVP จะสลับหน้าจอ (พลิกกระดาน) แต่ PVE/TUTORIAL จะล็อคฝั่งขาว
         gm = getattr(self, 'game_mode', 'PVP')
         vp = 'white' if gm in ['TUTORIAL', 'PVE'] else self.game.current_turn
         
@@ -151,8 +152,20 @@ class GameplayScreen(Screen):
         self.update_inventory_ui()
         if self.game.game_result:
             self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
-            if not self._game_over_scheduled: self._game_over_scheduled = True; Clock.schedule_once(self.auto_quit_to_setup, 2.5)
-        else: self.info_label.text = f"{self.game.current_turn.upper()}'S TURN"
+            
+            # เช็คเงื่อนไขชนะ: ถ้าผู้เล่น (ฝั่งขาว) ชนะ และกำลังเล่น PVE ให้เปิดเพลง Victory
+            if "WHITE WINS" in self.game.game_result.upper() and getattr(self, 'game_mode', 'PVP') == 'PVE':
+                if not getattr(self, '_victory_played', False):
+                    App.get_running_app().play_victory_sound()
+                    self._victory_played = True
+
+            if not self._game_over_scheduled: 
+                self._game_over_scheduled = True
+                Clock.schedule_once(self.auto_quit_to_setup, 2.5)
+        else: 
+            self.info_label.text = f"{self.game.current_turn.upper()}'S TURN"
+            self._victory_played = False # รีเซ็ตเพลงให้พร้อมสำหรับรอบต่อไป
+
         cp = self.game.find_king(self.game.current_turn) if self.game.is_in_check(self.game.current_turn) else None
         for (r, c), sq in self.squares.items():
             il = (r, c) in (self.game.last_move or [])
@@ -168,7 +181,6 @@ class GameplayScreen(Screen):
     def get_piece_image_path(self, piece):
         if not piece: return None
         p_c, p_n = piece.color, piece.__class__.__name__.lower()
-        # ✨ RESTORE: เอาระบบรูปภาพสิ่งกีดขวาง (Obstacles) กลับมา
         if p_n == 'obstacle':
             ot = piece.name.lower(); return f"assets/pieces/event/event{'1' if ot=='thorn' else '2' if ot=='sandstorm' else '3'}.png"
         theme = getattr(App.get_running_app(), f'selected_unit_{p_c}', 'Medieval Knights')
@@ -177,16 +189,17 @@ class GameplayScreen(Screen):
         return f"assets/pieces/{tf}/{p_c}/chess {tf}{num}.png"
 
     def on_square_tap(self, instance):
+        # ✨ เพิ่มเสียงคลิกเวลากดเลือกหมากหรือเดินบนกระดาน
+        App.get_running_app().play_click_sound()
+        
         if self.game.game_result: return
         
-        # ✨ RESTORE: ป้องกันผู้เล่นกดตอนเทิร์นบอทในโหมด PVE
         if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black': return
         
         r, c = instance.row, instance.col; piece = self.game.board[r][c]
         if self.selected_item:
             if piece and piece.color == self.game.current_turn:
                 piece.item = self.selected_item
-                # ✨ RESTORE: เอาระบบคำนวณ Stat พิเศษของไอเทมกลับมา
                 if piece.item.id == 6: 
                     piece.coins += 1; piece.base_points = max(0, piece.base_points - 1)
                 elif piece.item.id == 10 and piece.__class__.__name__.lower() == 'pawn': 
@@ -205,7 +218,6 @@ class GameplayScreen(Screen):
             sr, sc = self.selected; res = self.game.move_piece(sr, sc, r, c)
             if isinstance(res, tuple) and res[0] == "crash": self.show_crash_overlay(res[1], res[2], (sr, sc), (r, c)); return
             
-            # ✨ RESTORE: เอาระบบ Promotion กลับมา
             if res == "promote":
                 self.hide_piece_status()
                 def do_p(cls): 
@@ -219,7 +231,6 @@ class GameplayScreen(Screen):
     def execute_board_move(self, start_pos, end_pos, crash_status):
         self.cancel_crash()
         
-        # ✨ RESTORE: เอาระบบโล่ป้องกัน (Shield Blocked) กลับมา
         if crash_status == "blocked":
             atk, df = self.game.board[start_pos[0]][start_pos[1]], self.game.board[end_pos[0]][end_pos[1]]
             if df: df.item = None
@@ -229,7 +240,6 @@ class GameplayScreen(Screen):
             
         res = self.game.move_piece(start_pos[0], start_pos[1], end_pos[0], end_pos[1], resolve_crash=True, crash_won=(crash_status in ["won", "died"]))
         
-        # ✨ RESTORE: เอาระบบ Promotion หลังต่อสู้กลับมา
         if res == "promote":
             def do_p(cls): 
                 self.game.promote_pawn(end_pos[0], end_pos[1], cls); pop.dismiss(); self.init_board_ui(); self.check_ai_turn()
@@ -253,12 +263,14 @@ class GameplayScreen(Screen):
             else: self.inventory_layout.add_widget(InventorySlot())
 
     def on_item_click(self, item):
+        # ✨ เพิ่มเสียงคลิกเวลากดเลือกใช้ไอเทม
+        App.get_running_app().play_click_sound()
+        
         if self.selected_item == item: self.selected_item = None; self.hide_item_tooltip()
         else: self.selected_item = item; self.show_item_tooltip(item)
         self.update_inventory_ui() 
 
     def check_ai_turn(self):
-        # ✨ FIX: บอทจะเดินอัตโนมัติเฉพาะในโหมด PVE เท่านั้น (PVP เล่นกันเองสองคน)
         if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black' and not self.game.game_result: 
             Clock.schedule_once(self.trigger_ai_move, 0.8)
 
@@ -270,31 +282,43 @@ class GameplayScreen(Screen):
                 atk, df = res[1], res[2]
                 if not atk or not df: return
                 
-                # ✨ RESTORE: AI เจาะโล่กัน
                 if getattr(df, 'item', None) and df.item.id == 4:
                     df.item = None; atk.has_moved = True; self.game.history.save_state(self.game, "Shield Blocked!"); self.game.complete_turn(); self.init_board_ui(); return 
                     
                 r = simulate_ai_crash_result(atk, df, self.get_tribe_name(atk.color), self.get_tribe_name(df.color))
                 res = self.game.move_piece(sr, sc, er, ec, resolve_crash=True, crash_won=(r in ["win", "died"]))
                 
-            # ✨ RESTORE: AI โปรโมทหมาก
             if res == "promote":
                 from logic.pieces import Queen; self.game.promote_pawn(er, ec, Queen)
                 
             self.init_board_ui()
 
-    def on_quit(self): self.manager.current = 'setup'
+    def on_quit(self): 
+        # ✨ เพิ่มเสียงคลิกเวลากดปุ่ม Quit Match
+        App.get_running_app().play_click_sound()
+        self.manager.current = 'setup'
+        
     def auto_quit_to_setup(self, dt): self.manager.current = 'setup'
+    
     def on_undo_click(self):
+        App.get_running_app().play_click_sound() 
         if self.game.undo_move(): self.selected = None; self.init_board_ui()
+        
     def show_piece_status(self, piece):
         if self.crash_popup: return 
         self.info_zone.clear_widgets(); self.status_popup = UnitCard(piece, self.get_piece_image_path(piece))
         self.info_zone.add_widget(self.status_popup)
+        
     def hide_piece_status(self):
         if not self.crash_popup: self.info_zone.clear_widgets(); self.status_popup = None
+        
     def show_crash_overlay(self, attacker, defender, start, end):
         self.info_zone.clear_widgets()
+        
+        # สั่งเล่นเสียงทอยเหรียญเมื่อเริ่ม Crash 
+        App.get_running_app().play_coin_sound()
+        
         self.crash_popup = CrashOverlay(attacker, defender, start, end, self.get_tribe_name(attacker.color), self.get_tribe_name(defender.color), self.get_piece_image_path, self.execute_board_move, self.cancel_crash)
         self.info_zone.add_widget(self.crash_popup)
+        
     def cancel_crash(self): self.info_zone.clear_widgets(); self.crash_popup = None; self.refresh_ui()
