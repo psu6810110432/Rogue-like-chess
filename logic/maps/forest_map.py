@@ -4,8 +4,8 @@ from logic.board import ChessBoard
 from logic.pieces import Obstacle
 
 class ForestMap(ChessBoard):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, white_tribe='medieval', black_tribe='medieval'):
+        super().__init__(white_tribe, black_tribe, 'Enchanted Forest')
         self.bg_image = 'assets/boards/forest.png'
 
     def apply_map_effects(self):

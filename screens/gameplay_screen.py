@@ -100,10 +100,14 @@ class GameplayScreen(Screen):
         chosen_map = getattr(app, 'selected_board', 'Classic Board')
         if chosen_map == "Random Board": chosen_map = random.choice(['Classic Board', 'Enchanted Forest', 'Desert Ruins', 'Frozen Tundra'])
         
-        if chosen_map == 'Enchanted Forest' and ForestMap: self.game = ForestMap()
-        elif chosen_map == 'Desert Ruins' and DesertMap: self.game = DesertMap()
-        elif chosen_map == 'Frozen Tundra' and TundraMap: self.game = TundraMap()
-        else: self.game = ChessBoard(self.get_tribe_name('white'), self.get_tribe_name('black'), map_name=chosen_map)
+        if chosen_map == 'Enchanted Forest' and ForestMap: 
+            self.game = ForestMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
+        elif chosen_map == 'Desert Ruins' and DesertMap: 
+            self.game = DesertMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
+        elif chosen_map == 'Frozen Tundra' and TundraMap: 
+            self.game = TundraMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
+        else: 
+            self.game = ChessBoard(self.get_tribe_name('white'), self.get_tribe_name('black'), map_name=chosen_map)
 
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
         self.info_label = Label(text="WHITE'S TURN", size_hint_y=0.08, color=(0.83, 0.68, 0.21, 1), bold=True, font_size='22sp', markup=True)

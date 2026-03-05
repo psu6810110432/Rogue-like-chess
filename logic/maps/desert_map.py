@@ -4,8 +4,8 @@ from logic.board import ChessBoard
 from logic.pieces import Obstacle
 
 class DesertMap(ChessBoard):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, white_tribe='medieval', black_tribe='medieval'):
+        super().__init__(white_tribe, black_tribe, 'Desert Ruins')
         self.bg_image = 'assets/boards/desert.png'
         # ✨ FIX: เพิ่มตัวนับเทิร์นสำหรับด่านทะเลทราย
         self.desert_turn_count = 0

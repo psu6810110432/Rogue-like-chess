@@ -4,8 +4,8 @@ from logic.board import ChessBoard
 from logic.pieces import King, Obstacle 
 
 class TundraMap(ChessBoard):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, white_tribe='medieval', black_tribe='medieval'):
+        super().__init__(white_tribe, black_tribe, 'Frozen Tundra')
         self.bg_image = 'assets/boards/tundra.png'
         self.tundra_turn_count = 0  
 
