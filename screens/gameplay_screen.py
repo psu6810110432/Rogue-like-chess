@@ -128,6 +128,8 @@ class GameplayScreen(Screen):
     def setup_game(self, mode):
         self.main_layout.clear_widgets()
         self.game_mode, self._game_over_scheduled, self.selected = mode, False, None
+        self.is_input_locked = False 
+        self.ai_event = None
         app = App.get_running_app()
         chosen_map = getattr(app, 'selected_board', 'Classic Board')
         if chosen_map == "Random Board": chosen_map = random.choice(['Classic Board', 'Enchanted Forest', 'Desert Ruins', 'Frozen Tundra'])
