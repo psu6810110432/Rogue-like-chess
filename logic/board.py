@@ -267,7 +267,18 @@ class ChessBoard:
                     if getattr(p, 'freeze_timer', 0) > 0: p.freeze_timer -= 1
 
     def promote_pawn(self, r, c, cls):
-        color = self.board[r][c].color
-        self.board[r][c] = cls(color)
+        old_piece = self.board[r][c]
+        color = old_piece.color
+        
+        # ✨ FIX: ดึงเผ่าของฝั่งนั้นๆ มาเพื่อสร้างตัวใหม่ให้ตรงเผ่า ไม่ให้กลับไปเป็นเผ่า Default
+        tribe = self.white_tribe if color == 'white' else self.black_tribe
+        
+        # สร้างตัวใหม่โดยระบุเผ่า
+        new_piece = cls(color, tribe=tribe)
+        
+        # ✨ FIX: สืบทอดไอเทมจาก Pawn ตัวเดิม (ถ้ามี)
+        if getattr(old_piece, 'item', None):
+            new_piece.item = old_piece.item
+            
+        self.board[r][c] = new_piece
         self.history.add_suffix_to_last_move(f"={self.board[r][c].name.upper()}")
-        self.complete_turn()
