@@ -478,6 +478,9 @@ class GameplayScreen(Screen):
                 
             if res in [True, "promote", "died"]: App.get_running_app().play_move_sound()
             self.init_board_ui()
+            
+        self.ai_event = None
+        self.check_ai_turn()
 
     def on_quit(self): 
         App.get_running_app().play_click_sound()
