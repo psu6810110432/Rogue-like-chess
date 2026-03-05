@@ -367,10 +367,33 @@ class GameplayScreen(Screen):
         self.update_inventory_ui() 
 
     def check_ai_turn(self):
-        if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black' and not self.game.game_result: 
+        if getattr(self, 'game_mode', 'PVE') == 'PVE' and self.game.current_turn == 'black' and not self.game.game_result: 
             Clock.schedule_once(self.trigger_ai_move, 0.8)
 
     def trigger_ai_move(self, dt):
+        if self.game.game_result: return
+        
+        # --- AI Item Usage Logic ---
+        inv = getattr(self.game, 'inventory_black', [])
+        if inv:
+            import random
+            if len(inv) >= 5 or random.random() < 0.4:
+                ai_pieces = [p for row in self.game.board for p in row if p and p.color == 'black' and getattr(p, 'item', None) is None]
+                if ai_pieces:
+                    from logic.ai_logic import ChessAI
+                    ai_pieces.sort(key=lambda p: ChessAI.get_piece_value(p), reverse=True)
+                    chosen_piece = random.choice(ai_pieces[:3])
+                    item_to_use = inv[0] # Use the first item
+                    chosen_piece.item = item_to_use
+                    inv.remove(item_to_use)
+                    
+                    from kivy.app import App
+                    App.get_running_app().play_click_sound()
+                    self.init_board_ui()
+                    self.update_inventory_ui()
+        # ---------------------------
+
+        from logic.ai_logic import ChessAI
         move = ChessAI.get_best_move(self.game, ai_color='black')
         if move:
             (sr, sc), (er, ec) = move; res = self.game.move_piece(sr, sc, er, ec)

@@ -123,6 +123,18 @@ class ChessBoard:
         if is_capture and not resolve_crash:
             return ("crash", p, captured_piece)
             
+        # ✨ FIX: Save state BEFORE any modifications to fix Undo randomizing items!
+        if is_capture and resolve_crash:
+            if not crash_won: return False
+            if crash_won == "died":
+                move_text = f"{p.name} attacked but died against {captured_piece.name}"
+            else:
+                move_text = f"{p.name} crashed with {captured_piece.name}"
+            self.history.save_state(self, move_text)
+        else:
+            move_text = self.history.generate_move_text(p, sr, sc, er, ec, is_capture, is_castle)
+            self.history.save_state(self, move_text)
+            
         if is_capture and resolve_crash:
             if crash_won == "died": # 🛡️ ฝ่ายรับ (Defender) ชนะการปะทะ
                 effect_result = apply_post_crash_effects(self, p, captured_piece, True, sr, sc, er, ec)
@@ -133,7 +145,6 @@ class ChessBoard:
                 
                 if effect_result != "survived":
                     self.board[sr][sc] = None
-                self.history.save_state(self, f"{p.name} attacked but died against {captured_piece.name}")
                 self.complete_turn()
                 return "survived" if effect_result == "survived" else "died"
             elif not crash_won:
@@ -146,13 +157,10 @@ class ChessBoard:
                 
                 if effect_result == "defender_survived":
                     p.has_moved = True
-                    self.history.save_state(self, f"{p.name} attacked but {captured_piece.name} survived")
+                    self.history.move_text_history[-1] = f"{p.name} attacked but {captured_piece.name} survived"
                     self.complete_turn()
                     return True 
         # ---------------------------------------------------
-        
-        move_text = self.history.generate_move_text(p, sr, sc, er, ec, is_capture, is_castle)
-        self.history.save_state(self, move_text)
         
         if is_ep: self.board[sr][ec] = None 
         if is_castle:
