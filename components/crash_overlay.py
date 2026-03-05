@@ -182,6 +182,7 @@ class CrashOverlay(BoxLayout):
             self.crash_btn.text = "DRAW!"
             self.crash_btn.font_size = '24sp'
             self.crash_btn.background_color = (1, 1, 0, 1)  # เหลือง
+            App.get_running_app().play_draw_sound()
             Clock.schedule_once(lambda dt: self.start_crash_animation(), 1.2)
         else:
             self.crash_stagger_count += 1
@@ -194,6 +195,7 @@ class CrashOverlay(BoxLayout):
                 self.crash_btn.text = "DISTORTION!"
                 self.crash_btn.font_size = '24sp'
                 self.crash_btn.background_color = (1, 0, 0, 1)  # แดง
+                App.get_running_app().play_distortion_sound()
                 Clock.schedule_once(lambda dt: self.on_finish(self.start_pos, self.end_pos, "died"), 1.2)
 
     def force_cancel(self):

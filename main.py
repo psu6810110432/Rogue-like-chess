@@ -23,11 +23,12 @@ class RogueChessApp(App):
         self.sfx_coin = SoundLoader.load('assets/audio/sfx/coin.mp3')
         self.sfx_victory = SoundLoader.load('assets/audio/sfx/victory.mp3')
         
-        # ✨ โหลดไฟล์ SFX ชุดใหม่ตามชื่อไฟล์ในโฟลเดอร์
+        # โหลดไฟล์ SFX ชุดใหม่ตามชื่อไฟล์ในโฟลเดอร์
         self.sfx_lose = SoundLoader.load('assets/audio/sfx/lose.mp3')
         self.sfx_draw = SoundLoader.load('assets/audio/sfx/draw.mp3')
         self.sfx_crash_win = SoundLoader.load('assets/audio/sfx/stagger.mp3') # ใช้ไฟล์ stagger.mp3
         self.sfx_move = SoundLoader.load('assets/audio/sfx/chessmove.mp3') # ใช้ไฟล์ chessmove.mp3
+        self.sfx_distortion = SoundLoader.load('assets/audio/sfx/distorsion.mp3') # ใช้ไฟล์ distorsion.mp3
 
         if self.bgm:
             self.bgm.loop = True
@@ -54,7 +55,7 @@ class RogueChessApp(App):
     def play_victory_sound(self):
         if getattr(self, 'sfx_victory', None): self.sfx_victory.play()
     
-    # ✨ ฟังก์ชันสั่งเล่นเสียงชุดใหม่
+    # โหลดไฟล์ SFX ชุดใหม่ตามชื่อไฟล์ในโฟลเดอร์
     def play_lose_sound(self):
         if getattr(self, 'sfx_lose', None): self.sfx_lose.play()
     def play_draw_sound(self):
@@ -63,6 +64,8 @@ class RogueChessApp(App):
         if getattr(self, 'sfx_crash_win', None): self.sfx_crash_win.play()
     def play_move_sound(self):
         if getattr(self, 'sfx_move', None): self.sfx_move.play()
+    def play_distortion_sound(self):
+        if getattr(self, 'sfx_distortion', None): self.sfx_distortion.play()
 
 if __name__ == "__main__":
     RogueChessApp().run()
