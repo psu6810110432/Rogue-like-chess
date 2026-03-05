@@ -353,14 +353,22 @@ class GameplayScreen(Screen):
         self.inventory_layout.clear_widgets()
         info_box = BoxLayout(orientation='vertical', size_hint_x=None, width=dp(120))
         info_box.add_widget(Label(text="INVENTORY", bold=True, font_size='14sp', color=(0.8, 0.8, 0.8, 1)))
-        info_box.add_widget(Label(text=f"[{self.game.current_turn.upper()}]", bold=True, font_size='16sp', color=(0.83, 0.68, 0.21, 1)))
+        
+        # ✨ FIX: ถ้าเป็นโหมด PVE (เล่นกับบอท) ให้ล็อคโชว์กระเป๋าของ White เสมอ
+        # แต่ถ้าเป็น PVP ค่อยสลับตามเทิร์น
+        display_color = 'white' if getattr(self, 'game_mode', 'PVP') == 'PVE' else self.game.current_turn
+        
+        info_box.add_widget(Label(text=f"[{display_color.upper()}]", bold=True, font_size='16sp', color=(0.83, 0.68, 0.21, 1)))
         self.inventory_layout.add_widget(info_box)
-        inv = getattr(self.game, f'inventory_{self.game.current_turn}', [])
+        inv = getattr(self.game, f'inventory_{display_color}', [])
+        
         for i in range(5):
             if i < len(inv):
                 slot = InventorySlot(img_path=inv[i].image_path, is_selected=(self.selected_item and self.selected_item is inv[i]))
-                slot.bind(on_release=lambda x, it=inv[i]: self.on_item_click(it)); self.inventory_layout.add_widget(slot)
-            else: self.inventory_layout.add_widget(InventorySlot())
+                slot.bind(on_release=lambda x, it=inv[i]: self.on_item_click(it))
+                self.inventory_layout.add_widget(slot)
+            else: 
+                self.inventory_layout.add_widget(InventorySlot())
 
     def on_item_click(self, item):
         App.get_running_app().play_click_sound()
