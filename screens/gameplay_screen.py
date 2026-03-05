@@ -264,10 +264,11 @@ class GameplayScreen(Screen):
     def on_square_tap(self, instance):
         App.get_running_app().play_click_sound() 
         
+        if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return
-        if self.game.game_result: return
-        if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black': return
-        
+        if getattr(self.game, 'game_result', None): return
+        if getattr(self, 'game_mode', 'PVP') == 'PVE' and getattr(self.game, 'current_turn', 'white') == 'black': return
+
         r, c = instance.row, instance.col; piece = self.game.board[r][c]
         
         # ✨ 🚫 ระบบไอเทมล็อก (Item Slot Lock)
@@ -374,6 +375,9 @@ class GameplayScreen(Screen):
 
     def on_item_click(self, item):
         App.get_running_app().play_click_sound()
+        
+        # ✨ ล็อกการใช้ไอเทม
+        if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return
             
         if self.selected_item is item: self.selected_item = None; self.hide_item_tooltip()
@@ -386,7 +390,7 @@ class GameplayScreen(Screen):
             self.ai_event = Clock.schedule_once(self.trigger_ai_move, 0.8)
         else:
             self.is_input_locked = False # ✨ ปลดล็อกเมื่อกลับมาเทิร์นผู้เล่น
-            
+
     def trigger_ai_move(self, dt):
         if self.game.game_result: return
         
