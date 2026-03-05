@@ -68,6 +68,9 @@ def calculate_total_points(base_points, num_coins, faction):
         if heads_count >= 3: total += 3
         if heads_count >= 6: total += 3
         if heads_count >= 9: total += 3
+
+    if faction == "demon" and total <= -3:
+        total = abs(total)
             
     return total, results
 
@@ -75,10 +78,6 @@ def resolve_crash(p1_name, p1_faction, p1_base, p1_coins, p2_name, p2_faction, p
     while True:
         p1_total, p1_results = calculate_total_points(p1_base, p1_coins, p1_faction)
         p2_total, p2_results = calculate_total_points(p2_base, p2_coins, p2_faction)
-        has_demon = (p1_faction == "demon" or p2_faction == "demon")
-        if has_demon and (p1_total == 0 or p2_total == 0):
-            continue 
-        break 
     
     winner = None
     if p1_total > p2_total: winner = p1_name
