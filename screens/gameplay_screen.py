@@ -389,21 +389,63 @@ class GameplayScreen(Screen):
         inv = getattr(self.game, 'inventory_black', [])
         if inv:
             import random
+            from logic.ai_logic import ChessAI
+            
+            # โอกาส 40% ที่จะใช้ไอเทม หรือถ้ากระเป๋าเต็ม 5 ชิ้นบังคับใช้
             if len(inv) >= 5 or random.random() < 0.4:
-                ai_pieces = [p for row in self.game.board for p in row if p and p.color == 'black' and getattr(p, 'item', None) is None]
-                if ai_pieces:
-                    from logic.ai_logic import ChessAI
-                    ai_pieces.sort(key=lambda p: ChessAI.get_piece_value(p), reverse=True)
-                    chosen_piece = random.choice(ai_pieces[:3])
-                    item_to_use = inv[0] # Use the first item
-                    chosen_piece.item = item_to_use
-                    inv.remove(item_to_use)
-                    App.get_running_app().play_click_sound()
-                    self.init_board_ui()
-                    self.update_inventory_ui()
+                # สุ่มเลือกไอเทมที่จะใช้จากกระเป๋า (แทนของเดิมที่บังคับใช้ชิ้นแรกเสมอ)
+                item_to_use = random.choice(inv)
+                
+                # หาหมากของ AI ที่ยังมีชีวิตและยังไม่มีไอเทม
+                valid_pieces = [p for row in self.game.board for p in row if p and p.color == 'black' and getattr(p, 'item', None) is None]
+                
+                if valid_pieces:
+                    candidates = []
+                    item_id = item_to_use.id
+                    
+                    # ✨ กรองและเลือกหมากเป้าหมายให้ตรงกับคุณสมบัติของไอเทม
+                    if item_id == 10: 
+                        # Crown of the Usurper: บังคับใส่ให้ Pawn เท่านั้น
+                        candidates = [p for p in valid_pieces if p.__class__.__name__.lower() == 'pawn']
+                    elif item_id == 9: 
+                        # Pegasus Boots: ไม่ใส่ให้ Knight เพราะกระโดดได้อยู่แล้ว
+                        candidates = [p for p in valid_pieces if p.__class__.__name__.lower() != 'knight']
+                    elif item_id in [1, 2, 4, 8]: 
+                        # ไอเทมป้องกัน/เอาตัวรอด: เน้นใส่ให้ตัวสำคัญระดับสูง (King, Queen, Rook)
+                        candidates = [p for p in valid_pieces if p.__class__.__name__.lower() in ['king', 'queen', 'rook']]
+                        if not candidates: candidates = valid_pieces # ถ้าไม่มีให้ใส่ใครก็ได้
+                    elif item_id in [5, 7]: 
+                        # ไอเทมผลตอนตาย: เน้นใส่ให้ตัวแนวหน้าที่มักจะตายก่อน (Pawn, Knight)
+                        candidates = [p for p in valid_pieces if p.__class__.__name__.lower() in ['pawn', 'knight']]
+                        if not candidates: candidates = valid_pieces
+                    else: 
+                        # ไอเทมโจมตี (3, 6): ใส่ให้ตัวรุก (ไม่ใส่ให้ King)
+                        candidates = [p for p in valid_pieces if p.__class__.__name__.lower() not in ['king']]
+                        if not candidates: candidates = valid_pieces
+
+                    if candidates:
+                        # เรียงหมากที่ผ่านการกรองตามความเก่ง และสุ่มจากตัวที่เก่งที่สุด 2 อันดับแรก
+                        candidates.sort(key=lambda p: ChessAI.get_piece_value(p), reverse=True)
+                        chosen_piece = random.choice(candidates[:2])
+                        
+                        chosen_piece.item = item_to_use
+                        
+                        # ✨ อัปเดตสเตตัสทันทีถ้าเป็นไอเทมที่ต้องปรับค่าพลังถาวรตอนสวมใส่
+                        if item_to_use.id == 6: 
+                            chosen_piece.coins += 1
+                            chosen_piece.base_points = max(0, chosen_piece.base_points - 1)
+                        elif item_to_use.id == 10 and chosen_piece.__class__.__name__.lower() == 'pawn': 
+                            chosen_piece.base_points = 5
+                            chosen_piece.coins = 3
+                            
+                        inv.remove(item_to_use)
+                        App.get_running_app().play_click_sound()
+                        self.init_board_ui()
+                        self.update_inventory_ui()
         # ---------------------------
 
         from logic.ai_logic import ChessAI
+        # (โค้ดเดิมต่อจากนี้ปล่อยไว้เหมือนเดิม...)
         move = ChessAI.get_best_move(self.game, ai_color='black')
         if move:
             (sr, sc), (er, ec) = move; res = self.game.move_piece(sr, sc, er, ec)
