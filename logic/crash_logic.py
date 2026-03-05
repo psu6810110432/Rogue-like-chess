@@ -67,6 +67,7 @@ def calculate_total_points(base_points, num_coins, faction):
     if faction == "heaven":
         if heads_count >= 3: total += 3
         if heads_count >= 6: total += 3
+        if heads_count >= 9: total += 3
             
     return total, results
 
