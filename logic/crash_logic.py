@@ -34,11 +34,11 @@ def toss_coin_demon():
         return -3, "Tails"
     if random.random() < 0.20:
         if random.random() < 0.20:
-            return 4, "Purple Heads"
+            return 6, "Purple Heads"
         else:
-            return 6, "Orange Heads"
+            return 4, "Orange Heads"
     else:
-        return 6, "Orange Heads"
+        return 4, "Orange Heads"
 
 def toss_coin_heaven():
     if random.random() < 0.50:

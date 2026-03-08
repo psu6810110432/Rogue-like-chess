@@ -11,8 +11,9 @@ from kivy.animation import Animation
 from kivy.graphics import Color, RoundedRectangle, Line
 from kivy.metrics import dp
 from kivy.core.window import Window
+from kivy.uix.behaviors import ButtonBehavior
 
-# ✨ คลาสสำหรับกล่องข้อความ Tooltip (ลอยอยู่เหนือ UI)
+# ------------------ ระบบ Hover Tooltip สำหรับแผนที่ ------------------
 class HoverTooltip(Label):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -38,7 +39,6 @@ class HoverTooltip(Label):
     def update_size(self, *args):
         self.size = (self.texture_size[0] + dp(30), self.texture_size[1] + dp(20))
 
-# ✨ คลาสไอคอน ? ที่ตรวจจับเมาส์ Hover ได้
 class HoverInfoIcon(Label):
     def __init__(self, info_text, **kwargs):
         super().__init__(**kwargs)
@@ -66,16 +66,12 @@ class HoverInfoIcon(Label):
         self.border.rounded_rectangle = [self.x, self.y, self.width, self.height, self.height/2]
 
     def on_mouse_pos(self, window, pos):
-        # ป้องกันบั๊กเวลาสลับหน้าจอ
         if not self.get_root_window(): return
-        
-        # เช็คว่าเมาส์อยู่ในอาณาเขตของปุ่ม ? หรือไม่ (แปลงเป็น Window Coordinates)
         wx, wy = self.to_window(self.x, self.y)
         if wx <= pos[0] <= wx + self.width and wy <= pos[1] <= wy + self.height:
             if not self._tooltip:
                 self._tooltip = HoverTooltip(text=self.info_text)
                 Window.add_widget(self._tooltip)
-            # ให้กล่อง Tooltip ขยับตามเมาส์นิดๆ แต่อยู่เยื้องลงมาด้านขวาล่าง
             self._tooltip.pos = (pos[0] + dp(15), pos[1] - self._tooltip.height - dp(15))
         else:
             if self._tooltip:
@@ -83,6 +79,39 @@ class HoverInfoIcon(Label):
                 self._tooltip = None
 
 
+# ------------------ ระบบปุ่มกด Popup สำหรับ Legion ------------------
+class ClickableInfoIcon(ButtonBehavior, Label):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.text = "[b]?[/b]"
+        self.markup = True
+        self.color = (0.83, 0.68, 0.21, 1)
+        self.size_hint = (None, None)
+        self.size = (dp(26), dp(26))
+
+        with self.canvas.before:
+            Color(0.15, 0.15, 0.18, 1)
+            self.bg = RoundedRectangle(radius=[self.height/2])
+            Color(0.83, 0.68, 0.21, 1)
+            self.border = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, self.height/2], width=1.5)
+            
+        self.bind(pos=self.update_bg, size=self.update_bg)
+
+    def update_bg(self, *args):
+        self.bg.pos = self.pos
+        self.bg.size = self.size
+        self.bg.radius = [self.height/2]
+        self.border.rounded_rectangle = [self.x, self.y, self.width, self.height, self.height/2]
+
+    def on_release(self):
+        app = App.get_running_app()
+        if hasattr(app, 'play_click_sound'):
+            app.play_click_sound()
+        from components.encyclopedia_popup import EncyclopediaPopup
+        EncyclopediaPopup().open()
+
+
+# ------------------ ส่วนหลักของ UI ------------------
 class SelectionCard(Button):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -96,7 +125,6 @@ class SelectionCard(Button):
         with self.canvas.before:
             self.card_bg_color = Color(0.1, 0.1, 0.12, 0.7) 
             self.card_rect = RoundedRectangle(radius=[12])
-            
             self.card_border_color = Color(0.3, 0.3, 0.35, 1) 
             self.card_border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, 12], width=1.2)
             
@@ -151,7 +179,7 @@ class SetupSection(BoxLayout):
         self.mode_box.add_widget(mode_grid)
         self.add_widget(self.mode_box)
 
-        # 2. SELECT MAP (✨ อัปเดตส่วนนี้เพื่อใส่ Tooltip แผนที่ภาษาอังกฤษ)
+        # 2. SELECT MAP (✨ ใส่ tooltip แบบ Hover ที่นี่)
         self.map_box = BoxLayout(orientation='vertical', size_hint_y=0.25, spacing=5, opacity=0, disabled=True)
         
         map_descriptions = (
@@ -174,9 +202,9 @@ class SetupSection(BoxLayout):
         self.map_box.add_widget(map_grid)
         self.add_widget(self.map_box)
 
-        # 3. SELECT FACTIONS
+        # 3. SELECT FACTIONS (✨ ใส่ปุ่มกดดูข้อมูล Encyclopedia ที่นี่)
         self.fac_box = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=5, opacity=0, disabled=True)
-        self.add_header(self.fac_box, "3. CHOOSE YOUR LEGION")
+        self.add_header(self.fac_box, "3. CHOOSE YOUR LEGION", clickable_info=True)
         
         self.fac_split = BoxLayout(orientation='horizontal', spacing=30)
         
@@ -209,8 +237,8 @@ class SetupSection(BoxLayout):
 
         self.update_selections()
 
-    # ✨ ปรับฟังก์ชัน add_header ให้รองรับไอคอน ?
-    def add_header(self, parent_box, text, tooltip_text=None):
+    # ✨ ปรับ add_header ให้รองรับทั้ง Hover และ Clickable Info
+    def add_header(self, parent_box, text, tooltip_text=None, clickable_info=False):
         header_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(10))
         
         lbl = Label(text=f"[color=d4af37][b]{text}[/b][/color]", markup=True, font_size='20sp', halign='left', size_hint_x=None)
@@ -219,6 +247,11 @@ class SetupSection(BoxLayout):
         
         if tooltip_text:
             icon = HoverInfoIcon(info_text=tooltip_text)
+            icon_container = AnchorLayout(anchor_x='left', anchor_y='center', size_hint_x=1)
+            icon_container.add_widget(icon)
+            header_layout.add_widget(icon_container)
+        elif clickable_info:
+            icon = ClickableInfoIcon()
             icon_container = AnchorLayout(anchor_x='left', anchor_y='center', size_hint_x=1)
             icon_container.add_widget(icon)
             header_layout.add_widget(icon_container)
