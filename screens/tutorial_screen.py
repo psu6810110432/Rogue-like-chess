@@ -22,11 +22,19 @@ class TutorialScreen(GameplayScreen):
         self.game.board = [[None for _ in range(8)] for _ in range(8)]
         # วางหมากสำหรับ Tutorial
         white_p = Pawn('white', 'medieval'); white_p.setup_stats('pawn', 'medieval')
+        # ✨ บังคับให้ Pawn ขาวมีพลัง 99 เพื่อให้ Crash ชนะแน่นอน
+        white_p.base_points = 99 
         self.game.board[6][4] = white_p
+        
         white_k = King('white', 'medieval'); white_k.setup_stats('king', 'medieval')
         self.game.board[7][4] = white_k
+        
         black_p = Pawn('black', 'demon'); black_p.setup_stats('pawn', 'demon')
+        # ✨ ลดพลัง Pawn ดำให้เหลือ 0 ทั้งหมดเพื่อให้แพ้แน่นอน
+        black_p.base_points = 0
+        black_p.coins = 0
         self.game.board[5][5] = black_p
+        
         black_k = King('black', 'demon'); black_k.setup_stats('king', 'demon')
         self.game.board[4][4] = black_k
         
@@ -43,8 +51,7 @@ class TutorialScreen(GameplayScreen):
     def add_tutorial_overlay(self):
         if self.instr_box: self.root_layout.remove_widget(self.instr_box)
         
-        # ✨ ปรับพิกัด: center_x: 0.375 (กึ่งกลางกระดาน) และ top: 0.95 (เว้นขอบบน)
-        # ✨ ปรับขนาด: size_hint_x: 0.55 (กว้างพอดีกระดาน ไม่ล้นไป Sidebar)
+        # ปรับพิกัดและขนาด
         self.instr_box = BoxLayout(
             orientation='vertical', 
             size_hint=(0.55, None), 
@@ -54,9 +61,9 @@ class TutorialScreen(GameplayScreen):
         )
         
         with self.instr_box.canvas.before:
-            Color(0.05, 0.05, 0.1, 0.9) # พื้นหลังเข้มโปร่งแสงดู Premium
+            Color(0.05, 0.05, 0.1, 0.9) 
             self.overlay_bg = Rectangle(pos=self.instr_box.pos, size=self.instr_box.size)
-            Color(1, 0.5, 0, 1) # สีส้มสดใส
+            Color(1, 0.5, 0, 1) 
             self.overlay_border = Line(
                 rectangle=(self.instr_box.x, self.instr_box.y, self.instr_box.width, self.instr_box.height), 
                 width=dp(1.2)
@@ -78,7 +85,7 @@ class TutorialScreen(GameplayScreen):
             2: "[color=ffaa00][b]STEP 2: CRASH COMBAT[/b][/color]\nWin the [b]CRASH[/b] battle to take control of the square!",
             3: "[color=ffaa00][b]STEP 3: SKILLS & ITEMS[/b][/color]\nRead unit skills in the Sidebar. Now, click the [b]Emblem[/b] in your Inventory.",
             4: "[color=ffaa00][b]STEP 4: EQUIPPING[/b][/color]\nClick on your [b]White Pawn[/b] at (5, 5) to equip the item!",
-            5: "[color=ffaa00][b]STEP 5: VICTORY[/b][/color]\nFinal Task: Capture the [b]Black King[/b] at (4, 4)เพื่อจบเกม!",
+            5: "[color=ffaa00][b]STEP 5: VICTORY[/b][/color]\nFinal Task: Capture the [b]Black King[/b] at (4, 4) to win the game!", # ✨ FIX: เปลี่ยนเป็นภาษาอังกฤษเพื่อแก้บั๊กฟอนต์
             6: "[color=00ff00][b]TUTORIAL COMPLETE![/b][/color]\nYou win! Press [b]QUIT MATCH[/b] to return."
         }
         if hasattr(self, 'lbl'): self.lbl.text = steps.get(self.tutorial_step, "")
