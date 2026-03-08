@@ -127,6 +127,7 @@ class GameplayScreen(Screen):
 
     def setup_game(self, mode):
         self.main_layout.clear_widgets()
+        self.status_popup = self.crash_popup = self.item_tooltip = self.selected_item = None
         self.game_mode, self._game_over_scheduled, self.selected = mode, False, None
         self.is_input_locked = False 
         self.ai_event = None
@@ -495,6 +496,18 @@ class GameplayScreen(Screen):
 
     def on_quit(self): 
         App.get_running_app().play_click_sound()
+        
+        if getattr(self, 'crash_popup', None):
+            self.crash_popup.force_cancel()
+            self.crash_popup = None
+        if getattr(self, 'ai_event', None):
+            self.ai_event.cancel()
+            
+        self.status_popup = None
+        self.item_tooltip = None
+        self.selected_item = None
+        self.is_input_locked = False
+
         self.manager.current = 'setup'
         
     def auto_quit_to_setup(self, dt): self.manager.current = 'setup'
