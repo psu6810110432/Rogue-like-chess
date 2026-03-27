@@ -55,46 +55,34 @@ class _PromotionOption(ButtonBehavior, BoxLayout):
         with self.canvas.before:
             GColor(0.15, 0.15, 0.2, 0.8)
             self._bg_rr = GRRect(pos=self.pos, size=self.size, radius=[dp(8)])
-        self.bind(pos=lambda i, v: setattr(self._bg_rr, 'pos', v),
-                  size=lambda i, v: setattr(self._bg_rr, 'size', v))
+        self.bind(pos=lambda i, v: setattr(self._bg_rr, 'pos', v), size=lambda i, v: setattr(self._bg_rr, 'size', v))
         self.add_widget(Image(source=img_path, fit_mode='contain'))
 
 class PromotionPopup(ModalView):
     def __init__(self, color, tribe, callback, **kwargs):
-        super().__init__(size_hint=(0.45, 0.3), auto_dismiss=False,
-                         background='', background_color=(0, 0, 0, 0), **kwargs)
+        super().__init__(size_hint=(0.45, 0.3), auto_dismiss=False, background='', background_color=(0, 0, 0, 0), **kwargs)
         from kivy.graphics import Color as GColor, RoundedRectangle as GRRect
         root = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(8))
         with root.canvas.before:
-            GColor(0.08, 0.08, 0.1, 0.95)
-            self._bg = GRRect(pos=root.pos, size=root.size, radius=[dp(12)])
-        root.bind(pos=lambda i, v: setattr(self._bg, 'pos', v),
-                  size=lambda i, v: setattr(self._bg, 'size', v))
+            GColor(0.08, 0.08, 0.1, 0.95); self._bg = GRRect(pos=root.pos, size=root.size, radius=[dp(12)])
+        root.bind(pos=lambda i, v: setattr(self._bg, 'pos', v), size=lambda i, v: setattr(self._bg, 'size', v))
 
-        title = Label(text='Choose Your Piece', font_size='16sp', bold=True,
-                      color=(1, 0.25, 0.25, 1), size_hint_y=0.18)
-        root.add_widget(title)
+        root.add_widget(Label(text='Choose Your Piece', font_size='16sp', bold=True, color=(1, 0.25, 0.25, 1), size_hint_y=0.18))
 
         layout = GridLayout(cols=4, padding=dp(5), spacing=dp(10), size_hint_y=0.82)
         from logic.pieces import Queen, Rook, Bishop, Knight
-        ops = [Queen, Rook, Bishop, Knight]
-        names = ['queen', 'rook', 'bishop', 'knight']
+        ops = [Queen, Rook, Bishop, Knight]; names = ['queen', 'rook', 'bishop', 'knight']
         display_names = {'queen': 'Queen', 'rook': 'Rook', 'bishop': 'Bishop', 'knight': 'Knight'}
-        theme = getattr(App.get_running_app(), f'selected_unit_{color}', 'Medieval Knights')
-        tf = tribe
-        mapping = {'queen': '2', 'rook': '3', 'knight': '4', 'bishop': '5'}
+        tf, mapping = tribe, {'queen': '2', 'rook': '3', 'knight': '4', 'bishop': '5'}
 
         for cls, n in zip(ops, names):
-            path = f"assets/pieces/{tf}/{color}/chess {tf}{mapping[n]}.png"
             col = BoxLayout(orientation='vertical', spacing=dp(2))
-            opt = _PromotionOption(img_path=path)
+            opt = _PromotionOption(img_path=f"assets/pieces/{tf}/{color}/chess {tf}{mapping[n]}.png")
             opt.bind(on_release=lambda b, c=cls: (App.get_running_app().play_click_sound(), callback(c)))
             col.add_widget(opt)
-            lbl = Label(text=display_names[n], font_size='13sp', size_hint_y=0.18, color=(0.9, 0.9, 0.9, 1))
-            col.add_widget(lbl)
+            col.add_widget(Label(text=display_names[n], font_size='13sp', size_hint_y=0.18, color=(0.9, 0.9, 0.9, 1)))
             layout.add_widget(col)
-        root.add_widget(layout)
-        self.add_widget(root)
+        root.add_widget(layout); self.add_widget(root)
 
 class GameplayScreen(Screen):
     def __init__(self, **kwargs):
@@ -102,10 +90,8 @@ class GameplayScreen(Screen):
         self.root_layout = FloatLayout()
         
         with self.root_layout.canvas.before:
-            Color(1, 1, 1, 1)
-            self.main_bg_image = Rectangle(source='assets/ui/backgrounds/menu_bg.png', pos=self.pos, size=self.size)
-            Color(0.02, 0.02, 0.04, 0.9) 
-            self.main_bg_overlay = Rectangle(pos=self.pos, size=self.size)
+            Color(1, 1, 1, 1); self.main_bg_image = Rectangle(source='assets/ui/backgrounds/menu_bg.png', pos=self.pos, size=self.size)
+            Color(0.02, 0.02, 0.04, 0.9); self.main_bg_overlay = Rectangle(pos=self.pos, size=self.size)
             
         self.bind(pos=self._update_main_bg, size=self._update_main_bg)
 
@@ -116,10 +102,8 @@ class GameplayScreen(Screen):
         self._game_over_scheduled = False
 
     def _update_main_bg(self, *args):
-        self.main_bg_image.pos = self.pos
-        self.main_bg_image.size = self.size
-        self.main_bg_overlay.pos = self.pos
-        self.main_bg_overlay.size = self.size
+        self.main_bg_image.pos, self.main_bg_image.size = self.pos, self.size
+        self.main_bg_overlay.pos, self.main_bg_overlay.size = self.pos, self.size
 
     def get_tribe_name(self, color):
         theme = getattr(App.get_running_app(), f'selected_unit_{color}', 'Medieval Knights')
@@ -127,27 +111,30 @@ class GameplayScreen(Screen):
 
     def setup_game(self, mode):
         self.main_layout.clear_widgets()
+        # ✨ ล้างปุ่ม Start Battle ทิ้งถ้ามีการกดเล่นใหม่
+        if hasattr(self, 'deploy_btn') and self.deploy_btn in self.root_layout.children:
+            self.root_layout.remove_widget(self.deploy_btn)
+
         self.status_popup = self.crash_popup = self.item_tooltip = self.selected_item = None
         self.game_mode, self._game_over_scheduled, self.selected = mode, False, None
         self.is_input_locked = False 
         self.ai_event = None
-        
+        self.battle_phase = 'playing' # ค่าปกติ
+
         app = App.get_running_app()
         chosen_map = getattr(app, 'selected_board', 'Classic Board')
         if chosen_map == "Random Board": chosen_map = random.choice(['Classic Board', 'Enchanted Forest', 'Desert Ruins', 'Frozen Tundra'])
         
-        if chosen_map == 'Enchanted Forest' and ForestMap: 
-            self.game = ForestMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
-        elif chosen_map == 'Desert Ruins' and DesertMap: 
-            self.game = DesertMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
-        elif chosen_map == 'Frozen Tundra' and TundraMap: 
-            self.game = TundraMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
-        else: 
-            self.game = ChessBoard(self.get_tribe_name('white'), self.get_tribe_name('black'), map_name=chosen_map)
+        if chosen_map == 'Enchanted Forest' and ForestMap: self.game = ForestMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
+        elif chosen_map == 'Desert Ruins' and DesertMap: self.game = DesertMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
+        elif chosen_map == 'Frozen Tundra' and TundraMap: self.game = TundraMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
+        else: self.game = ChessBoard(self.get_tribe_name('white'), self.get_tribe_name('black'), map_name=chosen_map)
 
-        # ✨ ถ้าเป็นโหมด Divide_Conquer ให้จัดทัพเองแทนบอร์ดมาตรฐาน
+        # ✨ กรณี Divide & Conquer
         if mode == 'Divide_Conquer':
             self.setup_divide_conquer_board(app)
+            self.battle_phase = 'deployment' # เข้าสู่โหมดสลับตำแหน่ง
+            self.show_deployment_ui()
 
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
         self.info_label = Label(text="WHITE'S TURN", size_hint_y=0.08, color=(0.83, 0.68, 0.21, 1), bold=True, font_size='22sp', markup=True)
@@ -174,7 +161,6 @@ class GameplayScreen(Screen):
             Color(0.3, 0.3, 0.35, 1); self.div_rect = Rectangle(pos=self.divider.pos, size=self.divider.size)
         self.divider.bind(pos=self._update_div_bg, size=self._update_div_bg)
         
-        # ปรับปุ่ม BACK เพื่อให้ถอยกลับไปแผนที่ได้ถ้าเล่นโหมด Divide_Conquer
         def on_quit_action():
             if getattr(self, 'game_mode', '') == 'Divide_Conquer':
                 App.get_running_app().play_click_sound()
@@ -188,76 +174,67 @@ class GameplayScreen(Screen):
         self.sidebar.size_hint_y = 0.55; self.sidebar_panel.add_widget(self.sidebar); self.main_layout.add_widget(self.sidebar_panel)
         self.init_board_ui()
 
-    # ✨ ฟังก์ชันจัดกระดานตามจำนวนหมากจากโหมด Divide & Conquer
+    # ✨ แสดงปุ่มเริ่มสงคราม หลังจากจัดทัพ
+    def show_deployment_ui(self):
+        self.deploy_btn = Button(text="[b]START BATTLE[/b]", markup=True, size_hint=(None, None), size=(dp(250), dp(60)), pos_hint={'center_x': 0.5, 'y': 0.2}, background_color=(0.8, 0.3, 0.1, 1), font_size='22sp')
+        self.deploy_btn.bind(on_release=self.finish_deployment)
+        self.root_layout.add_widget(self.deploy_btn)
+
+    # ✨ เมื่อกดปุ่ม Start Battle ให้เริ่มการเล่นจริง
+    def finish_deployment(self, instance):
+        App.get_running_app().play_click_sound()
+        self.root_layout.remove_widget(self.deploy_btn)
+        self.battle_phase = 'playing'
+        self.selected = None
+        self.refresh_ui()
+        self.check_ai_turn()
+
     def setup_divide_conquer_board(self, app):
         self.game.board = [[None for _ in range(8)] for _ in range(8)]
         
-        attacker_faction = app.combat_source.faction
-        defender_faction = app.combat_target.faction
-        
-        atk_color = 'white'
-        def_color = 'black'
-        
-        atk_theme = getattr(app, f'selected_unit_{attacker_faction}', 'Medieval Knights')
+        atk_color, def_color = 'white', 'black'
+        atk_theme = getattr(app, f'selected_unit_{app.combat_source.faction}', 'Medieval Knights')
         atk_tribe = atk_theme.lower().replace(" ", "") if atk_theme != "Medieval Knights" else "medieval"
         
-        if defender_faction == 'red':
-            def_tribe = 'demon' 
+        if app.combat_target.faction == 'red': def_tribe = 'demon' 
         else:
-            def_theme = getattr(app, f'selected_unit_{defender_faction}', 'Medieval Knights')
+            def_theme = getattr(app, f'selected_unit_{app.combat_target.faction}', 'Medieval Knights')
             def_tribe = def_theme.lower().replace(" ", "") if def_theme != "Medieval Knights" else "medieval"
 
-        self._place_custom_army('bottom', atk_color, atk_tribe, app.combat_marching_army)
-        self._place_custom_army('top', def_color, def_tribe, app.combat_target_army)
+        self._place_enemy_randomly(def_color, def_tribe, app.combat_target_army)
+        self._place_player_deployment(atk_color, atk_tribe, app.combat_marching_army)
         
         self.game.current_turn = atk_color
 
-    def _place_custom_army(self, side, color, tribe, army_dict):
+    def _place_enemy_randomly(self, color, tribe, army_dict):
         from logic.pieces import Pawn, Knight, Bishop, Rook, Queen, King
+        pieces = []
+        for p, count in army_dict.items():
+            cls = {'king': King, 'prince': King, 'queen': Queen, 'rook': Rook, 'bishop': Bishop, 'knight': Knight, 'pawn': Pawn}.get(p)
+            pieces.extend([cls] * count)
         
-        back_r = 0 if side == 'top' else 7
-        front_r = 1 if side == 'top' else 6
-        overflow_r = 2 if side == 'top' else 5
+        # สุ่มช่องที่ 3 แถวแรกของศัตรู
+        valid_coords = [(r, c) for r in range(3) for c in range(8)]
+        random.shuffle(valid_coords)
         
-        headers = [King for _ in range(army_dict.get('king', 0))] + [King for _ in range(army_dict.get('prince', 0))] 
+        for cls, (r, c) in zip(pieces, valid_coords):
+            self.game.board[r][c] = cls(color, tribe)
+
+    def _place_player_deployment(self, color, tribe, army_dict):
+        from logic.pieces import Pawn, Knight, Bishop, Rook, Queen, King
+        pieces = []
+        for p in ['king', 'prince', 'queen', 'rook', 'bishop', 'knight', 'pawn']:
+            cls = {'king': King, 'prince': King, 'queen': Queen, 'rook': Rook, 'bishop': Bishop, 'knight': Knight, 'pawn': Pawn}.get(p)
+            pieces.extend([cls] * army_dict.get(p, 0))
         
-        heavies = []
-        for _ in range(army_dict.get('queen', 0)): heavies.append(Queen)
-        for _ in range(army_dict.get('rook', 0)): heavies.append(Rook)
-        for _ in range(army_dict.get('bishop', 0)): heavies.append(Bishop)
-        for _ in range(army_dict.get('knight', 0)): heavies.append(Knight)
-        
-        lights = [Pawn for _ in range(army_dict.get('pawn', 0))]
-        
-        back_rank_pieces = []
-        half_heavy = len(heavies) // 2
-        back_rank_pieces.extend(heavies[:half_heavy])
-        back_rank_pieces.extend(headers)
-        back_rank_pieces.extend(heavies[half_heavy:])
-        
-        c = 0
-        for PieceClass in back_rank_pieces:
-            if c < 8:
-                self.game.board[back_r][c] = PieceClass(color, tribe)
-                c += 1
-            else:
-                lights.append(PieceClass) 
-                
-        c = 0
-        for PieceClass in lights:
-            if c < 8:
-                self.game.board[front_r][c] = PieceClass(color, tribe)
-                c += 1
-            else:
-                for oc in range(8):
-                    if self.game.board[overflow_r][oc] is None:
-                        self.game.board[overflow_r][oc] = PieceClass(color, tribe)
-                        break
+        # เรียงลงไปในกล่อง 3 แถวล่าง (รอผู้เล่นจัดวาง)
+        coords = [(r, c) for r in range(7, 4, -1) for c in range(8)] 
+        for cls, (r, c) in zip(pieces, coords):
+            self.game.board[r][c] = cls(color, tribe)
 
     def _update_inv_bg(self, instance, value): self.inv_bg.pos, self.inv_bg.size = instance.pos, instance.size
     def _update_sb_bg(self, instance, value): self.sb_bg.pos, self.sb_bg.size = instance.pos, instance.size
     def _update_div_bg(self, instance, value): self.div_rect.pos, self.div_rect.size = instance.pos, instance.size
-
     def _update_bg(self, *args):
         if hasattr(self, 'bg_rect') and hasattr(self, 'grid'):
             self.bg_rect.pos, self.bg_rect.size = self.grid.pos, self.grid.size
@@ -265,11 +242,10 @@ class GameplayScreen(Screen):
     def init_board_ui(self):
         self.board_anchor.clear_widgets()
         gm = getattr(self, 'game_mode', 'PVP')
-        vp = 'white' if gm in ['TUTORIAL', 'PVE'] else self.game.current_turn
+        vp = 'white' if gm in ['TUTORIAL', 'PVE', 'Divide_Conquer'] else self.game.current_turn
 
         if hasattr(self, 'current_vp') and self.current_vp == vp and hasattr(self, 'grid') and self.grid in self.board_anchor.children:
-            self.refresh_ui()
-            return
+            self.refresh_ui(); return
         
         self.current_vp = vp
         self.grid = GridLayout(cols=8, rows=8, size_hint=(None, None), spacing=0, padding=0)
@@ -294,6 +270,25 @@ class GameplayScreen(Screen):
 
     def refresh_ui(self, legal_moves=[]):
         self.update_inventory_ui()
+        
+        # ✨ ลอจิก UI สำหรับ Deployment
+        if getattr(self, 'battle_phase', 'playing') == 'deployment':
+            self.info_label.text = "[color=00ffff]DEPLOYMENT PHASE: Swap pieces in the bottom 3 rows[/color]"
+            for (r, c), sq in self.squares.items():
+                is_deploy_zone = (r >= 5)
+                # ไฮไลต์ให้รู้ว่าวางตรงไหนได้บ้าง
+                is_legal_deploy = (is_deploy_zone and self.selected is not None and (r, c) != self.selected)
+                
+                sq.update_square_style(
+                    highlight=(self.selected == (r, c)), 
+                    is_legal=('move' if is_legal_deploy else False), 
+                    is_check=False, 
+                    is_last=False
+                )
+                p = self.game.board[r][c]; sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+            return
+
+        # --- ลอจิก UI โหมด Playing ปกติ ---
         if self.game.game_result:
             self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
             if not getattr(self, '_end_played', False):
@@ -351,23 +346,43 @@ class GameplayScreen(Screen):
 
     def on_square_tap(self, instance):
         App.get_running_app().play_click_sound() 
+        r, c = instance.row, instance.col
         
+        # ✨ ลอจิกการกดสำหรับ Deployment Phase
+        if getattr(self, 'battle_phase', 'playing') == 'deployment':
+            if r < 5: return # ห้ามกดนอกเขต Deployment (3 แถวล่าง)
+            
+            if self.selected is None:
+                piece = self.game.board[r][c]
+                if piece and piece.color == self.game.current_turn:
+                    self.selected = (r, c)
+                    self.refresh_ui()
+            else:
+                sr, sc = self.selected
+                if (r, c) == (sr, sc):
+                    self.selected = None; self.refresh_ui(); return
+                
+                target_piece = self.game.board[r][c]
+                if not target_piece or target_piece.color == self.game.current_turn:
+                    # สลับตำแหน่งหมากกัน
+                    self.game.board[r][c] = self.game.board[sr][sc]
+                    self.game.board[sr][sc] = target_piece
+                    self.selected = None
+                    self.init_board_ui()
+            return
+            
+        # --- ลอจิกการกดตอนเล่นเกมปกติ ---
         if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return
         if getattr(self.game, 'game_result', None): return
-        # ✨ FIX: ในโหมด Divide_Conquer ไม่ต้องบล็อกเทิร์นแบบ PVE
         if getattr(self, 'game_mode', 'PVP') == 'PVE' and getattr(self.game, 'current_turn', 'white') == 'black': return
 
-        r, c = instance.row, instance.col; piece = self.game.board[r][c]
+        piece = self.game.board[r][c]
         
         if self.selected_item:
             if piece and piece.color == self.game.current_turn:
                 if getattr(piece, 'item', None) is not None:
-                    self.selected_item = None
-                    self.hide_item_tooltip()
-                    self.refresh_ui()
-                    return
-
+                    self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); return
                 if self.selected_item.id == 9 and piece.__class__.__name__.lower() == 'knight':
                     self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); return
                 if self.selected_item.id == 10 and piece.__class__.__name__.lower() != 'pawn':
@@ -472,15 +487,12 @@ class GameplayScreen(Screen):
         self.update_inventory_ui() 
 
     def check_ai_turn(self):
-        # ✨ เพิ่มเช็คโหมด Divide_Conquer ถ้าเป้าหมายเป็น Bot (สีดำ หรือ สีแดง) ให้ออกบอทเล่น
         app = App.get_running_app()
         is_bot_turn = False
         
         if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black':
             is_bot_turn = True
         elif getattr(self, 'game_mode', 'PVP') == 'Divide_Conquer':
-            # โหมดแผนที่ ให้บอทเล่นถ้าศัตรูเป็นสีแดง หรือ ถ้าศัตรูเป็นสีดำ (และไม่ได้เล่น 2 คน)
-            # ณ ตอนนี้ตั้งให้ Black กับ Red ในโหมดด่านบุก ให้ใช้ AI
             if self.game.current_turn == 'black':
                 is_bot_turn = True
                 
@@ -509,10 +521,8 @@ class GameplayScreen(Screen):
                     candidates = []
                     item_id = item_to_use.id
                     
-                    if item_id == 10: 
-                        candidates = [p for p in valid_pieces if p.__class__.__name__.lower() == 'pawn']
-                    elif item_id == 9: 
-                        candidates = [p for p in valid_pieces if p.__class__.__name__.lower() != 'knight']
+                    if item_id == 10: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() == 'pawn']
+                    elif item_id == 9: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() != 'knight']
                     elif item_id in [1, 2, 4, 8]: 
                         candidates = [p for p in valid_pieces if p.__class__.__name__.lower() in ['king', 'queen', 'rook']]
                         if not candidates: candidates = valid_pieces
@@ -584,12 +594,13 @@ class GameplayScreen(Screen):
         self.selected_item = None
         self.is_input_locked = False
 
-        self.manager.current = 'setup'
+        if getattr(self, 'game_mode', '') == 'Divide_Conquer':
+            self.manager.current = 'campaign_map'
+        else:
+            self.manager.current = 'setup'
         
     def auto_quit_to_setup(self, dt): 
-        # ✨ ถ้าเล่นโหมด Campaign จบ ให้เด้งกลับไปที่ Campaign Map
         if getattr(self, 'game_mode', '') == 'Divide_Conquer':
-            # TODO: สร้างลอจิกโอนย้ายของกลับ, ยึดเมือง, อัปเดตกองทัพ
             self.manager.current = 'campaign_map'
         else:
             self.manager.current = 'setup'
