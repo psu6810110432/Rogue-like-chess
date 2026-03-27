@@ -8,6 +8,7 @@ from screens.options_screen import OptionsScreen
 from screens.tutorial_screen import TutorialScreen
 from kivy.properties import StringProperty
 from kivy.core.audio import SoundLoader 
+from screens.campaign_map_screen import CampaignMapScreen
 
 class RogueChessApp(App):
     ai_difficulty = 'normal'  
@@ -41,6 +42,7 @@ class RogueChessApp(App):
         sm.add_widget(GameplayScreen(name='gameplay')) 
         sm.add_widget(TutorialScreen(name='tutorial'))
         sm.add_widget(OptionsScreen(name='options'))
+        sm.add_widget(CampaignMapScreen(name='campaign_map'))
         
         return sm
 

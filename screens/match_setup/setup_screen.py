@@ -8,6 +8,7 @@ from kivy.graphics import Rectangle, Color
 from screens.match_setup.setup_section import SetupSection
 from screens.main_menu import RoundedButton 
 
+
 class MatchSetupScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -66,9 +67,14 @@ class MatchSetupScreen(Screen):
         if not getattr(app, 'selected_unit_white', None): app.selected_unit_white = 'Medieval Knights'
         if not getattr(app, 'selected_unit_black', None): app.selected_unit_black = 'Demon'
 
-        # แปลง match_type เป็น game_mode ให้ระบบเดิมใช้ได้
         app.game_mode = app.match_type 
 
-        gameplay_screen = self.manager.get_screen('gameplay')
-        gameplay_screen.setup_game(app.game_mode)
-        self.manager.current = 'gameplay'
+        # ✨ ตรวจสอบโหมดย่อย
+        if app.sub_mode == 'Divide_Conquer':
+            # ไปหน้า World Map จัดทัพ
+            self.manager.current = 'campaign_map'
+        else:
+            # เล่นโหมด Chess ปกติ
+            gameplay_screen = self.manager.get_screen('gameplay')
+            gameplay_screen.setup_game(app.game_mode)
+            self.manager.current = 'gameplay'
