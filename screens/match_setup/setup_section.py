@@ -78,7 +78,6 @@ class HoverInfoIcon(Label):
                 Window.remove_widget(self._tooltip)
                 self._tooltip = None
 
-
 # ------------------ ระบบปุ่มกด Popup สำหรับ Legion ------------------
 class ClickableInfoIcon(ButtonBehavior, Label):
     def __init__(self, **kwargs):
@@ -158,53 +157,60 @@ class SetupSection(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(orientation='vertical', padding=[20, 10, 20, 10], spacing=15, **kwargs)
         self.app = App.get_running_app()
-        self.app.game_mode = ''
+        self.app.match_type = '' # PVE / PVP
+        self.app.sub_mode = ''   # Classic / Divide_Conquer
         self.app.selected_board = ''
         self.app.selected_unit_white = ''
         self.app.selected_unit_black = ''
 
-        # 1. SELECT GAME MODE
-        self.mode_box = BoxLayout(orientation='vertical', size_hint_y=0.25, spacing=5)
-        self.add_header(self.mode_box, "1. SELECT GAME MODE")
+        # ✨ 1. SELECT MATCH TYPE
+        self.type_box = BoxLayout(orientation='vertical', size_hint_y=0.18, spacing=5)
+        self.add_header(self.type_box, "1. SELECT MATCH TYPE")
+        
+        type_grid = GridLayout(cols=2, spacing=20)
+        self.type_cards = []
+        for m in ['PVE', 'PVP']:
+            desc = "COMMANDER vs AI" if m=='PVE' else "DUEL BETWEEN LORDS"
+            card = SelectionCard(text=f"[b]{m}[/b]\n[size=14sp][color=a0a0a0]{desc}[/color][/size]")
+            card.val = m
+            card.bind(on_press=self.play_sound, on_release=self.on_type_select)
+            self.type_cards.append(card)
+            type_grid.add_widget(card)
+        self.type_box.add_widget(type_grid)
+        self.add_widget(self.type_box)
+
+        # ✨ 2. SELECT GAME MODE
+        self.mode_box = BoxLayout(orientation='vertical', size_hint_y=0.18, spacing=5, opacity=0, disabled=True)
+        self.add_header(self.mode_box, "2. SELECT GAME MODE")
         
         mode_grid = GridLayout(cols=2, spacing=20)
         self.mode_cards = []
-        for m in ['PVE', 'PVP']:
-            desc = "COMMANDER vs AI" if m=='PVE' else "DUEL BETWEEN LORDS"
-            card = SelectionCard(text=f"[b]{m} MODE[/b]\n[size=14sp][color=a0a0a0]{desc}[/color][/size]")
-            card.val = m
+        
+        modes = [
+            ('Classic', "CLASSIC CHESS", "Standard Rules & Combat"),
+            ('Divide_Conquer', "DIVIDE & CONQUER", "Total War Style, Farming & Conquest")
+        ]
+        for val, title, desc in modes:
+            card = SelectionCard(text=f"[b]{title}[/b]\n[size=13sp][color=a0a0a0]{desc}[/color][/size]")
+            card.val = val
             card.bind(on_press=self.play_sound, on_release=self.on_mode_select)
             self.mode_cards.append(card)
             mode_grid.add_widget(card)
         self.mode_box.add_widget(mode_grid)
         self.add_widget(self.mode_box)
 
-        # 2. SELECT MAP (✨ ใส่ tooltip แบบ Hover ที่นี่)
-        self.map_box = BoxLayout(orientation='vertical', size_hint_y=0.25, spacing=5, opacity=0, disabled=True)
+        # ✨ 3. SELECT MAP / SIZE (Dynamically changes based on Mode)
+        self.map_box = BoxLayout(orientation='vertical', size_hint_y=0.22, spacing=5, opacity=0, disabled=True)
+        self.map_header_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(10))
+        self.map_box.add_widget(self.map_header_layout)
         
-        map_descriptions = (
-            "[color=ffcc00][b]Classic:[/b][/color] Standard chess battlefield.\n"
-            "[color=00ff44][b]Enchanted Forest:[/b][/color] Thorny vines may sprout to block squares for 3 turns.\n"
-            "[color=ffaa00][b]Desert Ruins:[/b][/color] Empty rows/columns may trigger a sandstorm lasting 3 turns.\n"
-            "[color=00ccff][b]Frozen Tundra:[/b][/color] Every 3 turns, 2 random pieces per side freeze \n(cannot move or be captured). Ice blocks may also spawn for 3 turns."
-        )
-        self.add_header(self.map_box, "2. STRATEGIC BATTLEFIELD", tooltip_text=map_descriptions)
-        
-        map_grid = GridLayout(cols=5, spacing=12)
-        self.map_cards = []
-        for mp in ['Classic Board', 'Enchanted Forest', 'Desert Ruins', 'Frozen Tundra', 'Random Board']:
-            display_name = mp.replace(" Board", "")
-            card = SelectionCard(text=f"[b][size=15sp]{display_name}[/size][/b]")
-            card.val = mp
-            card.bind(on_press=self.play_sound, on_release=self.on_map_select)
-            self.map_cards.append(card)
-            map_grid.add_widget(card)
-        self.map_box.add_widget(map_grid)
+        self.map_grid = GridLayout(cols=5, spacing=12)
+        self.map_box.add_widget(self.map_grid)
         self.add_widget(self.map_box)
 
-        # 3. SELECT FACTIONS (✨ ใส่ปุ่มกดดูข้อมูล Encyclopedia ที่นี่)
-        self.fac_box = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=5, opacity=0, disabled=True)
-        self.add_header(self.fac_box, "3. CHOOSE YOUR LEGION", clickable_info=True)
+        # ✨ 4. SELECT FACTIONS
+        self.fac_box = BoxLayout(orientation='vertical', size_hint_y=0.42, spacing=5, opacity=0, disabled=True)
+        self.add_header(self.fac_box, "4. CHOOSE YOUR LEGION", clickable_info=True)
         
         self.fac_split = BoxLayout(orientation='horizontal', spacing=30)
         
@@ -237,7 +243,6 @@ class SetupSection(BoxLayout):
 
         self.update_selections()
 
-    # ✨ ปรับ add_header ให้รองรับทั้ง Hover และ Clickable Info
     def add_header(self, parent_box, text, tooltip_text=None, clickable_info=False):
         header_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(10))
         
@@ -265,20 +270,94 @@ class SetupSection(BoxLayout):
             self.app.play_click_sound()
 
     def update_selections(self):
-        for c in self.mode_cards: c.set_selected(c.val == self.app.game_mode)
-        for c in self.map_cards: c.set_selected(c.val == self.app.selected_board)
+        for c in self.type_cards: c.set_selected(c.val == self.app.match_type)
+        for c in self.mode_cards: c.set_selected(c.val == self.app.sub_mode)
+        for c in getattr(self, 'map_cards', []): c.set_selected(c.val == self.app.selected_board)
         for c in self.white_cards: c.set_selected(c.val == self.app.selected_unit_white)
         for c in self.black_cards: c.set_selected(c.val == self.app.selected_unit_black)
 
-    def on_mode_select(self, instance):
-        self.app.game_mode = instance.val
+    # ✨ จัดการการเลือกแต่ละ Step
+    def on_type_select(self, instance):
+        self.app.match_type = instance.val
         self.update_selections()
+        
+        self.mode_box.disabled = False
+        Animation(opacity=1, duration=0.3).start(self.mode_box)
+
+    def on_mode_select(self, instance):
+        self.app.sub_mode = instance.val
+        
+        # ปรับเปลี่ยน UI ของกล่อง Map/Size ทันทีที่เปลี่ยนโหมด
+        self.load_map_options()
+        self.update_selections()
+        
         self.map_box.disabled = False
         Animation(opacity=1, duration=0.3).start(self.map_box)
+
+    def load_map_options(self):
+        self.map_header_layout.clear_widgets()
+        self.map_grid.clear_widgets()
+        self.map_cards = []
+        
+        if self.app.sub_mode == 'Classic':
+            # Header
+            lbl = Label(text=f"[color=d4af37][b]3. STRATEGIC BATTLEFIELD[/b][/color]", markup=True, font_size='20sp', halign='left', size_hint_x=None)
+            lbl.bind(texture_size=lambda instance, value: setattr(instance, 'width', value[0]))
+            self.map_header_layout.add_widget(lbl)
+            
+            tooltip = (
+                "[color=ffcc00][b]Classic:[/b][/color] Standard chess battlefield.\n"
+                "[color=00ff44][b]Enchanted Forest:[/b][/color] Thorny vines may sprout.\n"
+                "[color=ffaa00][b]Desert Ruins:[/b][/color] Sandstorm affects empty lines.\n"
+                "[color=00ccff][b]Frozen Tundra:[/b][/color] Freezes pieces and blocks squares."
+            )
+            icon_container = AnchorLayout(anchor_x='left', anchor_y='center', size_hint_x=1)
+            icon_container.add_widget(HoverInfoIcon(info_text=tooltip))
+            self.map_header_layout.add_widget(icon_container)
+            
+            # Buttons
+            self.map_grid.cols = 5
+            options = ['Classic Board', 'Enchanted Forest', 'Desert Ruins', 'Frozen Tundra', 'Random Board']
+            for mp in options:
+                display_name = mp.replace(" Board", "")
+                card = SelectionCard(text=f"[b][size=15sp]{display_name}[/size][/b]")
+                card.val = mp
+                card.bind(on_press=self.play_sound, on_release=self.on_map_select)
+                self.map_cards.append(card)
+                self.map_grid.add_widget(card)
+                
+        else: # Divide & Conquer
+            # Header
+            lbl = Label(text=f"[color=d4af37][b]3. SELECT WORLD SIZE[/b][/color]", markup=True, font_size='20sp', halign='left', size_hint_x=None)
+            lbl.bind(texture_size=lambda instance, value: setattr(instance, 'width', value[0]))
+            self.map_header_layout.add_widget(lbl)
+            
+            tooltip = (
+                "Select how many farming bases you can control per side.\n"
+                "[b]Small:[/b] 3 Farms per faction\n"
+                "[b]Medium:[/b] 5 Farms per faction\n"
+                "[b]Large:[/b] 7 Farms per faction"
+            )
+            icon_container = AnchorLayout(anchor_x='left', anchor_y='center', size_hint_x=1)
+            icon_container.add_widget(HoverInfoIcon(info_text=tooltip))
+            self.map_header_layout.add_widget(icon_container)
+            
+            # Buttons
+            self.map_grid.cols = 3
+            options = [('Size_S', 'SMALL WORLD\n[size=12sp](3 Farming Bases)[/size]'), 
+                       ('Size_M', 'MEDIUM WORLD\n[size=12sp](5 Farming Bases)[/size]'), 
+                       ('Size_L', 'LARGE WORLD\n[size=12sp](7 Farming Bases)[/size]')]
+            for val, display_name in options:
+                card = SelectionCard(text=f"[b][size=16sp]{display_name}[/size][/b]")
+                card.val = val
+                card.bind(on_press=self.play_sound, on_release=self.on_map_select)
+                self.map_cards.append(card)
+                self.map_grid.add_widget(card)
 
     def on_map_select(self, instance):
         self.app.selected_board = instance.val
         self.update_selections()
+        
         self.fac_box.disabled = False
         Animation(opacity=1, duration=0.3).start(self.fac_box)
         Animation(opacity=1, duration=0.3).start(self.w_box)
