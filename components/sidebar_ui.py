@@ -7,14 +7,14 @@ from kivy.uix.widget import Widget
 from kivy.graphics import Color, Rectangle
 from kivy.clock import Clock
 from kivy.metrics import dp
-# ✨ นำเข้าปุ่มแบบ 3D จากหน้า Main Menu
 from screens.main_menu import RoundedButton 
 
 class SidebarUI(BoxLayout):
-    def __init__(self, on_undo_callback, on_quit_callback, **kwargs):
+    # ✨ เพิ่มการรับค่า game_mode เข้ามา
+    def __init__(self, on_undo_callback, on_quit_callback, game_mode='Classic', **kwargs):
         super().__init__(orientation='vertical', spacing=10, **kwargs)
         
-        # 1. หัวข้อ Move History (✨ เปลี่ยนเป็นสีทอง #d4af37)
+        # 1. หัวข้อ Move History
         title = Label(
             text="[b]Move History[/b]", 
             markup=True,
@@ -25,7 +25,7 @@ class SidebarUI(BoxLayout):
         )
         self.add_widget(title)
         
-        # 2. หัวตาราง (ล็อค 3 ช่องให้ตรงกันเป๊ะ)
+        # 2. หัวตาราง
         header_layout = GridLayout(cols=3, size_hint_y=None, height=dp(25))
         header_layout.add_widget(Label(text="[b]Turn[/b]", markup=True, color=(0.7, 0.8, 1, 1), size_hint_x=0.2))
         
@@ -42,7 +42,7 @@ class SidebarUI(BoxLayout):
         # เส้นประใต้หัวตาราง
         self.add_widget(Label(text="-"*50, size_hint_y=None, height=dp(10), color=(0.4, 0.4, 0.4, 1)))
         
-        # 3. พื้นที่ประวัติการเดิน (มี ScrollView)
+        # 3. พื้นที่ประวัติการเดิน
         self.scroll = ScrollView(
             size_hint_y=1, 
             do_scroll_x=False,
@@ -69,17 +69,24 @@ class SidebarUI(BoxLayout):
         self.scroll.add_widget(self.history_wrapper)
         self.add_widget(self.scroll)
         
-        # 4. โซนปุ่มกด (✨ เปลี่ยนไปใช้ RoundedButton 3D)
+        # 4. โซนปุ่มกด
         btn_layout = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(110), spacing=10, padding=[0, 10, 0, 0])
         
-        undo_btn = RoundedButton(text="Undo Move", bold=True, font_size='18sp', normal_color=(0.55, 0.15, 0.15, 0.95))
-        undo_btn.bind(on_release=lambda x: on_undo_callback())
-        
-        quit_btn = RoundedButton(text="Quit Match", bold=True, font_size='18sp', normal_color=(0.35, 0.05, 0.05, 0.95))
-        quit_btn.bind(on_release=lambda x: on_quit_callback())
-        
-        btn_layout.add_widget(undo_btn)
-        btn_layout.add_widget(quit_btn)
+        # ✨ สร้างเงื่อนไขแสดงปุ่มตามโหมดเกม
+        if game_mode == 'Divide_Conquer':
+            btn_layout.add_widget(Widget()) # ดันปุ่มลงไปข้างล่าง
+            retreat_btn = RoundedButton(text="Retreat", bold=True, font_size='18sp', normal_color=(0.8, 0.4, 0.1, 0.95))
+            retreat_btn.bind(on_release=lambda x: on_quit_callback())
+            btn_layout.add_widget(retreat_btn)
+        else:
+            undo_btn = RoundedButton(text="Undo Move", bold=True, font_size='18sp', normal_color=(0.55, 0.15, 0.15, 0.95))
+            undo_btn.bind(on_release=lambda x: on_undo_callback())
+            
+            quit_btn = RoundedButton(text="Quit Match", bold=True, font_size='18sp', normal_color=(0.35, 0.05, 0.05, 0.95))
+            quit_btn.bind(on_release=lambda x: on_quit_callback())
+            
+            btn_layout.add_widget(undo_btn)
+            btn_layout.add_widget(quit_btn)
         
         self.add_widget(btn_layout)
 

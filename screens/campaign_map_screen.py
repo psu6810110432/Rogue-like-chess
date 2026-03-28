@@ -8,16 +8,17 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.button import Button
 from kivy.uix.label import Label
-from kivy.uix.modalview import ModalView
 from kivy.uix.image import Image
 from kivy.graphics import Color, Rectangle, Line, Ellipse, RoundedRectangle
 from kivy.metrics import dp
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.uix.behaviors import ButtonBehavior
+from logic.pieces import Pawn, Knight, Bishop, Rook, Queen, King
+from components.hidden_passive import HiddenPassive
 
 def check_rect_overlap(r1, r2):
-    x1, y1, w1, h1 = r1
-    x2, y2, w2, h2 = r2
+    x1, y1, w1, h1 = r1; x2, y2, w2, h2 = r2
     return not (x1 + w1 < x2 or x1 > x2 + w2 or y1 + h1 < y2 or y1 > y2 + h2)
 
 def is_overlapping_any(rect, rect_list):
@@ -28,339 +29,321 @@ def is_overlapping_any(rect, rect_list):
 def get_distance(p1, p2):
     return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
 
-class UnitCounter(BoxLayout):
-    def __init__(self, piece_name, count, update_cb, img_path, cost=0, can_recruit=False, **kwargs):
-        super().__init__(orientation='horizontal', size_hint_y=None, height=dp(50), spacing=dp(5), **kwargs)
+def generate_piece(piece_name, faction, app):
+    theme = getattr(app, f'selected_unit_{faction}', 'Medieval Knights') if faction != 'red' else 'Demon'
+    tribe = theme.lower().replace(" ", "") if theme != "Medieval Knights" else "medieval"
+    color = faction if faction in ['white', 'black'] else 'black'
+    
+    classes = {'pawn': Pawn, 'knight': Knight, 'bishop': Bishop, 'rook': Rook, 'queen': Queen, 'king': King, 'prince': King}
+    p = classes[piece_name](color, tribe)
+    if piece_name == 'prince': p.name = "Prince" 
+    
+    if not hasattr(p, 'hidden_passive') or p.hidden_passive is None:
+        p.hidden_passive = HiddenPassive()
+        p.base_points, p.coins = p.hidden_passive.apply_passive(p.base_points, p.coins)
+    return p
+
+def clone_piece(p, faction, app):
+    # ฟังก์ชันล้างคราบสถานะกระดานของทหารที่รอดชีวิต ให้เป็นหมากใหม่กิ๊กแต่สเตตัสเดิม
+    p_name = p.__class__.__name__.lower()
+    if getattr(p, 'name', '') == 'Prince': p_name = 'prince'
+    new_p = generate_piece(p_name, faction, app)
+    new_p.base_points = p.base_points
+    new_p.coins = p.coins
+    new_p.item = getattr(p, 'item', None)
+    new_p.hidden_passive = getattr(p, 'hidden_passive', None)
+    return new_p
+
+# ----------------- UI การ์ดทหารสไตล์ Total War -----------------
+class PieceCard(ButtonBehavior, FloatLayout):
+    def __init__(self, piece_obj, **kwargs):
+        super().__init__(size_hint=(None, 1), width=dp(110), **kwargs)
+        self.piece_obj = piece_obj
+        self.is_selected = False
+        
+        with self.canvas.before:
+            Color(0.12, 0.12, 0.15, 0.95)
+            self.bg = RoundedRectangle(radius=[dp(8)])
+            self.border_color = Color(0.3, 0.3, 0.35, 1)
+            self.border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, dp(8)], width=1.5)
+        self.bind(pos=self._update_bg, size=self._update_bg)
+
+        p_name = piece_obj.__class__.__name__.lower()
+        tribe = getattr(piece_obj, 'tribe', 'medieval')
+        color = piece_obj.color
+        num = {'pawn':6, 'rook':3, 'knight':4, 'bishop':5, 'queen':2, 'king':1}.get(p_name, 1)
+        if getattr(piece_obj, 'name', '') == 'Prince': num = 1
+        img_path = f"assets/pieces/{tribe}/{color}/chess {tribe}{num}.png"
+        
+        # รูปทหาร
+        self.add_widget(Image(source=img_path, size_hint=(0.7, 0.6), pos_hint={'center_x': 0.5, 'top': 0.9}))
+        
+        # ข้อมูล
+        display_name = getattr(piece_obj, 'name', p_name.capitalize())
+        self.add_widget(Label(text=f"[b]{display_name}[/b]", markup=True, font_size='13sp', pos_hint={'center_x': 0.5, 'y': 0.15}, size_hint=(1, 0.2)))
+        
+        hp = getattr(piece_obj, 'hidden_passive', None)
+        passive_text = hp.description if hp and hp.passive_type else "No Passive"
+        self.add_widget(Label(text=f"[size=10sp][color=a0a0a0]{passive_text}[/color][/size]", markup=True, pos_hint={'center_x': 0.5, 'y': 0.05}, size_hint=(1, 0.15)))
+
+        # ไอเทมมุมขวาบน
+        if getattr(piece_obj, 'item', None):
+            self.add_widget(Image(source=piece_obj.item.image_path, size_hint=(0.35, 0.35), pos_hint={'right': 0.95, 'top': 0.95}))
+
+    def _update_bg(self, instance, value):
+        self.bg.pos, self.bg.size = instance.pos, instance.size
+        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(8)]
+
+    def on_release(self):
+        App.get_running_app().play_click_sound()
+        self.is_selected = not self.is_selected
+        self.border_color.rgba = (1, 0.8, 0, 1) if self.is_selected else (0.3, 0.3, 0.35, 1)
+        self.border_line.width = 2.5 if self.is_selected else 1.5
+
+class RecruitCard(ButtonBehavior, FloatLayout):
+    def __init__(self, piece_name, cost, faction, app, click_cb, **kwargs):
+        super().__init__(size_hint=(None, 1), width=dp(110), **kwargs)
+        self.click_cb = click_cb
         self.piece_name = piece_name
-        self.count = count
-        self.update_cb = update_cb
         self.cost = cost
-
-        self.add_widget(Image(source=img_path, size_hint_x=0.2, allow_stretch=True, keep_ratio=True))
-        name_lbl = f"[b]{piece_name.capitalize()}[/b]"
-        if cost > 0: name_lbl += f"\n[size=12sp][color=ffff00]Cost: {cost}[/color][/size]"
-        self.add_widget(Label(text=name_lbl, markup=True, size_hint_x=0.3, halign='left'))
         
-        self.lbl_count = Label(text=f"[b]{self.count}[/b]", markup=True, size_hint_x=0.3, font_size='18sp')
-        self.add_widget(self.lbl_count)
+        with self.canvas.before:
+            Color(0.12, 0.2, 0.12, 0.95)
+            self.bg = RoundedRectangle(radius=[dp(8)])
+            self.border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, dp(8)], width=1.5)
+        self.bind(pos=self._update_bg, size=self._update_bg)
+
+        theme = getattr(app, f'selected_unit_{faction}', 'Medieval Knights')
+        tribe = theme.lower().replace(" ", "") if theme != "Medieval Knights" else "medieval"
+        num = {'pawn':6, 'rook':3, 'knight':4, 'bishop':5, 'queen':2, 'king':1}.get(piece_name, 1)
+        img_path = f"assets/pieces/{tribe}/{faction}/chess {tribe}{num}.png"
         
-        self.btn_plus = Button(text="[b]+[/b]", markup=True, size_hint_x=0.2, background_color=(0.2, 0.8, 0.2, 1))
-        self.btn_plus.disabled = not can_recruit
-        self.btn_plus.bind(on_release=self.increase)
-        self.add_widget(self.btn_plus)
+        self.add_widget(Image(source=img_path, size_hint=(0.7, 0.6), pos_hint={'center_x': 0.5, 'top': 0.9}))
+        self.add_widget(Label(text=f"[b]{piece_name.capitalize()}[/b]", markup=True, font_size='13sp', pos_hint={'center_x': 0.5, 'y': 0.15}, size_hint=(1, 0.2)))
+        self.add_widget(Label(text=f"[size=12sp][color=ffff00]Cost: {cost}[/color][/size]", markup=True, pos_hint={'center_x': 0.5, 'y': 0.05}, size_hint=(1, 0.15)))
 
-    def increase(self, instance):
-        if self.update_cb(self.piece_name, self.count + 1, self.cost):
-            self.count += 1
-            self.lbl_count.text = f"[b]{self.count}[/b]"
+    def _update_bg(self, instance, value):
+        self.bg.pos, self.bg.size = instance.pos, instance.size
+        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(8)]
 
-class ArmyManagementPopup(ModalView):
-    def __init__(self, node, app, **kwargs):
-        super().__init__(size_hint=(0.85, 0.85), auto_dismiss=False, background_color=(0,0,0,0.8), **kwargs)
-        self.node = node
+    def on_release(self):
+        self.click_cb(self.piece_name, self.cost)
+
+# ----------------- UI แถบซ้ายล่าง (Total War Army Panel) -----------------
+class CampaignArmyPanel(FloatLayout):
+    def __init__(self, map_screen, app, **kwargs):
+        # ตำแหน่งอยู่ด้านซ้ายล่าง
+        super().__init__(size_hint=(0.85, None), height=dp(200), pos_hint={'x': 0.02, 'y': -0.5}, **kwargs) 
+        self.map_screen = map_screen
         self.app = app
-        self.temp_army = node.army.copy()
-        
-        root = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(10))
-        with root.canvas.before:
-            Color(0.1, 0.1, 0.15, 0.95)
+        self.current_node = None
+        self.current_tab = 'army'
+
+        with self.canvas.before:
+            Color(0.05, 0.05, 0.08, 0.9)
             self.bg = RoundedRectangle(radius=[dp(12)])
-            Color(0.8, 0.6, 0.2, 1)
-            self.border_line = Line(rounded_rectangle=[root.x, root.y, root.width, root.height, dp(12)], width=2)
-        root.bind(pos=self._update_bg, size=self._update_bg)
+            self.border_color = Color(0.5, 0.5, 0.5, 1)
+            self.border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, dp(12)], width=2)
+        self.bind(pos=self._update_bg, size=self._update_bg)
 
-        header_box = BoxLayout(size_hint_y=0.1)
-        header_box.add_widget(Label(text=f"[b][color=d4af37]ARMY HQ - {node.node_type.upper()}[/color][/b]", markup=True, font_size='22sp'))
-        self.lbl_tax = Label(text="", markup=True, font_size='18sp')
-        header_box.add_widget(self.lbl_tax)
-        root.add_widget(header_box)
-
-        content_box = BoxLayout(orientation='horizontal', spacing=dp(15), size_hint_y=0.75)
-        left_panel = ScrollView(size_hint_x=0.6)
-        self.counter_grid = GridLayout(cols=1, spacing=dp(5), size_hint_y=None)
-        self.counter_grid.bind(minimum_height=self.counter_grid.setter('height'))
-        left_panel.add_widget(self.counter_grid)
-        content_box.add_widget(left_panel)
-
-        right_panel = BoxLayout(orientation='vertical', size_hint_x=0.4, spacing=dp(10))
-        with right_panel.canvas.before:
-            Color(0.05, 0.05, 0.08, 1)
-            self.rp_bg = RoundedRectangle(radius=[dp(10)])
-        right_panel.bind(pos=lambda i,v: setattr(self.rp_bg, 'pos', i.pos), size=lambda i,v: setattr(self.rp_bg, 'size', i.size))
+        # Header Area
+        self.header_box = BoxLayout(orientation='horizontal', size_hint=(1, 0.2), pos_hint={'top': 1, 'x': 0}, padding=[dp(10), dp(5)])
         
-        self.lbl_stats = Label(text="", markup=True, size_hint_y=0.5, font_size='15sp', halign='left', valign='top')
-        self.lbl_stats.bind(size=self.lbl_stats.setter('text_size'))
-        right_panel.add_widget(self.lbl_stats)
-
-        self.btn_quick = Button(text="[b]QUICK RECRUIT (7 TAX)[/b]", markup=True, size_hint_y=0.2, background_color=(0.8, 0.6, 0.1, 1))
-        self.btn_quick.bind(on_release=self.quick_recruit)
-        right_panel.add_widget(self.btn_quick)
+        self.header_lbl = Label(text="ARMY HQ", bold=True, font_size='18sp', size_hint_x=0.3, halign='left')
+        self.status_lbl = Label(text="", markup=True, size_hint_x=0.2, font_size='14sp')
         
-        content_box.add_widget(right_panel)
-        root.add_widget(content_box)
-
-        btn_box = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(20))
-        btn_cancel = Button(text="[b]CLOSE[/b]", markup=True, background_color=(0.5, 0.2, 0.2, 1))
-        btn_cancel.bind(on_release=self.dismiss)
-        btn_confirm = Button(text="[b]SAVE ARMY[/b]", markup=True, background_color=(0.2, 0.6, 0.2, 1))
-        btn_confirm.bind(on_release=self.confirm_save)
-        btn_box.add_widget(btn_cancel)
-        btn_box.add_widget(btn_confirm)
-        root.add_widget(btn_box)
-
-        self.add_widget(root)
-        self.build_recruit_ui()
-        self.update_summary()
-
-    def _update_bg(self, instance, value):
-        self.bg.pos = instance.pos
-        self.bg.size = instance.size
-        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(12)]
-
-    def build_recruit_ui(self):
-        self.counter_grid.clear_widgets()
-        theme = getattr(self.app, f'selected_unit_{self.node.faction}', 'Medieval Knights')
-        tribe = theme.lower().replace(" ", "") if theme != "Medieval Knights" else "medieval"
-        categories = {'HEADER': [('king', 0), ('prince', 0)], 'HEAVY (Cost: 2)': [('queen', 2), ('rook', 2), ('bishop', 2), ('knight', 2)], 'LIGHT (Cost: 1)': [('pawn', 1)]}
-        can_heavy = (self.node.node_type == 'castle')
-        for cat_name, pieces in categories.items():
-            self.counter_grid.add_widget(Label(text=f"[color=aaddff][b]--- {cat_name} ---[/b][/color]", markup=True, size_hint_y=None, height=dp(30), halign='left'))
-            for p, cost in pieces:
-                num = {'pawn':6, 'rook':3, 'knight':4, 'bishop':5, 'queen':2, 'king':1}.get(p, 1)
-                img_path = f"assets/pieces/{tribe}/{self.node.faction}/chess {tribe}{num}.png"
-                if p == 'prince': img_path = f"assets/pieces/{tribe}/{self.node.faction}/chess {tribe}1.png"
-                
-                allow_recruit = True
-                if cost == 0: allow_recruit = False
-                if not can_heavy and cost == 2: allow_recruit = False
-                counter = UnitCounter(p, self.temp_army.get(p, 0), self.on_recruit_attempt, img_path, cost=cost, can_recruit=allow_recruit)
-                self.counter_grid.add_widget(counter)
-
-    def on_recruit_attempt(self, piece_name, new_count, cost):
-        tax = self.app.tax_points[self.node.faction]
-        if tax < cost: return False
-        headers = self.temp_army.get('king', 0) + self.temp_army.get('prince', 0)
-        heavies = sum([self.temp_army.get(p, 0) for p in ['queen', 'rook', 'bishop', 'knight']])
-        total = headers + heavies + self.temp_army.get('pawn', 0)
-        max_cap = 18 if headers > 0 else 8
-        if total >= max_cap: return False
-        if piece_name == 'pawn' and heavies > 9: return False 
+        # Tabs
+        self.btn_tab_army = Button(text="[b]ARMY[/b]", markup=True, size_hint_x=0.15, background_color=(0.3, 0.5, 0.8, 1))
+        self.btn_tab_army.bind(on_release=lambda x: self.switch_tab('army'))
+        self.btn_tab_recruit = Button(text="[b]RECRUIT[/b]", markup=True, size_hint_x=0.15, background_color=(0.2, 0.2, 0.2, 1))
+        self.btn_tab_recruit.bind(on_release=lambda x: self.switch_tab('recruit'))
         
-        self.app.tax_points[self.node.faction] -= cost
-        self.temp_army[piece_name] = new_count
-        self.update_summary()
-        return True
-
-    def quick_recruit(self, instance):
-        tax = self.app.tax_points[self.node.faction]
-        if tax < 7: return
-        target = {'queen': 1, 'rook': 2, 'bishop': 2, 'knight': 2, 'pawn': 8}
-        self.app.tax_points[self.node.faction] -= 7
-        for p, target_count in target.items():
-            while self.temp_army.get(p, 0) < target_count:
-                headers = self.temp_army.get('king', 0) + self.temp_army.get('prince', 0)
-                curr_heavies = sum([self.temp_army.get(h, 0) for h in ['queen', 'rook', 'bishop', 'knight']])
-                if headers + curr_heavies + self.temp_army.get('pawn', 0) >= (18 if headers > 0 else 8): break
-                if p in ['queen', 'rook', 'bishop', 'knight'] and curr_heavies >= 9:
-                    self.temp_army['pawn'] += 1
-                else:
-                    self.temp_army[p] += 1
-        self.build_recruit_ui()
-        self.update_summary()
-        self.app.play_click_sound()
-
-    def update_summary(self):
-        tax = self.app.tax_points[self.node.faction]
-        self.lbl_tax.text = f"TAX POINTS: [color=00ff00]{tax}[/color]"
-        light_count = self.temp_army.get('pawn', 0)
-        heavy_count = sum([self.temp_army.get(p, 0) for p in ['queen', 'rook', 'bishop', 'knight']])
-        header_count = self.temp_army.get('king', 0) + self.temp_army.get('prince', 0)
-        max_cap = 18 if header_count > 0 else 8
-        stats = f"Capacity: [b]{light_count+heavy_count+header_count} / {max_cap}[/b]\nHeavy: [color=ff6666]{heavy_count}[/color]\nLight: [color=66ff66]{light_count}[/color]\n"
-        self.lbl_stats.text = stats
-
-    def confirm_save(self, instance):
-        self.node.army = self.temp_army.copy()
-        self.app.play_click_sound()
-        self.dismiss()
-
-class TroopTransferCounter(BoxLayout):
-    def __init__(self, piece_name, base_count, update_cb, img_path, **kwargs):
-        super().__init__(orientation='horizontal', size_hint_y=None, height=dp(50), spacing=dp(5), **kwargs)
-        self.piece_name = piece_name
-        self.base_count = base_count
-        self.army_count = 0
-        self.update_cb = update_cb
-
-        self.add_widget(Image(source=img_path, size_hint_x=0.15, allow_stretch=True, keep_ratio=True))
-        self.add_widget(Label(text=f"[b]{piece_name.capitalize()}[/b]", markup=True, size_hint_x=0.25, halign='left'))
-        self.lbl_base = Label(text=f"Base:\n[b]{self.base_count}[/b]", markup=True, size_hint_x=0.15, halign='center')
-        self.add_widget(self.lbl_base)
-
-        btn_left = Button(text="<", size_hint_x=0.1, background_color=(0.8, 0.2, 0.2, 1))
-        btn_left.bind(on_release=self.move_to_base)
-        self.add_widget(btn_left)
-        btn_right = Button(text=">", size_hint_x=0.1, background_color=(0.2, 0.8, 0.2, 1))
-        btn_right.bind(on_release=self.move_to_army)
-        self.add_widget(btn_right)
-
-        self.lbl_army = Label(text=f"March:\n[b]{self.army_count}[/b]", markup=True, size_hint_x=0.15, halign='center', color=(1, 0.8, 0, 1))
-        self.add_widget(self.lbl_army)
-
-    def move_to_army(self, instance):
-        if self.base_count > 0:
-            if self.update_cb(self.piece_name, 1): 
-                self.base_count -= 1; self.army_count += 1
-                self.lbl_base.text = f"Base:\n[b]{self.base_count}[/b]"
-                self.lbl_army.text = f"March:\n[b]{self.army_count}[/b]"
-
-    def move_to_base(self, instance):
-        if self.army_count > 0:
-            if self.update_cb(self.piece_name, -1): 
-                self.base_count += 1; self.army_count -= 1
-                self.lbl_base.text = f"Base:\n[b]{self.base_count}[/b]"
-                self.lbl_army.text = f"March:\n[b]{self.army_count}[/b]"
-
-class MarchSetupPopup(ModalView):
-    def __init__(self, source_node, target_node, app, map_screen, **kwargs):
-        super().__init__(size_hint=(0.7, 0.8), auto_dismiss=False, background_color=(0,0,0,0.8), **kwargs)
-        self.source_node = source_node; self.target_node = target_node
-        self.app = app; self.map_screen = map_screen
-        self.temp_base_army = source_node.army.copy()
-        self.marching_army = {'king': 0, 'prince': 0, 'queen': 0, 'rook': 0, 'bishop': 0, 'knight': 0, 'pawn': 0}
+        btn_close = Button(text="CLOSE", size_hint_x=0.1, background_color=(0.5, 0.2, 0.2, 1))
+        btn_close.bind(on_release=self.close_panel)
         
-        root = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(10))
-        with root.canvas.before:
-            Color(0.15, 0.15, 0.2, 0.95); self.bg = RoundedRectangle(radius=[dp(12)])
-            Color(0.8, 0.3, 0.2, 1); self.border_line = Line(rounded_rectangle=[root.x, root.y, root.width, root.height, dp(12)], width=2)
-        root.bind(pos=self._update_bg, size=self._update_bg)
+        self.header_box.add_widget(self.header_lbl)
+        self.header_box.add_widget(self.status_lbl)
+        self.header_box.add_widget(self.btn_tab_army)
+        self.header_box.add_widget(self.btn_tab_recruit)
+        self.header_box.add_widget(btn_close)
+        self.add_widget(self.header_box)
 
-        title_text = f"MARCHING TO {target_node.faction.upper()} {target_node.node_type.upper()}"
-        root.add_widget(Label(text=f"[b][color=ffaa55]{title_text}[/color][/b]", markup=True, font_size='22sp', size_hint_y=0.1))
-        self.lbl_status = Label(text="Capacity: 0 / 8", font_size='16sp', size_hint_y=0.05, color=(0.8,0.8,0.8,1))
-        root.add_widget(self.lbl_status)
+        # Content Area (แนวนอน)
+        self.content_scroll = ScrollView(size_hint=(0.8, 0.7), pos_hint={'x': 0.02, 'y': 0.05}, do_scroll_x=True, do_scroll_y=False)
+        self.content_grid = GridLayout(rows=1, spacing=dp(8), size_hint_x=None, padding=dp(5))
+        self.content_grid.bind(minimum_width=self.content_grid.setter('width'))
+        self.content_scroll.add_widget(self.content_grid)
+        self.add_widget(self.content_scroll)
 
-        self.scroll = ScrollView(size_hint_y=0.7)
-        self.grid = GridLayout(cols=1, spacing=dp(5), size_hint_y=None)
-        self.grid.bind(minimum_height=self.grid.setter('height'))
-        self.scroll.add_widget(self.grid); root.add_widget(self.scroll)
+        # Action Button (ขวาล่าง)
+        self.btn_action = Button(text="[b]MARCH / ATTACK[/b]", markup=True, size_hint=(0.15, 0.7), pos_hint={'right': 0.98, 'y': 0.05}, background_color=(0.8, 0.2, 0.2, 1))
+        self.btn_action.bind(on_release=self.execute_action)
+        self.add_widget(self.btn_action)
 
-        btn_box = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(20))
-        btn_cancel = Button(text="[b]CANCEL[/b]", markup=True, background_color=(0.5, 0.2, 0.2, 1))
-        btn_cancel.bind(on_release=self.dismiss)
-        btn_str = "[b]DEPLOY COMBAT[/b]" if target_node.faction != source_node.faction else "[b]MERGE ARMY[/b]"
-        self.btn_confirm = Button(text=btn_str, markup=True, background_color=(0.8, 0.2, 0.2, 1) if target_node.faction != source_node.faction else (0.2, 0.6, 0.8, 1))
-        self.btn_confirm.bind(on_release=self.confirm_march)
-        btn_box.add_widget(btn_cancel); btn_box.add_widget(self.btn_confirm)
-        root.add_widget(btn_box)
-        self.add_widget(root); self.build_transfer_ui()
+        self.piece_cards = []
 
     def _update_bg(self, instance, value):
         self.bg.pos, self.bg.size = instance.pos, instance.size
         self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(12)]
 
-    def build_transfer_ui(self):
-        theme = getattr(self.app, f'selected_unit_{self.source_node.faction}', 'Medieval Knights')
-        tribe = theme.lower().replace(" ", "") if theme != "Medieval Knights" else "medieval"
-        for p in ['king', 'prince', 'queen', 'rook', 'bishop', 'knight', 'pawn']:
-            if self.temp_base_army.get(p, 0) > 0: 
-                num = {'pawn':6, 'rook':3, 'knight':4, 'bishop':5, 'queen':2, 'king':1}.get(p, 1)
-                img_path = f"assets/pieces/{tribe}/{self.source_node.faction}/chess {tribe}{num}.png"
-                if p == 'prince': img_path = f"assets/pieces/{tribe}/{self.source_node.faction}/chess {tribe}1.png"
-                self.grid.add_widget(TroopTransferCounter(p, self.temp_base_army[p], self.on_transfer_attempt, img_path))
+    def open_for_node(self, node):
+        from kivy.animation import Animation
+        self.current_node = node
+        self.header_lbl.text = f"{node.faction.upper()} {node.node_type.upper()}"
+        
+        if node.faction == 'white': self.border_color.rgba = (0.9, 0.9, 0.9, 1)
+        elif node.faction == 'black': self.border_color.rgba = (0.3, 0.3, 0.4, 1)
+        
+        self.switch_tab('army')
+        Animation(pos_hint={'y': 0.02}, duration=0.3, t='out_quad').start(self)
 
-    def on_transfer_attempt(self, piece_name, direction):
-        if direction == 1: 
-            headers = self.marching_army.get('king', 0) + self.marching_army.get('prince', 0)
-            if piece_name in ['king', 'prince']: headers += 1
-            heavies = sum([self.marching_army.get(p, 0) for p in ['queen', 'rook', 'bishop', 'knight']])
-            if piece_name in ['queen', 'rook', 'bishop', 'knight']: heavies += 1
-            lights = self.marching_army.get('pawn', 0)
-            if piece_name == 'pawn': lights += 1
-            if headers + heavies + lights > (18 if headers > 0 else 8): return False 
-            self.marching_army[piece_name] += 1; self.temp_base_army[piece_name] -= 1
-        else: 
-            self.marching_army[piece_name] -= 1; self.temp_base_army[piece_name] += 1
-        self.update_status(); return True
-
-    def update_status(self):
-        headers = self.marching_army.get('king', 0) + self.marching_army.get('prince', 0)
-        heavies = sum([self.marching_army.get(p, 0) for p in ['queen', 'rook', 'bishop', 'knight']])
-        lights = self.marching_army.get('pawn', 0)
-        self.lbl_status.text = f"Marching Capacity: [b]{headers+heavies+lights} / {18 if headers > 0 else 8}[/b]  |  [color=ffcc00]Header: {'Yes' if headers > 0 else 'No'}[/color]"
-
-    def confirm_march(self, instance):
-        if sum(self.marching_army.values()) == 0: return 
+    def close_panel(self, *args):
+        from kivy.animation import Animation
         self.app.play_click_sound()
-        self.source_node.army = self.temp_base_army.copy() 
-        if self.target_node.faction == self.source_node.faction:
-            for p, count in self.marching_army.items(): self.target_node.army[p] += count
+        Animation(pos_hint={'y': -0.5}, duration=0.2).start(self)
+
+    def switch_tab(self, tab_name):
+        self.app.play_click_sound()
+        self.current_tab = tab_name
+        self.content_grid.clear_widgets()
+        self.piece_cards.clear()
+
+        headers = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince')
+        heavies = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() in ['queen', 'rook', 'bishop', 'knight'])
+        total = len(self.current_node.army_pieces)
+        max_cap = 16 if headers > 0 else 8
+
+        if tab_name == 'army':
+            self.btn_tab_army.background_color = (0.3, 0.5, 0.8, 1)
+            self.btn_tab_recruit.background_color = (0.2, 0.2, 0.2, 1)
+            self.status_lbl.text = f"Cap: [b]{total}/{max_cap}[/b] | Select to March"
+            self.btn_action.text = "[b]MARCH / ATTACK[/b]"
+            self.btn_action.background_color = (0.8, 0.2, 0.2, 1)
+            
+            for p in self.current_node.army_pieces:
+                card = PieceCard(p)
+                self.piece_cards.append(card)
+                self.content_grid.add_widget(card)
         else:
-            self.app.combat_marching_army = self.marching_army.copy() 
-            self.map_screen.initiate_combat(self.source_node, self.target_node)
-        self.dismiss()
+            self.btn_tab_army.background_color = (0.2, 0.2, 0.2, 1)
+            self.btn_tab_recruit.background_color = (0.3, 0.8, 0.3, 1)
+            self.status_lbl.text = f"Tax: [color=00ff00]{self.app.tax_points[self.current_node.faction]}[/color] | Cap: {total}/{max_cap}"
+            self.btn_action.text = "[b]QUICK RECRUIT\n(7 TAX)[/b]"
+            self.btn_action.background_color = (0.8, 0.6, 0.1, 1)
+            
+            can_heavy = (self.current_node.node_type == 'castle')
+            units_to_sell = [('queen', 2), ('rook', 2), ('bishop', 2), ('knight', 2), ('pawn', 1)]
+            for p_name, cost in units_to_sell:
+                if cost == 2 and not can_heavy: continue
+                card = RecruitCard(p_name, cost, self.current_node.faction, self.app, self.buy_piece)
+                self.content_grid.add_widget(card)
 
-class NodeActionMenu(ModalView):
-    def __init__(self, node, app, map_screen, **kwargs):
-        super().__init__(size_hint=(0.4, 0.4), auto_dismiss=True, background_color=(0,0,0,0.8), **kwargs)
-        self.node = node; self.app = app; self.map_screen = map_screen
-        root = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(15))
-        with root.canvas.before:
-            Color(0.1, 0.1, 0.15, 0.95); self.bg = RoundedRectangle(radius=[dp(12)])
-            Color(0.8, 0.6, 0.2, 1); self.border_line = Line(rounded_rectangle=[root.x, root.y, root.width, root.height, dp(12)], width=2)
-        root.bind(pos=self._update_bg, size=self._update_bg)
-        root.add_widget(Label(text=f"[b]SELECT ACTION[/b]", markup=True, font_size='20sp', size_hint_y=0.2))
-        btn_manage = Button(text="[b]MANAGE ARMY[/b]", markup=True, background_color=(0.2, 0.4, 0.8, 1))
-        btn_manage.bind(on_release=self.open_manage)
-        root.add_widget(btn_manage)
-        btn_march = Button(text="[b]MARCH / ATTACK[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1))
-        btn_march.bind(on_release=self.start_march)
-        root.add_widget(btn_march)
-        self.add_widget(root)
+    def buy_piece(self, piece_name, cost):
+        self.app.play_click_sound()
+        tax = self.app.tax_points[self.current_node.faction]
+        if tax < cost: return
+        
+        headers = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince')
+        heavies = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() in ['queen', 'rook', 'bishop', 'knight'])
+        max_cap = 16 if headers > 0 else 8
+        if len(self.current_node.army_pieces) >= max_cap: return
+        
+        if piece_name == 'pawn' and heavies > 9: return 
+        
+        self.app.tax_points[self.current_node.faction] -= cost
+        new_p = generate_piece(piece_name, self.current_node.faction, self.app)
+        self.current_node.army_pieces.append(new_p)
+        self.switch_tab('recruit') 
 
-    def _update_bg(self, instance, value):
-        self.bg.pos, self.bg.size = instance.pos, instance.size
-        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(12)]
+    def execute_action(self, instance):
+        self.app.play_click_sound()
+        if self.current_tab == 'army':
+            selected_pieces = [card.piece_obj for card in self.piece_cards if card.is_selected]
+            if len(selected_pieces) == 0:
+                selected_pieces = self.current_node.army_pieces.copy() 
+            
+            if len(selected_pieces) == 0: return 
+            
+            for p in selected_pieces:
+                self.current_node.army_pieces.remove(p)
+                
+            self.app.combat_marching_army = selected_pieces
+            self.close_panel()
+            self.map_screen.start_marching(self.current_node)
+        else:
+            tax = self.app.tax_points[self.current_node.faction]
+            if tax < 7: return
+            self.app.tax_points[self.current_node.faction] -= 7
+            
+            targets = ['queen', 'rook', 'rook', 'bishop', 'bishop', 'knight', 'knight'] + ['pawn']*8
+            for p_name in targets:
+                headers = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince')
+                heavies = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() in ['queen', 'rook', 'bishop', 'knight'])
+                if len(self.current_node.army_pieces) >= (16 if headers > 0 else 8): break
+                
+                actual_p = p_name
+                if p_name in ['queen', 'rook', 'bishop', 'knight'] and heavies >= 9:
+                    actual_p = 'pawn'
+                    
+                self.current_node.army_pieces.append(generate_piece(actual_p, self.current_node.faction, self.app))
+            self.switch_tab('recruit')
 
-    def open_manage(self, instance):
-        self.app.play_click_sound(); self.dismiss(); ArmyManagementPopup(node=self.node, app=self.app).open()
-
-    def start_march(self, instance):
-        self.app.play_click_sound(); self.dismiss(); self.map_screen.start_marching(self.node)
-
+# ----------------- คลาส MapNode -----------------
 class MapNode(Button):
-    def __init__(self, node_type, faction, node_id, is_main_base=False, **kwargs):
+    def __init__(self, node_type, faction, node_id, is_main_base=False, app=None, **kwargs):
         super().__init__(**kwargs)
-        self.node_type, self.faction, self.node_id, self.is_main_base = node_type, faction, node_id, is_main_base 
-        self.has_claimed_prince, self.neighbors = False, []             
+        self.node_type = node_type 
+        self.faction = faction     
+        self.node_id = node_id
+        self.is_main_base = is_main_base 
+        self.neighbors = []             
+        self.size_hint = (None, None)
+        self.size = (dp(50), dp(50))
+        self.background_color = (0, 0, 0, 0) 
         
-        if self.is_main_base: self.army = {'king': 1, 'queen': 1, 'rook': 2, 'bishop': 2, 'knight': 2, 'pawn': 8, 'prince': 0}
-        elif faction == 'red':
-            if node_type == 'castle': self.army = {'king': 1, 'queen': 1, 'rook': 2, 'bishop': 2, 'knight': 2, 'pawn': 8, 'prince': 0}
-            else: self.army = {'king': 0, 'queen': 0, 'rook': 1, 'bishop': 1, 'knight': 1, 'pawn': 8, 'prince': 0}
-        else: self.army = {'king': 0, 'queen': 0, 'rook': 0, 'bishop': 0, 'knight': 0, 'pawn': 0, 'prince': 0}
-        
-        self.size_hint, self.size, self.background_color = (None, None), (dp(50), dp(50)), (0, 0, 0, 0) 
+        self.army_pieces = []
+        if app:
+            if self.is_main_base:
+                pieces_to_gen = ['king', 'queen', 'rook', 'rook', 'bishop', 'bishop', 'knight', 'knight'] + ['pawn']*8
+                for pt in pieces_to_gen: self.army_pieces.append(generate_piece(pt, faction, app))
+            elif faction == 'red':
+                if node_type == 'castle':
+                    pieces_to_gen = ['king', 'queen', 'rook', 'rook', 'bishop', 'bishop', 'knight', 'knight'] + ['pawn']*8
+                else:
+                    pieces_to_gen = ['king', 'rook', 'bishop', 'knight'] + ['pawn']*8
+                for pt in pieces_to_gen: self.army_pieces.append(generate_piece(pt, faction, app))
+
+        self.update_graphics()
+        self.bind(pos=self.update_canvas, size=self.update_canvas)
+
+    def update_graphics(self):
+        self.canvas.before.clear()
         with self.canvas.before:
             if self.is_main_base:
                 Color(1, 0.8, 0, 0.4)
                 self.aura = Ellipse(pos=(self.x - dp(10), self.y - dp(10)), size=(self.width + dp(20), self.height + dp(20)))
-            else: self.aura = None
-            if self.node_type == 'castle':
-                self.color_inst = Color(0.5, 0.5, 0.55, 1); self.shape = Rectangle(pos=self.pos, size=self.size)
             else:
-                self.color_inst = Color(0.85, 0.85, 0.85, 1); self.shape = Ellipse(pos=self.pos, size=self.size)
+                self.aura = None
+
+            if self.node_type == 'castle':
+                self.color_inst = Color(0.5, 0.5, 0.55, 1)
+                self.shape = Rectangle(pos=self.pos, size=self.size)
+            else:
+                self.color_inst = Color(0.85, 0.85, 0.85, 1)
+                self.shape = Ellipse(pos=self.pos, size=self.size)
                 
-            if faction == 'white': fac_color = (0.9, 0.9, 0.9, 1)
-            elif faction == 'black': fac_color = (0.1, 0.1, 0.1, 1)
+            if self.faction == 'white': fac_color = (0.9, 0.9, 0.9, 1)
+            elif self.faction == 'black': fac_color = (0.1, 0.1, 0.1, 1)
             else: fac_color = (0.8, 0.2, 0.2, 1) 
-            Color(*fac_color); self.border_line = Line(circle=(self.center_x, self.center_y, dp(28)), width=3)
-        self.bind(pos=self.update_canvas, size=self.update_canvas)
+            
+            Color(*fac_color)
+            self.border_line = Line(circle=(self.center_x, self.center_y, dp(28)), width=3)
 
     def update_canvas(self, *args):
-        self.shape.pos, self.shape.size = self.pos, self.size
-        self.border_line.circle = (self.center_x, self.center_y, dp(28))
-        if self.aura: self.aura.pos, self.aura.size = (self.x - dp(10), self.y - dp(10)), (self.width + dp(20), self.height + dp(20))
+        if hasattr(self, 'shape'):
+            self.shape.pos, self.shape.size = self.pos, self.size
+            self.border_line.circle = (self.center_x, self.center_y, dp(28))
+            if self.aura: self.aura.pos, self.aura.size = (self.x - dp(10), self.y - dp(10)), (self.width + dp(20), self.height + dp(20))
 
     def on_release(self):
         app = App.get_running_app()
@@ -369,15 +352,38 @@ class MapNode(Button):
         
         if map_screen.marching_from_node:
             if self in map_screen.marching_from_node.neighbors:
-                MarchSetupPopup(source_node=map_screen.marching_from_node, target_node=self, app=app, map_screen=map_screen).open()
-            else: map_screen.status_lbl.text = "[color=ff0000]TOO FAR! SELECT ADJACENT BASE.[/color]"
+                if self.faction == map_screen.marching_from_node.faction:
+                    headers = sum(1 for p in self.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince')
+                    m_headers = sum(1 for p in app.combat_marching_army if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince')
+                    max_cap = 16 if (headers + m_headers) > 0 else 8
+                    
+                    if len(self.army_pieces) + len(app.combat_marching_army) <= max_cap:
+                        self.army_pieces.extend(app.combat_marching_army)
+                        app.combat_marching_army = []
+                        map_screen.status_lbl.text = "[color=00ff00]ARMY MERGED SUCCESSFUL![/color]"
+                    else:
+                        map_screen.status_lbl.text = "[color=ff0000]MERGE FAILED: CAPACITY LIMIT EXCEEDED![/color]"
+                        map_screen.marching_from_node.army_pieces.extend(app.combat_marching_army)
+                else:
+                    map_screen.initiate_combat(map_screen.marching_from_node, self)
+            else: 
+                map_screen.status_lbl.text = "[color=ff0000]TOO FAR! SELECT ADJACENT BASE.[/color]"
+                map_screen.marching_from_node.army_pieces.extend(app.combat_marching_army) 
+            
             map_screen.marching_from_node = None 
             return
 
         current_turn = getattr(app, 'current_map_turn', 'white')
-        if self.faction == current_turn: NodeActionMenu(node=self, app=app, map_screen=map_screen).open()
-        else: map_screen.status_lbl.text = "[color=ff0000]ENEMY TERRITORY. SELECT YOUR BASE TO ATTACK FROM.[/color]"
+        if self.faction == current_turn:
+            if self.is_main_base and app.prince_rewards.get(self.faction, 0) > 0:
+                app.prince_rewards[self.faction] -= 1
+                self.army_pieces.append(generate_piece('prince', self.faction, app))
+            map_screen.army_panel.open_for_node(self)
+        else:
+            map_screen.status_lbl.text = "[color=ff0000]ENEMY TERRITORY. SELECT YOUR BASE TO ATTACK FROM.[/color]"
 
+
+# ----------------- คลาสหลัก CampaignMapScreen -----------------
 class CampaignMapScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -414,20 +420,55 @@ class CampaignMapScreen(Screen):
 
     def on_enter(self):
         app = App.get_running_app()
-        # ✨ เช็คเพื่อให้จดจำแมพ (ไม่สร้างใหม่ถ้าเพิ่งรบเสร็จ)
+        
+        if not hasattr(self, 'army_panel'):
+            self.army_panel = CampaignArmyPanel(self, app)
+            self.ui_layer.add_widget(self.army_panel)
+
         if not getattr(app, 'campaign_initialized', False):
             app.current_map_turn = 'white'
             app.turn_number = 1
-            app.tax_points = {'white': 0, 'black': 0} 
+            app.tax_points = {'white': 0, 'black': 0}
+            app.prince_rewards = {'white': 0, 'black': 0} 
             self.marching_from_node = None
             Clock.schedule_once(lambda dt: self.generate_procedural_map(), 0.1)
             app.campaign_initialized = True
         else:
             self.marching_from_node = None
+            
+            # ✨ โค้ดรับทหารกลับมาจาก GameplayScreen และยึดเมือง!
+            if getattr(app, 'battle_finished', False):
+                src = app.combat_source
+                tgt = app.combat_target
+                winner = app.battle_winner
+                
+                # ล้างสถานะกระดานด้วย clone_piece
+                clean_atk = [clone_piece(p, src.faction, app) for p in app.survivors_atk]
+                clean_def = [clone_piece(p, tgt.faction, app) for p in app.survivors_def]
+                
+                if winner == 'attacker':
+                    orig_tgt_faction = tgt.faction
+                    tgt.faction = src.faction
+                    tgt.army_pieces = clean_atk
+                    tgt.update_graphics() 
+                    
+                    if tgt.node_type == 'castle' and orig_tgt_faction == 'red':
+                        app.prince_rewards[src.faction] += 1
+                        
+                    self.status_lbl.text = f"[color=00ff00]VICTORY! YOU CAPTURED {tgt.node_id}.[/color]"
+                elif winner == 'defender':
+                    tgt.army_pieces = clean_def
+                    src.army_pieces.extend(clean_atk) 
+                    self.status_lbl.text = f"[color=ff0000]DEFEAT! YOUR ARMY RETREATED TO {src.node_id}.[/color]"
+                else:
+                    tgt.army_pieces = clean_def
+                    src.army_pieces.extend(clean_atk) 
+                    
+                app.battle_finished = False
 
     def go_back(self, instance):
         app = App.get_running_app()
-        app.campaign_initialized = False # รีเซ็ตแมพเมื่อกลับหน้า Setup
+        app.campaign_initialized = False 
         self.manager.current = 'setup'
 
     def start_marching(self, source_node):
@@ -439,18 +480,20 @@ class CampaignMapScreen(Screen):
         app.combat_source = source_node
         app.combat_target = target_node
         
-        target_army = target_node.army.copy()
+        target_army = target_node.army_pieces.copy()
+        
+        # เพิ่มคิงให้ศัตรูหากไม่มี
+        has_king = any(p.__class__.__name__.lower() in ['king', 'prince'] for p in target_army)
+        if not has_king:
+            target_army.append(generate_piece('king', target_node.faction, app))
+        
         if target_node.faction == 'red':
             target_count = random.randint(8, 12)
-            current_count = sum(target_army.values())
-            removable_pieces = ['queen', 'rook', 'bishop', 'knight', 'pawn']
-            
-            while current_count > target_count:
-                available_to_remove = [p for p in removable_pieces if target_army.get(p, 0) > 0]
-                if not available_to_remove: break
-                p_to_remove = random.choice(available_to_remove)
-                target_army[p_to_remove] -= 1
-                current_count -= 1
+            while len(target_army) > target_count:
+                removable_pieces = [p for p in target_army if p.__class__.__name__.lower() not in ['king', 'prince']]
+                if not removable_pieces: break
+                p_to_remove = random.choice(removable_pieces)
+                target_army.remove(p_to_remove)
                 
         app.combat_target_army = target_army
         
@@ -461,7 +504,9 @@ class CampaignMapScreen(Screen):
     def end_turn(self, instance):
         app = App.get_running_app()
         app.play_click_sound()
-        self.marching_from_node = None
+        if self.marching_from_node:
+            self.marching_from_node.army_pieces.extend(app.combat_marching_army)
+            self.marching_from_node = None
         
         tax_collected = sum([3 if n.node_type == 'village' else 6 for n in self.nodes_list if n.faction == app.current_map_turn])
         app.tax_points[app.current_map_turn] += tax_collected
@@ -518,7 +563,7 @@ class CampaignMapScreen(Screen):
 
         nodes_dict = {}
         for data in nodes_data:
-            node = MapNode(node_type=data['type'], faction=data['faction'], node_id=data['id'], is_main_base=data['main'])
+            node = MapNode(node_type=data['type'], faction=data['faction'], node_id=data['id'], is_main_base=data['main'], app=app)
             node.pos = (data['pos'][0] - node.width/2, data['pos'][1] - node.height/2)
             self.nodes_list.append(node)
             nodes_dict[data['id']] = node

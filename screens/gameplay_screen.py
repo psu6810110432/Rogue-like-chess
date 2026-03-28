@@ -111,7 +111,6 @@ class GameplayScreen(Screen):
 
     def setup_game(self, mode):
         self.main_layout.clear_widgets()
-        # ✨ ล้างปุ่ม Start Battle ทิ้งถ้ามีการกดเล่นใหม่
         if hasattr(self, 'deploy_btn') and self.deploy_btn in self.root_layout.children:
             self.root_layout.remove_widget(self.deploy_btn)
 
@@ -119,7 +118,7 @@ class GameplayScreen(Screen):
         self.game_mode, self._game_over_scheduled, self.selected = mode, False, None
         self.is_input_locked = False 
         self.ai_event = None
-        self.battle_phase = 'playing' # ค่าปกติ
+        self.battle_phase = 'playing' 
 
         app = App.get_running_app()
         chosen_map = getattr(app, 'selected_board', 'Classic Board')
@@ -130,10 +129,9 @@ class GameplayScreen(Screen):
         elif chosen_map == 'Frozen Tundra' and TundraMap: self.game = TundraMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
         else: self.game = ChessBoard(self.get_tribe_name('white'), self.get_tribe_name('black'), map_name=chosen_map)
 
-        # ✨ กรณี Divide & Conquer
         if mode == 'Divide_Conquer':
             self.setup_divide_conquer_board(app)
-            self.battle_phase = 'deployment' # เข้าสู่โหมดสลับตำแหน่ง
+            self.battle_phase = 'deployment' 
             self.show_deployment_ui()
 
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
@@ -166,21 +164,35 @@ class GameplayScreen(Screen):
                 App.get_running_app().play_click_sound()
                 if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel()
                 if getattr(self, 'ai_event', None): self.ai_event.cancel()
-                self.manager.current = 'campaign_map'
+                
+                # ✨ ลอจิก Retreat: สุ่มฆ่าทหาร Light (Pawn) ของฝั่งที่กดล่าถอย
+                import random
+                retreating_color = self.game.current_turn
+                for r in range(8):
+                    for c in range(8):
+                        p = self.game.board[r][c]
+                        if p and p.color == retreating_color and p.__class__.__name__.lower() == 'pawn':
+                            # โอกาสตาย 50% (ปรับตัวเลข 0.5 ได้ตามต้องการ)
+                            if random.random() < 0.5: 
+                                self.game.board[r][c] = None
+                                print("A Light infantry died during retreat!")
+                
+                # ยอมแพ้ = ศัตรูชนะ (เพื่อให้ระบบส่งตัวที่เหลือรอดกลับไปเมืองหลัก)
+                self.game.game_result = "BLACK WINS" if retreating_color == 'white' else "WHITE WINS"
+                self.auto_quit_to_setup(0)
             else:
                 self.on_quit()
                 
-        self.sidebar = SidebarUI(on_undo_callback=self.on_undo_click, on_quit_callback=on_quit_action)
+        # ✨ เพิ่มการส่ง game_mode=mode เข้าไป
+        self.sidebar = SidebarUI(on_undo_callback=self.on_undo_click, on_quit_callback=on_quit_action, game_mode=mode)
         self.sidebar.size_hint_y = 0.55; self.sidebar_panel.add_widget(self.sidebar); self.main_layout.add_widget(self.sidebar_panel)
         self.init_board_ui()
 
-    # ✨ แสดงปุ่มเริ่มสงคราม หลังจากจัดทัพ
     def show_deployment_ui(self):
         self.deploy_btn = Button(text="[b]START BATTLE[/b]", markup=True, size_hint=(None, None), size=(dp(250), dp(60)), pos_hint={'center_x': 0.5, 'y': 0.2}, background_color=(0.8, 0.3, 0.1, 1), font_size='22sp')
         self.deploy_btn.bind(on_release=self.finish_deployment)
         self.root_layout.add_widget(self.deploy_btn)
 
-    # ✨ เมื่อกดปุ่ม Start Battle ให้เริ่มการเล่นจริง
     def finish_deployment(self, instance):
         App.get_running_app().play_click_sound()
         self.root_layout.remove_widget(self.deploy_btn)
@@ -192,45 +204,20 @@ class GameplayScreen(Screen):
     def setup_divide_conquer_board(self, app):
         self.game.board = [[None for _ in range(8)] for _ in range(8)]
         
-        atk_color, def_color = 'white', 'black'
-        atk_theme = getattr(app, f'selected_unit_{app.combat_source.faction}', 'Medieval Knights')
-        atk_tribe = atk_theme.lower().replace(" ", "") if atk_theme != "Medieval Knights" else "medieval"
-        
-        if app.combat_target.faction == 'red': def_tribe = 'demon' 
-        else:
-            def_theme = getattr(app, f'selected_unit_{app.combat_target.faction}', 'Medieval Knights')
-            def_tribe = def_theme.lower().replace(" ", "") if def_theme != "Medieval Knights" else "medieval"
-
-        self._place_enemy_randomly(def_color, def_tribe, app.combat_target_army)
-        self._place_player_deployment(atk_color, atk_tribe, app.combat_marching_army)
-        
-        self.game.current_turn = atk_color
-
-    def _place_enemy_randomly(self, color, tribe, army_dict):
-        from logic.pieces import Pawn, Knight, Bishop, Rook, Queen, King
-        pieces = []
-        for p, count in army_dict.items():
-            cls = {'king': King, 'prince': King, 'queen': Queen, 'rook': Rook, 'bishop': Bishop, 'knight': Knight, 'pawn': Pawn}.get(p)
-            pieces.extend([cls] * count)
-        
-        # สุ่มช่องที่ 3 แถวแรกของศัตรู
+        enemy_army_list = app.combat_target_army
         valid_coords = [(r, c) for r in range(3) for c in range(8)]
         random.shuffle(valid_coords)
-        
-        for cls, (r, c) in zip(pieces, valid_coords):
-            self.game.board[r][c] = cls(color, tribe)
+        for p, (r, c) in zip(enemy_army_list, valid_coords):
+            p.color = 'black'
+            self.game.board[r][c] = p
 
-    def _place_player_deployment(self, color, tribe, army_dict):
-        from logic.pieces import Pawn, Knight, Bishop, Rook, Queen, King
-        pieces = []
-        for p in ['king', 'prince', 'queen', 'rook', 'bishop', 'knight', 'pawn']:
-            cls = {'king': King, 'prince': King, 'queen': Queen, 'rook': Rook, 'bishop': Bishop, 'knight': Knight, 'pawn': Pawn}.get(p)
-            pieces.extend([cls] * army_dict.get(p, 0))
-        
-        # เรียงลงไปในกล่อง 3 แถวล่าง (รอผู้เล่นจัดวาง)
+        player_army_list = app.combat_marching_army
         coords = [(r, c) for r in range(7, 4, -1) for c in range(8)] 
-        for cls, (r, c) in zip(pieces, coords):
-            self.game.board[r][c] = cls(color, tribe)
+        for p, (r, c) in zip(player_army_list, coords):
+            p.color = 'white'
+            self.game.board[r][c] = p
+            
+        self.game.current_turn = 'white'
 
     def _update_inv_bg(self, instance, value): self.inv_bg.pos, self.inv_bg.size = instance.pos, instance.size
     def _update_sb_bg(self, instance, value): self.sb_bg.pos, self.sb_bg.size = instance.pos, instance.size
@@ -271,30 +258,21 @@ class GameplayScreen(Screen):
     def refresh_ui(self, legal_moves=[]):
         self.update_inventory_ui()
         
-        # ✨ ลอจิก UI สำหรับ Deployment
         if getattr(self, 'battle_phase', 'playing') == 'deployment':
             self.info_label.text = "[color=00ffff]DEPLOYMENT PHASE: Swap pieces in the bottom 3 rows[/color]"
             for (r, c), sq in self.squares.items():
                 is_deploy_zone = (r >= 5)
-                # ไฮไลต์ให้รู้ว่าวางตรงไหนได้บ้าง
                 is_legal_deploy = (is_deploy_zone and self.selected is not None and (r, c) != self.selected)
-                
-                sq.update_square_style(
-                    highlight=(self.selected == (r, c)), 
-                    is_legal=('move' if is_legal_deploy else False), 
-                    is_check=False, 
-                    is_last=False
-                )
+                sq.update_square_style(highlight=(self.selected == (r, c)), is_legal=('move' if is_legal_deploy else False), is_check=False, is_last=False)
                 p = self.game.board[r][c]; sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
             return
 
-        # --- ลอจิก UI โหมด Playing ปกติ ---
         if self.game.game_result:
             self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
             if not getattr(self, '_end_played', False):
-                if "WHITE WINS" in self.game.game_result.upper() and getattr(self, 'game_mode', 'PVP') == 'PVE':
+                if "WHITE WINS" in self.game.game_result.upper() and getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer']:
                     App.get_running_app().play_victory_sound()
-                elif "BLACK WINS" in self.game.game_result.upper() and getattr(self, 'game_mode', 'PVP') == 'PVE':
+                elif "BLACK WINS" in self.game.game_result.upper() and getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer']:
                     App.get_running_app().play_lose_sound()
                 self._end_played = True
 
@@ -339,43 +317,36 @@ class GameplayScreen(Screen):
         p_c, p_n = piece.color, piece.__class__.__name__.lower()
         if p_n == 'obstacle':
             ot = piece.name.lower(); return f"assets/pieces/event/event{'1' if ot=='thorn' else '2' if ot=='sandstorm' else '3'}.png"
-        theme = getattr(App.get_running_app(), f'selected_unit_{p_c}', 'Medieval Knights')
+        
         tf = getattr(piece, 'tribe', 'medieval')
         num = getattr(piece, 'variant', 6) if p_n == 'pawn' else {'king': 1, 'queen': 2, 'rook': 3, 'knight': 4, 'bishop': 5}.get(p_n, 1)
+        if getattr(piece, 'name', '') == 'Prince': num = 1
         return f"assets/pieces/{tf}/{p_c}/chess {tf}{num}.png"
 
     def on_square_tap(self, instance):
         App.get_running_app().play_click_sound() 
         r, c = instance.row, instance.col
         
-        # ✨ ลอจิกการกดสำหรับ Deployment Phase
         if getattr(self, 'battle_phase', 'playing') == 'deployment':
-            if r < 5: return # ห้ามกดนอกเขต Deployment (3 แถวล่าง)
-            
+            if r < 5: return 
             if self.selected is None:
                 piece = self.game.board[r][c]
                 if piece and piece.color == self.game.current_turn:
-                    self.selected = (r, c)
-                    self.refresh_ui()
+                    self.selected = (r, c); self.refresh_ui()
             else:
                 sr, sc = self.selected
-                if (r, c) == (sr, sc):
-                    self.selected = None; self.refresh_ui(); return
-                
+                if (r, c) == (sr, sc): self.selected = None; self.refresh_ui(); return
                 target_piece = self.game.board[r][c]
                 if not target_piece or target_piece.color == self.game.current_turn:
-                    # สลับตำแหน่งหมากกัน
                     self.game.board[r][c] = self.game.board[sr][sc]
                     self.game.board[sr][sc] = target_piece
-                    self.selected = None
-                    self.init_board_ui()
+                    self.selected = None; self.init_board_ui()
             return
             
-        # --- ลอจิกการกดตอนเล่นเกมปกติ ---
         if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return
         if getattr(self.game, 'game_result', None): return
-        if getattr(self, 'game_mode', 'PVP') == 'PVE' and getattr(self.game, 'current_turn', 'white') == 'black': return
+        if getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer'] and getattr(self.game, 'current_turn', 'white') == 'black': return
 
         piece = self.game.board[r][c]
         
@@ -389,10 +360,8 @@ class GameplayScreen(Screen):
                     self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); return
                 
                 piece.item = self.selected_item
-                if piece.item.id == 6: 
-                    piece.coins += 1; piece.base_points = max(0, piece.base_points - 1)
-                elif piece.item.id == 10 and piece.__class__.__name__.lower() == 'pawn': 
-                    piece.base_points, piece.coins = 5, 3
+                if piece.item.id == 6: piece.coins += 1; piece.base_points = max(0, piece.base_points - 1)
+                elif piece.item.id == 10 and piece.__class__.__name__.lower() == 'pawn': piece.base_points, piece.coins = 5, 3
                     
                 inv = getattr(self.game, f'inventory_{self.game.current_turn}')
                 if self.selected_item in inv: inv.remove(self.selected_item)
@@ -405,8 +374,7 @@ class GameplayScreen(Screen):
                 self.selected = (r, c); self.refresh_ui(self.game.get_legal_moves((r, c))); self.show_piece_status(piece)
         else:
             sr, sc = self.selected
-            if sr == r and sc == c:
-                self.selected = None; self.hide_piece_status(); self.refresh_ui(); return
+            if sr == r and sc == c: self.selected = None; self.hide_piece_status(); self.refresh_ui(); return
                 
             res = self.game.move_piece(sr, sc, r, c)
             if isinstance(res, tuple) and res[0] == "crash": self.show_crash_overlay(res[1], res[2], (sr, sc), (r, c)); return
@@ -414,16 +382,12 @@ class GameplayScreen(Screen):
             if res in [True, "promote", "died"]: App.get_running_app().play_move_sound()
 
             if res == "promote":
-                self.hide_piece_status()
-                promoted_pawn = self.game.board[r][c] 
-                def do_p(cls): 
-                    self.game.promote_pawn(r, c, cls); pop.dismiss(); self.init_board_ui(); self.check_ai_turn()
+                self.hide_piece_status(); promoted_pawn = self.game.board[r][c] 
+                def do_p(cls): self.game.promote_pawn(r, c, cls); pop.dismiss(); self.init_board_ui(); self.check_ai_turn()
                 pop = PromotionPopup(promoted_pawn.color, getattr(promoted_pawn, 'tribe', self.get_tribe_name(promoted_pawn.color)), do_p)
                 pop.open()
-            elif res in [True, "died"]: 
-                self.selected = None; self.hide_piece_status(); self.init_board_ui(); self.check_ai_turn()
-            else: 
-                self.selected = None; self.hide_piece_status(); self.refresh_ui()
+            elif res in [True, "died"]: self.selected = None; self.hide_piece_status(); self.init_board_ui(); self.check_ai_turn()
+            else: self.selected = None; self.hide_piece_status(); self.refresh_ui()
 
     def execute_board_move(self, start_pos, end_pos, crash_status):
         self.cancel_crash()
@@ -444,25 +408,22 @@ class GameplayScreen(Screen):
         if res == "promote":
             pcolor = self.game.board[end_pos[0]][end_pos[1]].color
             ptribe = getattr(self.game.board[end_pos[0]][end_pos[1]], 'tribe', self.get_tribe_name(pcolor))
-            if getattr(self, 'game_mode', 'PVP') == 'PVE' and pcolor == 'black':
+            if getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer'] and pcolor == 'black':
                 from logic.pieces import Queen
                 self.game.promote_pawn(end_pos[0], end_pos[1], Queen)
                 self.init_board_ui(); self.check_ai_turn()
             else:
-                def do_p(cls): 
-                    self.game.promote_pawn(end_pos[0], end_pos[1], cls); pop.dismiss(); self.init_board_ui(); self.check_ai_turn()
+                def do_p(cls): self.game.promote_pawn(end_pos[0], end_pos[1], cls); pop.dismiss(); self.init_board_ui(); self.check_ai_turn()
                 pop = PromotionPopup(pcolor, ptribe, do_p); pop.open()
-        elif res in [True, "died", "survived", "defender_survived"]: 
-            self.selected = None; self.init_board_ui(); self.check_ai_turn()
-        else: 
-            self.selected = None; self.refresh_ui(); self.check_ai_turn()
+        elif res in [True, "died", "survived", "defender_survived"]: self.selected = None; self.init_board_ui(); self.check_ai_turn()
+        else: self.selected = None; self.refresh_ui(); self.check_ai_turn()
 
     def update_inventory_ui(self):
         self.inventory_layout.clear_widgets()
         info_box = BoxLayout(orientation='vertical', size_hint_x=None, width=dp(120))
         info_box.add_widget(Label(text="INVENTORY", bold=True, font_size='14sp', color=(0.8, 0.8, 0.8, 1)))
         
-        display_color = 'white' if getattr(self, 'game_mode', 'PVP') == 'PVE' else self.game.current_turn
+        display_color = 'white' if getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer'] else self.game.current_turn
         
         info_box.add_widget(Label(text=f"[{display_color.upper()}]", bold=True, font_size='16sp', color=(0.83, 0.68, 0.21, 1)))
         self.inventory_layout.add_widget(info_box)
@@ -473,12 +434,10 @@ class GameplayScreen(Screen):
                 slot = InventorySlot(img_path=inv[i].image_path, is_selected=(self.selected_item and self.selected_item is inv[i]))
                 slot.bind(on_release=lambda x, it=inv[i]: self.on_item_click(it))
                 self.inventory_layout.add_widget(slot)
-            else: 
-                self.inventory_layout.add_widget(InventorySlot())
+            else: self.inventory_layout.add_widget(InventorySlot())
 
     def on_item_click(self, item):
         App.get_running_app().play_click_sound()
-        
         if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return
             
@@ -490,11 +449,9 @@ class GameplayScreen(Screen):
         app = App.get_running_app()
         is_bot_turn = False
         
-        if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black':
-            is_bot_turn = True
+        if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black': is_bot_turn = True
         elif getattr(self, 'game_mode', 'PVP') == 'Divide_Conquer':
-            if self.game.current_turn == 'black':
-                is_bot_turn = True
+            if self.game.current_turn == 'black': is_bot_turn = True
                 
         if is_bot_turn and not self.game.game_result: 
             self.is_input_locked = True  
@@ -507,31 +464,23 @@ class GameplayScreen(Screen):
         
         inv = getattr(self.game, 'inventory_black', [])
         if inv:
-            import random
-            from logic.ai_logic import ChessAI
-            
+            import random; from logic.ai_logic import ChessAI
             difficulty = getattr(App.get_running_app(), 'ai_difficulty', 'normal')
             use_chance = 0.6 if difficulty == 'hard' else 0.4 if difficulty == 'normal' else 0.25
             
             if len(inv) >= 5 or random.random() < use_chance:
                 item_to_use = random.choice(inv)
                 valid_pieces = [p for row in self.game.board for p in row if p and p.color == 'black' and getattr(p, 'item', None) is None]
-                
                 if valid_pieces:
                     candidates = []
                     item_id = item_to_use.id
-                    
                     if item_id == 10: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() == 'pawn']
                     elif item_id == 9: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() != 'knight']
-                    elif item_id in [1, 2, 4, 8]: 
-                        candidates = [p for p in valid_pieces if p.__class__.__name__.lower() in ['king', 'queen', 'rook']]
-                        if not candidates: candidates = valid_pieces
-                    elif item_id in [5, 7]: 
-                        candidates = [p for p in valid_pieces if p.__class__.__name__.lower() in ['pawn', 'knight']]
-                        if not candidates: candidates = valid_pieces
-                    else: 
-                        candidates = [p for p in valid_pieces if p.__class__.__name__.lower() not in ['king']]
-                        if not candidates: candidates = valid_pieces
+                    elif item_id in [1, 2, 4, 8]: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() in ['king', 'queen', 'rook']]
+                    elif item_id in [5, 7]: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() in ['pawn', 'knight']]
+                    else: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() not in ['king']]
+                    
+                    if not candidates: candidates = valid_pieces
 
                     if candidates:
                         if difficulty == 'easy': chosen_piece = random.choice(candidates)
@@ -543,18 +492,11 @@ class GameplayScreen(Screen):
                             chosen_piece = random.choice(candidates[:2])
                         
                         chosen_piece.item = item_to_use
-                        
-                        if item_to_use.id == 6: 
-                            chosen_piece.coins += 1
-                            chosen_piece.base_points = max(0, chosen_piece.base_points - 1)
-                        elif item_to_use.id == 10 and chosen_piece.__class__.__name__.lower() == 'pawn': 
-                            chosen_piece.base_points = 5
-                            chosen_piece.coins = 3
+                        if item_to_use.id == 6: chosen_piece.coins += 1; chosen_piece.base_points = max(0, chosen_piece.base_points - 1)
+                        elif item_to_use.id == 10 and chosen_piece.__class__.__name__.lower() == 'pawn': chosen_piece.base_points = 5; chosen_piece.coins = 3
                             
                         inv.remove(item_to_use)
-                        App.get_running_app().play_click_sound()
-                        self.init_board_ui()
-                        self.update_inventory_ui()
+                        App.get_running_app().play_click_sound(); self.init_board_ui(); self.update_inventory_ui()
 
         from logic.ai_logic import ChessAI
         move = ChessAI.get_best_move(self.game, ai_color='black')
@@ -563,10 +505,8 @@ class GameplayScreen(Screen):
             if isinstance(res, tuple) and res[0] == "crash":
                 atk, df = res[1], res[2]
                 if not atk or not df: return
-                
                 if getattr(df, 'item', None) and df.item.id == 4:
                     df.item = None; atk.has_moved = True; self.game.history.save_state(self.game, "Shield Blocked!"); self.game.complete_turn(); self.init_board_ui(); return 
-                
                 self.show_crash_overlay(atk, df, (sr, sc), (er, ec))
                 return
                 
@@ -577,30 +517,40 @@ class GameplayScreen(Screen):
             if res in [True, "promote", "died"]: App.get_running_app().play_move_sound()
             self.init_board_ui()
 
-        self.ai_event = None
-        self.check_ai_turn()
+        self.ai_event = None; self.check_ai_turn()
 
     def on_quit(self): 
         App.get_running_app().play_click_sound()
-        
-        if getattr(self, 'crash_popup', None):
-            self.crash_popup.force_cancel()
-            self.crash_popup = None
-        if getattr(self, 'ai_event', None):
-            self.ai_event.cancel()
-            
-        self.status_popup = None
-        self.item_tooltip = None
-        self.selected_item = None
+        if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel(); self.crash_popup = None
+        if getattr(self, 'ai_event', None): self.ai_event.cancel()
+        self.status_popup = self.item_tooltip = self.selected_item = None
         self.is_input_locked = False
-
-        if getattr(self, 'game_mode', '') == 'Divide_Conquer':
-            self.manager.current = 'campaign_map'
-        else:
-            self.manager.current = 'setup'
+        if getattr(self, 'game_mode', '') == 'Divide_Conquer': 
+            self.game.game_result = "BLACK WINS" if self.game.current_turn == 'white' else "WHITE WINS"
+            self.auto_quit_to_setup(0)
+        else: self.manager.current = 'setup'
         
     def auto_quit_to_setup(self, dt): 
         if getattr(self, 'game_mode', '') == 'Divide_Conquer':
+            app = App.get_running_app()
+            app.battle_finished = True
+            
+            # ✨ เช็คผู้ชนะอย่างรัดกุม 
+            res_str = self.game.game_result.upper() if self.game.game_result else ""
+            if "WHITE WINS" in res_str: app.battle_winner = 'attacker'
+            elif "BLACK WINS" in res_str: app.battle_winner = 'defender'
+            else: app.battle_winner = 'draw'
+            
+            surv_atk, surv_def = [], []
+            for r in range(8):
+                for c in range(8):
+                    p = self.game.board[r][c]
+                    if p:
+                        if p.color == 'white': surv_atk.append(p)
+                        elif p.color == 'black': surv_def.append(p)
+                        
+            app.survivors_atk = surv_atk
+            app.survivors_def = surv_def
             self.manager.current = 'campaign_map'
         else:
             self.manager.current = 'setup'
@@ -623,7 +573,6 @@ class GameplayScreen(Screen):
         App.get_running_app().play_coin_sound()
         atk_tribe = getattr(attacker, 'tribe', self.get_tribe_name(attacker.color))
         def_tribe = getattr(defender, 'tribe', self.get_tribe_name(defender.color))
-        
         self.crash_popup = CrashOverlay(attacker, defender, start, end, atk_tribe, def_tribe, self.get_piece_image_path, self.execute_board_move, self.cancel_crash)
         self.info_zone.add_widget(self.crash_popup)
         
