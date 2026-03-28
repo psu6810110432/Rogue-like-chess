@@ -128,6 +128,114 @@ class Pawn(Piece):
                     return True
         return False
 
+    # เพิ่มต่อท้ายไฟล์ logic/pieces.py
+
+class Princess(Piece):
+    def get_valid_moves(self, board):
+        moves = []
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+        for d in directions:
+            for step in range(1, 4): # เดินเหมือน Queen แต่จำกัดแค่ 3 ช่อง
+                r = self.row + d[0] * step
+                c = self.col + d[1] * step
+                if 0 <= r < 8 and 0 <= c < 8:
+                    if board[r][c] is None:
+                        moves.append((r, c))
+                    elif board[r][c].color != self.color:
+                        moves.append((r, c))
+                        break
+                    else:
+                        break
+                else:
+                    break
+        return moves
+
+class Menatarm(Piece):
+    def get_valid_moves(self, board):
+        moves = []
+        # white เดินขึ้นบน (แถวลดลง), black เดินลงล่าง (แถวเพิ่มขึ้น)
+        fwd = -1 if self.color == 'white' else 1
+        # เดินรอบตัว ยกเว้นเดินถอยหลังตรงๆ (-fwd, 0)
+        directions = [(fwd, 0), (fwd, 1), (fwd, -1), (0, 1), (0, -1), (-fwd, 1), (-fwd, -1)]
+        for d in directions:
+            r = self.row + d[0]
+            c = self.col + d[1]
+            if 0 <= r < 8 and 0 <= c < 8:
+                if board[r][c] is None or board[r][c].color != self.color:
+                    moves.append((r, c))
+        return moves
+
+class Praetorian(Piece):
+    def get_valid_moves(self, board):
+        moves = []
+        # เดินตรง (บน ล่าง ซ้าย ขวา) สูงสุด 2 ช่อง
+        for d in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            for step in range(1, 3):
+                r = self.row + d[0] * step
+                c = self.col + d[1] * step
+                if 0 <= r < 8 and 0 <= c < 8:
+                    if board[r][c] is None:
+                        moves.append((r, c))
+                    else:
+                        if board[r][c].color != self.color:
+                            moves.append((r, c))
+                        break
+        
+        # ปลายทางแตกออกด้านข้าง (ตรงกับลักษณะการเดินของม้า Knight พอดี)
+        knight_moves = [(-2, -1), (-2, 1), (2, -1), (2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2)]
+        for d in knight_moves:
+            r = self.row + d[0]
+            c = self.col + d[1]
+            if 0 <= r < 8 and 0 <= c < 8:
+                if board[r][c] is None or board[r][c].color != self.color:
+                    moves.append((r, c))
+        return moves
+
+class Royalguard(Piece):
+    def get_valid_moves(self, board):
+        moves = []
+        # ขุน (รอบตัว 1 ช่อง) + ม้า (ตัว L)
+        directions = [
+            (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1), # ขุน
+            (-2, -1), (-2, 1), (2, -1), (2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2)  # ม้า
+        ]
+        for d in directions:
+            r = self.row + d[0]
+            c = self.col + d[1]
+            if 0 <= r < 8 and 0 <= c < 8:
+                if board[r][c] is None or board[r][c].color != self.color:
+                    moves.append((r, c))
+        return moves
+
+class Hastati(Piece):
+    def get_valid_moves(self, board):
+        moves = []
+        fwd = -1 if self.color == 'white' else 1
+        for step in range(1, 4): # เดินและกินตรงๆ 3 ช่อง
+            r = self.row + fwd * step
+            c = self.col
+            if 0 <= r < 8 and 0 <= c < 8:
+                if board[r][c] is None:
+                    moves.append((r, c))
+                elif board[r][c].color != self.color:
+                    moves.append((r, c))
+                    break
+                else:
+                    break
+        return moves
+
+class Levies(Piece):
+    def get_valid_moves(self, board):
+        moves = []
+        fwd = -1 if self.color == 'white' else 1
+        r = self.row + fwd
+        c = self.col
+        # เดินและกินแค่ 1 ช่องด้านหน้าตรงๆ (ไม่ทแยง)
+        if 0 <= r < 8 and 0 <= c < 8:
+            if board[r][c] is None or board[r][c].color != self.color:
+                moves.append((r, c))
+        return moves
+
 class Obstacle(Piece):
     def __init__(self, n, l):
         self.color, self.name, self.item, self.lifespan, self.base_points, self.coins, self.has_moved = 'neutral', n, None, l, 0, 0, False
