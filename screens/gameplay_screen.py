@@ -84,6 +84,39 @@ class PromotionPopup(ModalView):
             layout.add_widget(col)
         root.add_widget(layout); self.add_widget(root)
 
+# ✨ เพิ่ม Popup ใหม่สำหรับแสดงผลการ Retreat อย่างชัดเจน
+class RetreatPopup(ModalView):
+    def __init__(self, dead_count, on_close, **kwargs):
+        super().__init__(size_hint=(0.45, 0.35), auto_dismiss=False, background='', background_color=(0, 0, 0, 0.8), **kwargs)
+        root = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(10))
+        with root.canvas.before:
+            Color(0.12, 0.12, 0.15, 0.95)
+            self._bg = RoundedRectangle(pos=root.pos, size=root.size, radius=[dp(12)])
+            Color(0.8, 0.3, 0.2, 1)
+            self._border = Line(rounded_rectangle=[root.x, root.y, root.width, root.height, dp(12)], width=2)
+        root.bind(pos=self._update_bg, size=self._update_bg)
+
+        title = Label(text="[b]TACTICAL RETREAT[/b]", markup=True, font_size='22sp', color=(1, 0.4, 0.4, 1), size_hint_y=0.2)
+        root.add_widget(title)
+
+        msg = "Your army is falling back..."
+        if dead_count > 0:
+            msg += f"\n\n[color=ff4444]Casualties: {dead_count} Light Infantry lost during the escape![/color]"
+        else:
+            msg += "\n\n[color=44ff44]A clean escape! No casualties.[/color]"
+
+        lbl = Label(text=msg, markup=True, font_size='16sp', halign='center', size_hint_y=0.5)
+        root.add_widget(lbl)
+
+        btn = Button(text="[b]CONTINUE[/b]", markup=True, size_hint_y=0.3, background_color=(0.6, 0.2, 0.2, 1))
+        btn.bind(on_release=lambda x: (self.dismiss(), on_close()))
+        root.add_widget(btn)
+        self.add_widget(root)
+
+    def _update_bg(self, instance, value):
+        self._bg.pos, self._bg.size = instance.pos, instance.size
+        self._border.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(12)]
+
 class GameplayScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -165,25 +198,29 @@ class GameplayScreen(Screen):
                 if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel()
                 if getattr(self, 'ai_event', None): self.ai_event.cancel()
                 
-                # ✨ ลอจิก Retreat: สุ่มฆ่าทหาร Light (Pawn) ของฝั่งที่กดล่าถอย
-                import random
+                # ✨ ลอจิก Retreat: สุ่มฆ่าทหาร Light (Pawn)
                 retreating_color = self.game.current_turn
+                dead_count = 0
                 for r in range(8):
                     for c in range(8):
                         p = self.game.board[r][c]
                         if p and p.color == retreating_color and p.__class__.__name__.lower() == 'pawn':
-                            # โอกาสตาย 50% (ปรับตัวเลข 0.5 ได้ตามต้องการ)
                             if random.random() < 0.5: 
                                 self.game.board[r][c] = None
-                                print("A Light infantry died during retreat!")
+                                dead_count += 1
                 
-                # ยอมแพ้ = ศัตรูชนะ (เพื่อให้ระบบส่งตัวที่เหลือรอดกลับไปเมืองหลัก)
+                # ยอมแพ้ เพื่อตัดจบเกม
                 self.game.game_result = "BLACK WINS" if retreating_color == 'white' else "WHITE WINS"
-                self.auto_quit_to_setup(0)
+                
+                # ✨ แสดงหน้าต่าง RetreatPopup
+                def proceed_to_map():
+                    self.auto_quit_to_setup(0)
+                    
+                RetreatPopup(dead_count, proceed_to_map).open()
             else:
                 self.on_quit()
                 
-        # ✨ เพิ่มการส่ง game_mode=mode เข้าไป
+        # ✨ ส่ง game_mode ไปให้ SidebarUI เพื่อให้มันเปลี่ยนปุ่มได้อย่างถูกต้อง
         self.sidebar = SidebarUI(on_undo_callback=self.on_undo_click, on_quit_callback=on_quit_action, game_mode=mode)
         self.sidebar.size_hint_y = 0.55; self.sidebar_panel.add_widget(self.sidebar); self.main_layout.add_widget(self.sidebar_panel)
         self.init_board_ui()
@@ -526,16 +563,15 @@ class GameplayScreen(Screen):
         self.status_popup = self.item_tooltip = self.selected_item = None
         self.is_input_locked = False
         if getattr(self, 'game_mode', '') == 'Divide_Conquer': 
-            self.game.game_result = "BLACK WINS" if self.game.current_turn == 'white' else "WHITE WINS"
-            self.auto_quit_to_setup(0)
-        else: self.manager.current = 'setup'
+            self.manager.current = 'campaign_map'
+        else: 
+            self.manager.current = 'setup'
         
     def auto_quit_to_setup(self, dt): 
         if getattr(self, 'game_mode', '') == 'Divide_Conquer':
             app = App.get_running_app()
             app.battle_finished = True
             
-            # ✨ เช็คผู้ชนะอย่างรัดกุม 
             res_str = self.game.game_result.upper() if self.game.game_result else ""
             if "WHITE WINS" in res_str: app.battle_winner = 'attacker'
             elif "BLACK WINS" in res_str: app.battle_winner = 'defender'

@@ -47,12 +47,23 @@ def clone_piece(p, faction, app):
     # ฟังก์ชันล้างคราบสถานะกระดานของทหารที่รอดชีวิต ให้เป็นหมากใหม่กิ๊กแต่สเตตัสเดิม
     p_name = p.__class__.__name__.lower()
     if getattr(p, 'name', '') == 'Prince': p_name = 'prince'
+    elif getattr(p, 'name', '') == 'Garrison Commander': p_name = 'king' # เลื่อนขั้นให้ถ้าป้องกันเมืองรอด
+    
     new_p = generate_piece(p_name, faction, app)
     new_p.base_points = p.base_points
     new_p.coins = p.coins
     new_p.item = getattr(p, 'item', None)
     new_p.hidden_passive = getattr(p, 'hidden_passive', None)
     return new_p
+
+# ✨ ตรวจสอบให้มีราชา/ผู้บัญชาการ ก่อนจัดทัพเสมอเพื่อกันบัคจบเกม
+def ensure_header(army_list, faction, app):
+    has_header = any(p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' for p in army_list)
+    if not has_header:
+        commander = generate_piece('king', faction, app)
+        commander.name = "Garrison Commander"
+        army_list.append(commander)
+        print("Spawned a Garrison Commander for defense/march!")
 
 # ----------------- UI การ์ดทหารสไตล์ Total War -----------------
 class PieceCard(ButtonBehavior, FloatLayout):
@@ -75,10 +86,7 @@ class PieceCard(ButtonBehavior, FloatLayout):
         if getattr(piece_obj, 'name', '') == 'Prince': num = 1
         img_path = f"assets/pieces/{tribe}/{color}/chess {tribe}{num}.png"
         
-        # รูปทหาร
         self.add_widget(Image(source=img_path, size_hint=(0.7, 0.6), pos_hint={'center_x': 0.5, 'top': 0.9}))
-        
-        # ข้อมูล
         display_name = getattr(piece_obj, 'name', p_name.capitalize())
         self.add_widget(Label(text=f"[b]{display_name}[/b]", markup=True, font_size='13sp', pos_hint={'center_x': 0.5, 'y': 0.15}, size_hint=(1, 0.2)))
         
@@ -86,7 +94,6 @@ class PieceCard(ButtonBehavior, FloatLayout):
         passive_text = hp.description if hp and hp.passive_type else "No Passive"
         self.add_widget(Label(text=f"[size=10sp][color=a0a0a0]{passive_text}[/color][/size]", markup=True, pos_hint={'center_x': 0.5, 'y': 0.05}, size_hint=(1, 0.15)))
 
-        # ไอเทมมุมขวาบน
         if getattr(piece_obj, 'item', None):
             self.add_widget(Image(source=piece_obj.item.image_path, size_hint=(0.35, 0.35), pos_hint={'right': 0.95, 'top': 0.95}))
 
@@ -132,7 +139,6 @@ class RecruitCard(ButtonBehavior, FloatLayout):
 # ----------------- UI แถบซ้ายล่าง (Total War Army Panel) -----------------
 class CampaignArmyPanel(FloatLayout):
     def __init__(self, map_screen, app, **kwargs):
-        # ตำแหน่งอยู่ด้านซ้ายล่าง
         super().__init__(size_hint=(0.85, None), height=dp(200), pos_hint={'x': 0.02, 'y': -0.5}, **kwargs) 
         self.map_screen = map_screen
         self.app = app
@@ -146,13 +152,11 @@ class CampaignArmyPanel(FloatLayout):
             self.border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, dp(12)], width=2)
         self.bind(pos=self._update_bg, size=self._update_bg)
 
-        # Header Area
         self.header_box = BoxLayout(orientation='horizontal', size_hint=(1, 0.2), pos_hint={'top': 1, 'x': 0}, padding=[dp(10), dp(5)])
         
         self.header_lbl = Label(text="ARMY HQ", bold=True, font_size='18sp', size_hint_x=0.3, halign='left')
         self.status_lbl = Label(text="", markup=True, size_hint_x=0.2, font_size='14sp')
         
-        # Tabs
         self.btn_tab_army = Button(text="[b]ARMY[/b]", markup=True, size_hint_x=0.15, background_color=(0.3, 0.5, 0.8, 1))
         self.btn_tab_army.bind(on_release=lambda x: self.switch_tab('army'))
         self.btn_tab_recruit = Button(text="[b]RECRUIT[/b]", markup=True, size_hint_x=0.15, background_color=(0.2, 0.2, 0.2, 1))
@@ -168,14 +172,12 @@ class CampaignArmyPanel(FloatLayout):
         self.header_box.add_widget(btn_close)
         self.add_widget(self.header_box)
 
-        # Content Area (แนวนอน)
         self.content_scroll = ScrollView(size_hint=(0.8, 0.7), pos_hint={'x': 0.02, 'y': 0.05}, do_scroll_x=True, do_scroll_y=False)
         self.content_grid = GridLayout(rows=1, spacing=dp(8), size_hint_x=None, padding=dp(5))
         self.content_grid.bind(minimum_width=self.content_grid.setter('width'))
         self.content_scroll.add_widget(self.content_grid)
         self.add_widget(self.content_scroll)
 
-        # Action Button (ขวาล่าง)
         self.btn_action = Button(text="[b]MARCH / ATTACK[/b]", markup=True, size_hint=(0.15, 0.7), pos_hint={'right': 0.98, 'y': 0.05}, background_color=(0.8, 0.2, 0.2, 1))
         self.btn_action.bind(on_release=self.execute_action)
         self.add_widget(self.btn_action)
@@ -216,7 +218,11 @@ class CampaignArmyPanel(FloatLayout):
         if tab_name == 'army':
             self.btn_tab_army.background_color = (0.3, 0.5, 0.8, 1)
             self.btn_tab_recruit.background_color = (0.2, 0.2, 0.2, 1)
-            self.status_lbl.text = f"Cap: [b]{total}/{max_cap}[/b] | Select to March"
+            
+            # ✨ โชว์ค่า Loyalty แบบ Real-time
+            lylt = getattr(self.current_node, 'loyalty', 100)
+            color_lylt = '00ff00' if lylt > 60 else ('ffcc00' if lylt > 20 else 'ff0000')
+            self.status_lbl.text = f"Loyalty: [color={color_lylt}]{lylt}%[/color] | Cap: [b]{total}/{max_cap}[/b]"
             self.btn_action.text = "[b]MARCH / ATTACK[/b]"
             self.btn_action.background_color = (0.8, 0.2, 0.2, 1)
             
@@ -301,6 +307,8 @@ class MapNode(Button):
         self.size = (dp(50), dp(50))
         self.background_color = (0, 0, 0, 0) 
         
+        self.loyalty = 100 # ✨ ค่าความภักดี ป้องกันกบฏ
+
         self.army_pieces = []
         if app:
             if self.is_main_base:
@@ -436,13 +444,11 @@ class CampaignMapScreen(Screen):
         else:
             self.marching_from_node = None
             
-            # ✨ โค้ดรับทหารกลับมาจาก GameplayScreen และยึดเมือง!
             if getattr(app, 'battle_finished', False):
                 src = app.combat_source
                 tgt = app.combat_target
                 winner = app.battle_winner
                 
-                # ล้างสถานะกระดานด้วย clone_piece
                 clean_atk = [clone_piece(p, src.faction, app) for p in app.survivors_atk]
                 clean_def = [clone_piece(p, tgt.faction, app) for p in app.survivors_def]
                 
@@ -450,6 +456,7 @@ class CampaignMapScreen(Screen):
                     orig_tgt_faction = tgt.faction
                     tgt.faction = src.faction
                     tgt.army_pieces = clean_atk
+                    tgt.loyalty = 100 # ยึดได้ใหม่ๆ คนภักดี
                     tgt.update_graphics() 
                     
                     if tgt.node_type == 'castle' and orig_tgt_faction == 'red':
@@ -481,20 +488,55 @@ class CampaignMapScreen(Screen):
         app.combat_target = target_node
         
         target_army = target_node.army_pieces.copy()
-        
-        # เพิ่มคิงให้ศัตรูหากไม่มี
-        has_king = any(p.__class__.__name__.lower() in ['king', 'prince'] for p in target_army)
-        if not has_king:
-            target_army.append(generate_piece('king', target_node.faction, app))
+        ensure_header(target_army, target_node.faction, app) # ✨ กันเป้าหมายไม่มีราชา
         
         if target_node.faction == 'red':
             target_count = random.randint(8, 12)
             while len(target_army) > target_count:
-                removable_pieces = [p for p in target_army if p.__class__.__name__.lower() not in ['king', 'prince']]
+                removable_pieces = [p for p in target_army if p.__class__.__name__.lower() not in ['king']]
                 if not removable_pieces: break
                 p_to_remove = random.choice(removable_pieces)
                 target_army.remove(p_to_remove)
                 
+        app.combat_target_army = target_army
+        
+        # ✨ กันฝั่งเดินทัพไม่มีราชา (เกิดจากการแบ่งทหารไปรบ)
+        ensure_header(app.combat_marching_army, source_node.faction, app)
+        
+        gameplay_screen = self.manager.get_screen('gameplay')
+        gameplay_screen.setup_game(mode='Divide_Conquer')
+        self.manager.current = 'gameplay'
+
+    def switch_turn(self):
+        app = App.get_running_app()
+        if app.current_map_turn == 'white':
+            app.current_map_turn = 'black'
+            self.status_lbl.text = f"DARK ABYSS (BLACK) - TURN {app.turn_number}"
+            self.status_lbl.color = (0.6, 0.6, 0.8, 1)
+        else:
+            app.current_map_turn = 'white'
+            app.turn_number += 1
+            self.status_lbl.text = f"DIVINE ORDER (WHITE) - TURN {app.turn_number}"
+            self.status_lbl.color = (1, 0.8, 0.2, 1)
+
+    def trigger_rebellion(self, node):
+        app = App.get_running_app()
+        app.play_click_sound()
+        self.status_lbl.text = f"[color=ff0000]REBELLION AT {node.node_id}! DEFEND YOUR BASE![/color]"
+        
+        # สุ่มทัพกบฏสีแดงแบบโหดๆ
+        rebel_army = [generate_piece('king', 'red', app), generate_piece('knight', 'red', app), generate_piece('rook', 'red', app)]
+        for _ in range(5): rebel_army.append(generate_piece('pawn', 'red', app))
+            
+        dummy_red_node = MapNode('village', 'red', 'REBEL', app=None)
+        dummy_red_node.army_pieces = rebel_army
+        
+        app.combat_source = dummy_red_node
+        app.combat_marching_army = rebel_army
+        app.combat_target = node
+        
+        target_army = node.army_pieces.copy()
+        ensure_header(target_army, node.faction, app)
         app.combat_target_army = target_army
         
         gameplay_screen = self.manager.get_screen('gameplay')
@@ -508,18 +550,32 @@ class CampaignMapScreen(Screen):
             self.marching_from_node.army_pieces.extend(app.combat_marching_army)
             self.marching_from_node = None
         
-        tax_collected = sum([3 if n.node_type == 'village' else 6 for n in self.nodes_list if n.faction == app.current_map_turn])
+        tax_collected = 0
+        rebellions = []
+        
+        for node in self.nodes_list:
+            if node.faction == app.current_map_turn:
+                tax_collected += 3 if node.node_type == 'village' else 6
+                
+                # ✨ ระบบความภักดี ทิ้งทหารน้อยกว่า 3 คน ความภักดีลดฮวบ
+                if len(node.army_pieces) < 3: node.loyalty -= 20
+                else: node.loyalty += 10
+                
+                node.loyalty = max(0, min(100, node.loyalty))
+                if node.loyalty == 0:
+                    rebellions.append(node)
+                
         app.tax_points[app.current_map_turn] += tax_collected
         
-        if app.current_map_turn == 'white':
-            app.current_map_turn = 'black'
-            self.status_lbl.text = f"DARK ABYSS (BLACK) - TURN {app.turn_number}"
-            self.status_lbl.color = (0.6, 0.6, 0.8, 1)
-        else:
-            app.current_map_turn = 'white'
-            app.turn_number += 1
-            self.status_lbl.text = f"DIVINE ORDER (WHITE) - TURN {app.turn_number}"
-            self.status_lbl.color = (1, 0.8, 0.2, 1)
+        # ถ่ายมีกบฏ ให้เกิดการบุกตีทันที (1 ที่ต่อเทิร์นเพื่อไม่ให้งง)
+        if rebellions:
+            node = rebellions[0]
+            node.loyalty = 50 # รีเซ็ตกันลูปกบฏ
+            self.switch_turn() 
+            self.trigger_rebellion(node)
+            return
+
+        self.switch_turn()
 
     def generate_procedural_map(self):
         self.map_content.clear_widgets()
