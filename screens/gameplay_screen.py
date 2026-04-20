@@ -73,18 +73,16 @@ class PromotionPopup(ModalView):
         from logic.pieces import Queen, Rook, Bishop, Knight
         ops = [Queen, Rook, Bishop, Knight]; names = ['queen', 'rook', 'bishop', 'knight']
         display_names = {'queen': 'Queen', 'rook': 'Rook', 'bishop': 'Bishop', 'knight': 'Knight'}
-        tf, mapping = tribe, {'queen': '2', 'rook': '3', 'knight': '4', 'bishop': '5'}
 
         for cls, n in zip(ops, names):
             col = BoxLayout(orientation='vertical', spacing=dp(2))
-            opt = _PromotionOption(img_path=f"assets/pieces/{tf}/{color}/chess {tf}{mapping[n]}.png")
+            opt = _PromotionOption(img_path=f"assets/pieces/{tribe}/{color}/1base/{n}.png")
             opt.bind(on_release=lambda b, c=cls: (App.get_running_app().play_click_sound(), callback(c)))
             col.add_widget(opt)
             col.add_widget(Label(text=display_names[n], font_size='13sp', size_hint_y=0.18, color=(0.9, 0.9, 0.9, 1)))
             layout.add_widget(col)
         root.add_widget(layout); self.add_widget(root)
 
-# ✨ เพิ่ม Popup ใหม่สำหรับแสดงผลการ Retreat อย่างชัดเจน
 class RetreatPopup(ModalView):
     def __init__(self, dead_count, on_close, **kwargs):
         super().__init__(size_hint=(0.45, 0.35), auto_dismiss=False, background='', background_color=(0, 0, 0, 0.8), **kwargs)
@@ -139,8 +137,15 @@ class GameplayScreen(Screen):
         self.main_bg_overlay.pos, self.main_bg_overlay.size = self.pos, self.size
 
     def get_tribe_name(self, color):
-        theme = getattr(App.get_running_app(), f'selected_unit_{color}', 'Medieval Knights')
-        return theme.lower().replace(" ", "") if theme != "Medieval Knights" else "medieval"
+        theme = getattr(App.get_running_app(), f'selected_unit_{color}', 'the knight company')
+        theme_map = {
+            "Medieval Knights": "the knight company",
+            "Heaven": "the ancient runes",
+            "Ayothaya": "the chaos mankind",
+            "Demon": "the deep anomaly",
+            "Bandit": "bandit"
+        }
+        return theme_map.get(theme, theme.lower())
 
     def setup_game(self, mode):
         self.main_layout.clear_widgets()
@@ -198,7 +203,7 @@ class GameplayScreen(Screen):
                 if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel()
                 if getattr(self, 'ai_event', None): self.ai_event.cancel()
                 
-                # ✨ ลอจิก Retreat: สุ่มฆ่าทหาร Light (Pawn)
+                # ลอจิก Retreat: สุ่มฆ่าทหาร Light (Pawn)
                 retreating_color = self.game.current_turn
                 dead_count = 0
                 for r in range(8):
@@ -212,7 +217,7 @@ class GameplayScreen(Screen):
                 # ยอมแพ้ เพื่อตัดจบเกม
                 self.game.game_result = "BLACK WINS" if retreating_color == 'white' else "WHITE WINS"
                 
-                # ✨ แสดงหน้าต่าง RetreatPopup
+                # แสดงหน้าต่าง RetreatPopup
                 def proceed_to_map():
                     self.auto_quit_to_setup(0)
                     
@@ -220,7 +225,6 @@ class GameplayScreen(Screen):
             else:
                 self.on_quit()
                 
-        # ✨ ส่ง game_mode ไปให้ SidebarUI เพื่อให้มันเปลี่ยนปุ่มได้อย่างถูกต้อง
         self.sidebar = SidebarUI(on_undo_callback=self.on_undo_click, on_quit_callback=on_quit_action, game_mode=mode)
         self.sidebar.size_hint_y = 0.55; self.sidebar_panel.add_widget(self.sidebar); self.main_layout.add_widget(self.sidebar_panel)
         self.init_board_ui()
@@ -355,10 +359,19 @@ class GameplayScreen(Screen):
         if p_n == 'obstacle':
             ot = piece.name.lower(); return f"assets/pieces/event/event{'1' if ot=='thorn' else '2' if ot=='sandstorm' else '3'}.png"
         
-        tf = getattr(piece, 'tribe', 'medieval')
-        num = getattr(piece, 'variant', 6) if p_n == 'pawn' else {'king': 1, 'queen': 2, 'rook': 3, 'knight': 4, 'bishop': 5}.get(p_n, 1)
-        if getattr(piece, 'name', '') == 'Prince': num = 1
-        return f"assets/pieces/{tf}/{p_c}/chess {tf}{num}.png"
+        tf = getattr(piece, 'tribe', 'the knight company')
+        
+        # ตอนนี้ยังไม่มีระบบเปลี่ยนร่างอัปเกรด ให้ใช้โฟลเดอร์ 1base เป็นค่าเริ่มต้น
+        stage_folder = "1base"
+        
+        # ดึงหมายเลข variant สำหรับหมากที่มีหลายหน้าตา
+        if p_n in ['pawn', 'hastati', 'levies']:
+            num = getattr(piece, 'variant', 1) # ถ้าไม่มีตัวแปร variant จะใช้รูป 1
+            filename = f"{p_n}{num}.png"
+        else:
+            filename = f"{p_n}.png"
+            
+        return f"assets/pieces/{tf}/{p_c}/{stage_folder}/{filename}"
 
     def on_square_tap(self, instance):
         App.get_running_app().play_click_sound() 
@@ -499,15 +512,11 @@ class GameplayScreen(Screen):
     def trigger_ai_move(self, dt):
         if self.game.game_result: return
         
-        # ดึงระดับความยาก
         difficulty = getattr(App.get_running_app(), 'ai_difficulty', 'normal')
         
-        # ✨แยกลอจิก AI ตามโหมดเกม
         if getattr(self, 'game_mode', 'PVP') == 'Divide_Conquer':
-            # === AI โหมด Divide & Conquer ===
             from logic.dac_ai import DACBot
             
-            # 1. ให้ DACBot ตัดสินใจเรื่องไอเทม
             target_piece, item_to_use = DACBot.decide_item_usage(self.game, 'black', difficulty)
             if target_piece and item_to_use:
                 target_piece.item = item_to_use
@@ -523,14 +532,11 @@ class GameplayScreen(Screen):
                 self.init_board_ui()
                 self.update_inventory_ui()
 
-            # 2. ให้ DACBot คำนวณการเดิน
             move = DACBot.get_best_move(self.game, 'black')
             
         else:
-            # === AI โหมด Classic (PVE) ปกติ ===
             from logic.ai_logic import ChessAI
             
-            # โลจิกไอเทมของบอทโหมดปกติ (คล้ายๆ กัน แต่เก็บไว้เผื่อปรับแยก)
             inv = getattr(self.game, 'inventory_black', [])
             if inv:
                 import random
@@ -539,7 +545,7 @@ class GameplayScreen(Screen):
                     item_to_use = random.choice(inv)
                     valid_pieces = [p for row in self.game.board for p in row if p and p.color == 'black' and getattr(p, 'item', None) is None]
                     if valid_pieces:
-                        chosen_piece = random.choice(valid_pieces) # สุ่มง่ายๆ ไปก่อนสำหรับโหมดธรรมดา
+                        chosen_piece = random.choice(valid_pieces)
                         chosen_piece.item = item_to_use
                         if item_to_use.id == 6: 
                             chosen_piece.coins += 1; chosen_piece.base_points = max(0, chosen_piece.base_points - 1)
@@ -551,10 +557,8 @@ class GameplayScreen(Screen):
                         self.init_board_ui()
                         self.update_inventory_ui()
 
-            # การเดินโหมดปกติ
             move = ChessAI.get_best_move(self.game, ai_color='black')
 
-        # === รันผลลัพธ์การเดิน (เหมือนกันทั้งสองโหมด) ===
         if move:
             (sr, sc), (er, ec) = move
             res = self.game.move_piece(sr, sc, er, ec)

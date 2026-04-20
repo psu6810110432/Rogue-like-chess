@@ -7,11 +7,10 @@ class Piece:
     def __init__(self, color, name):
         self.color, self.name, self.item, self.has_moved = color, name, None, False
         self.hidden_passive = HiddenPassive()
-        self.passive_desc = "" # เก็บคำอธิบายสกิลติดตัวของหมาก
-        self.tribe = "medieval" # ✨ ให้มีค่าเริ่มต้นป้องกันบั๊ก
+        self.passive_desc = "" 
+        self.tribe = "the knight company" 
 
     def is_path_clear(self, start, end, board):
-        """ตรวจสอบว่าเส้นทางการเดินไม่มีหมากตัวอื่นขวางกั้น"""
         sr, sc, er, ec = start[0], start[1], end[0], end[1]
         step_r = 0 if sr == er else (1 if er > sr else -1)
         step_c = 0 if sc == ec else (1 if ec > sc else -1)
@@ -24,30 +23,25 @@ class Piece:
         return True
 
     def setup_stats(self, piece_type, tribe):
-        """ตั้งค่าพลัง (Dice, Coins, Max) และคำอธิบายสกิลจากเผ่าที่เลือก"""
-        # ✨ FIX: ป้องกันกรณีค่าเผ่าถูกส่งมาเป็นค่าว่าง
         if not tribe:
-            tribe = 'medieval'
+            tribe = 'the knight company'
         self.tribe = tribe 
         
         passive = PassiveManager.get_passive_handler(piece_type, tribe)
         if passive:
             stats = passive['get_piece_stats']()
-            # ใช้ Passive แฝงปรับค่าพลังพื้นฐาน
             self.base_points, self.coins = self.hidden_passive.apply_passive(stats['dice'], stats['coins'])
             self.max_stats = stats['max']
             self.passive_desc = stats['desc']
         else:
-            # ค่าเริ่มต้นกรณีไม่พบข้อมูลเผ่า
             self.base_points, self.coins, self.max_stats, self.passive_desc = 5, 3, 12, ""
 
     def check_knight_move(self, s, e):
-        """ตรวจสอบการเดินแบบรูปตัว L (สำหรับ Knight หรือไอเทม Pegasus Boots)"""
         rd, cd = abs(s[0]-e[0]), abs(s[1]-e[1])
         return (rd == 2 and cd == 1) or (rd == 1 and cd == 2)
 
 class Rook(Piece):
-    def __init__(self, color, tribe='medieval'):
+    def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'R' if color == 'white' else 'r')
         self.setup_stats('rook', tribe)
 
@@ -58,7 +52,7 @@ class Rook(Piece):
         return (s[0] == e[0] or s[1] == e[1]) and self.is_path_clear(s, e, b)
 
 class Knight(Piece):
-    def __init__(self, color, tribe='medieval'):
+    def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'N' if color == 'white' else 'n')
         self.setup_stats('knight', tribe)
 
@@ -70,7 +64,7 @@ class Knight(Piece):
         return False
 
 class Bishop(Piece):
-    def __init__(self, color, tribe='medieval'):
+    def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'B' if color == 'white' else 'b')
         self.setup_stats('bishop', tribe)
 
@@ -81,7 +75,7 @@ class Bishop(Piece):
         return abs(s[0]-e[0]) == abs(s[1]-e[1]) and self.is_path_clear(s, e, b)
 
 class Queen(Piece):
-    def __init__(self, color, tribe='medieval'):
+    def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'Q' if color == 'white' else 'q')
         self.setup_stats('queen', tribe)
 
@@ -94,7 +88,7 @@ class Queen(Piece):
         return (is_straight or is_diagonal) and self.is_path_clear(s, e, b)
 
 class King(Piece):
-    def __init__(self, color, tribe='medieval'):
+    def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'K' if color == 'white' else 'k')
         self.setup_stats('king', tribe)
 
@@ -105,10 +99,10 @@ class King(Piece):
         return max(abs(s[0]-e[0]), abs(s[1]-e[1])) == 1
 
 class Pawn(Piece):
-    def __init__(self, color, tribe='medieval'):
+    def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'P' if color == 'white' else 'p')
         self.setup_stats('pawn', tribe)
-        self.variant = random.randint(6, 9)
+        self.variant = random.randint(1, 4)
 
     def is_valid_move(self, s, e, b, ep_target=None):
         if s == e: return False
@@ -128,14 +122,16 @@ class Pawn(Piece):
                     return True
         return False
 
-    # เพิ่มต่อท้ายไฟล์ logic/pieces.py
-
 class Princess(Piece):
+    def __init__(self, color, tribe='the knight company'):
+        super().__init__(color, 'PR' if color == 'white' else 'pr')
+        self.setup_stats('princess', tribe)
+
     def get_valid_moves(self, board):
         moves = []
         directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
         for d in directions:
-            for step in range(1, 4): # เดินเหมือน Queen แต่จำกัดแค่ 3 ช่อง
+            for step in range(1, 4): 
                 r = self.row + d[0] * step
                 c = self.col + d[1] * step
                 if 0 <= r < 8 and 0 <= c < 8:
@@ -151,11 +147,13 @@ class Princess(Piece):
         return moves
 
 class Menatarm(Piece):
+    def __init__(self, color, tribe='the knight company'):
+        super().__init__(color, 'M' if color == 'white' else 'm')
+        self.setup_stats('menatarm', tribe)
+
     def get_valid_moves(self, board):
         moves = []
-        # white เดินขึ้นบน (แถวลดลง), black เดินลงล่าง (แถวเพิ่มขึ้น)
         fwd = -1 if self.color == 'white' else 1
-        # เดินรอบตัว ยกเว้นเดินถอยหลังตรงๆ (-fwd, 0)
         directions = [(fwd, 0), (fwd, 1), (fwd, -1), (0, 1), (0, -1), (-fwd, 1), (-fwd, -1)]
         for d in directions:
             r = self.row + d[0]
@@ -166,9 +164,12 @@ class Menatarm(Piece):
         return moves
 
 class Praetorian(Piece):
+    def __init__(self, color, tribe='the knight company'):
+        super().__init__(color, 'PT' if color == 'white' else 'pt')
+        self.setup_stats('praetorian', tribe)
+
     def get_valid_moves(self, board):
         moves = []
-        # เดินตรง (บน ล่าง ซ้าย ขวา) สูงสุด 2 ช่อง
         for d in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             for step in range(1, 3):
                 r = self.row + d[0] * step
@@ -181,7 +182,6 @@ class Praetorian(Piece):
                             moves.append((r, c))
                         break
         
-        # ปลายทางแตกออกด้านข้าง (ตรงกับลักษณะการเดินของม้า Knight พอดี)
         knight_moves = [(-2, -1), (-2, 1), (2, -1), (2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2)]
         for d in knight_moves:
             r = self.row + d[0]
@@ -192,12 +192,15 @@ class Praetorian(Piece):
         return moves
 
 class Royalguard(Piece):
+    def __init__(self, color, tribe='the knight company'):
+        super().__init__(color, 'RG' if color == 'white' else 'rg')
+        self.setup_stats('royalguard', tribe)
+
     def get_valid_moves(self, board):
         moves = []
-        # ขุน (รอบตัว 1 ช่อง) + ม้า (ตัว L)
         directions = [
-            (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1), # ขุน
-            (-2, -1), (-2, 1), (2, -1), (2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2)  # ม้า
+            (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1), 
+            (-2, -1), (-2, 1), (2, -1), (2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2)  
         ]
         for d in directions:
             r = self.row + d[0]
@@ -208,10 +211,15 @@ class Royalguard(Piece):
         return moves
 
 class Hastati(Piece):
+    def __init__(self, color, tribe='the knight company'):
+        super().__init__(color, 'H' if color == 'white' else 'h')
+        self.setup_stats('hastati', tribe)
+        self.variant = random.randint(1, 4)
+
     def get_valid_moves(self, board):
         moves = []
         fwd = -1 if self.color == 'white' else 1
-        for step in range(1, 4): # เดินและกินตรงๆ 3 ช่อง
+        for step in range(1, 4): 
             r = self.row + fwd * step
             c = self.col
             if 0 <= r < 8 and 0 <= c < 8:
@@ -225,12 +233,16 @@ class Hastati(Piece):
         return moves
 
 class Levies(Piece):
+    def __init__(self, color, tribe='the knight company'):
+        super().__init__(color, 'L' if color == 'white' else 'l')
+        self.setup_stats('levies', tribe)
+        self.variant = random.randint(1, 4)
+
     def get_valid_moves(self, board):
         moves = []
         fwd = -1 if self.color == 'white' else 1
         r = self.row + fwd
         c = self.col
-        # เดินและกินแค่ 1 ช่องด้านหน้าตรงๆ (ไม่ทแยง)
         if 0 <= r < 8 and 0 <= c < 8:
             if board[r][c] is None or board[r][c].color != self.color:
                 moves.append((r, c))
@@ -239,7 +251,7 @@ class Levies(Piece):
 class Obstacle(Piece):
     def __init__(self, n, l):
         self.color, self.name, self.item, self.lifespan, self.base_points, self.coins, self.has_moved = 'neutral', n, None, l, 0, 0, False
-        self.tribe = "neutral" # ✨ ป้องกันบั๊กรูปไอเทมกิจกรรมแหว่ง
+        self.tribe = "neutral" 
 
     def is_valid_move(self, s, e, b):
         return False

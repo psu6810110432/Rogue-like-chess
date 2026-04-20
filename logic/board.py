@@ -7,7 +7,7 @@ from logic.item_logic import ITEM_DATABASE, Item
 from logic.item_effects import apply_post_crash_effects # นำเข้า Logic ของ Item
 
 class ChessBoard:
-    def __init__(self, white_tribe='medieval', black_tribe='medieval', map_name='Classic Board'):
+    def __init__(self, white_tribe='the knight company', black_tribe='the knight company', map_name='Classic Board'):
         self.white_tribe = white_tribe
         self.black_tribe = black_tribe
         self.board = self.create_initial_board()
