@@ -31,8 +31,16 @@ def get_distance(p1, p2):
     return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
 
 def generate_piece(piece_name, faction, app):
-    theme = getattr(app, f'selected_unit_{faction}', 'Medieval Knights') if faction != 'red' else 'Demon'
-    tribe = theme.lower().replace(" ", "") if theme != "Medieval Knights" else "medieval"
+    theme = getattr(app, f'selected_unit_{faction}', 'Medieval Knights') if faction != 'red' else 'Bandit'
+    
+    theme_map = {
+        "Medieval Knights": "the knight company",
+        "Heaven": "the ancient runes",
+        "Ayothaya": "the chaos mankind",
+        "Demon": "the deep anomaly",
+        "Bandit": "bandit"
+    }
+    tribe = theme_map.get(theme, theme.lower())
     color = faction if faction in ['white', 'black'] else 'black'
     
     classes = {
@@ -83,16 +91,19 @@ class PieceCard(ButtonBehavior, FloatLayout):
         self.bind(pos=self._update_bg, size=self._update_bg)
 
         p_name = piece_obj.__class__.__name__.lower()
-        tribe = getattr(piece_obj, 'tribe', 'medieval')
+        tribe = getattr(piece_obj, 'tribe', 'the knight company')
         color = piece_obj.color
         
-        num_mapping = {
-            'pawn': 6, 'rook': 3, 'knight': 4, 'bishop': 5, 'queen': 2, 'king': 1, 'prince': 1,
-            'princess': 2, 'menatarm': 4, 'praetorian': 3, 'royalguard': 4, 'hastati': 6, 'levies': 6
-        }
-        num = num_mapping.get(p_name, 1)
-        if getattr(piece_obj, 'name', '') == 'Prince': num = 1
-        img_path = f"assets/pieces/{tribe}/{color}/chess {tribe}{num}.png"
+        # ✨ อัปเดต Path เป็นโฟลเดอร์แบบใหม่ (/1base/)
+        if p_name in ['pawn', 'hastati', 'levies']:
+            num = getattr(piece_obj, 'variant', 1)
+            filename = f"{p_name}{num}.png"
+        else:
+            filename = f"{p_name}.png"
+            
+        if getattr(piece_obj, 'name', '') == 'Prince': filename = 'prince.png'
+        
+        img_path = f"assets/pieces/{tribe}/{color}/1base/{filename}"
         
         self.add_widget(Image(source=img_path, size_hint=(0.7, 0.6), pos_hint={'center_x': 0.5, 'top': 0.9}))
         display_name = getattr(piece_obj, 'name', p_name.capitalize())
@@ -129,13 +140,22 @@ class RecruitCard(ButtonBehavior, FloatLayout):
         self.bind(pos=self._update_bg, size=self._update_bg)
 
         theme = getattr(app, f'selected_unit_{faction}', 'Medieval Knights')
-        tribe = theme.lower().replace(" ", "") if theme != "Medieval Knights" else "medieval"
-        num_mapping = {
-            'pawn': 6, 'rook': 3, 'knight': 4, 'bishop': 5, 'queen': 2, 'king': 1, 'prince': 1,
-            'princess': 2, 'menatarm': 4, 'praetorian': 3, 'royalguard': 4, 'hastati': 6, 'levies': 6
+        theme_map = {
+            "Medieval Knights": "the knight company",
+            "Heaven": "the ancient runes",
+            "Ayothaya": "the chaos mankind",
+            "Demon": "the deep anomaly",
+            "Bandit": "bandit"
         }
-        num = num_mapping.get(piece_name, 1)
-        img_path = f"assets/pieces/{tribe}/{faction}/chess {tribe}{num}.png"
+        tribe = theme_map.get(theme, theme.lower())
+        
+        # ✨ อัปเดต Path เป็นโฟลเดอร์แบบใหม่ (/1base/)
+        if piece_name in ['pawn', 'hastati', 'levies']:
+            filename = f"{piece_name}1.png"
+        else:
+            filename = f"{piece_name}.png"
+            
+        img_path = f"assets/pieces/{tribe}/{faction}/1base/{filename}"
         
         self.add_widget(Image(source=img_path, size_hint=(0.7, 0.6), pos_hint={'center_x': 0.5, 'top': 0.9}))
         self.add_widget(Label(text=f"[b]{piece_name.capitalize()}[/b]", markup=True, font_size='13sp', pos_hint={'center_x': 0.5, 'y': 0.15}, size_hint=(1, 0.2)))
@@ -241,7 +261,11 @@ class CampaignArmyPanel(FloatLayout):
             
             lylt = getattr(self.current_node, 'loyalty', 100)
             color_lylt = '00ff00' if lylt > 60 else ('ffcc00' if lylt > 20 else 'ff0000')
-            self.status_lbl.text = f"Loyalty: [color={color_lylt}]{lylt}%[/color] | Cap: [b]{total}/{max_cap}[/b]"
+            
+            # ✨ นำค่า Fatigue มาแสดงผล
+            fatigue = self.app.army_fatigue.get(self.current_node.faction, 0)
+            fatigue_color = '00ff00' if fatigue == 0 else ('ffaa00' if fatigue < 3 else 'ff0000')
+            self.status_lbl.text = f"Loyalty: [color={color_lylt}]{lylt}%[/color] | Cap: [b]{total}/{max_cap}[/b] | Fatigue: [color={fatigue_color}]{fatigue}/4[/color]"
             
             self.btn_action.text = "[b]MARCH / ATTACK[/b]"
             self.btn_action.background_color = (0.8, 0.2, 0.2, 1)
@@ -296,6 +320,12 @@ class CampaignArmyPanel(FloatLayout):
     def execute_action(self, instance):
         self.app.play_click_sound()
         if self.current_tab == 'army':
+            # ✨ เช็ค Fatigue ถ้ามากกว่าหรือเท่ากับ 3 จะเดินทัพไม่ได้
+            fatigue = self.app.army_fatigue.get(self.current_node.faction, 0)
+            if fatigue >= 3:
+                self.map_screen.status_lbl.text = "[color=ff0000]ARMY IS TOO EXHAUSTED (FATIGUE LEVEL 3+)! MUST REST.[/color]"
+                return
+                
             selected_pieces = [card.piece_obj for card in self.piece_cards if card.is_selected]
             if len(selected_pieces) == 0:
                 selected_pieces = self.current_node.army_pieces.copy() 
@@ -429,6 +459,13 @@ class MapNode(Button):
                         map_screen.status_lbl.text = "[color=ff0000]MERGE FAILED: CAPACITY LIMIT EXCEEDED![/color]"
                         map_screen.marching_from_node.army_pieces.extend(app.combat_marching_army)
                 else:
+                    # ✨ เช็คการเข้าโจมตี เพิ่ม Fatigue ตาม node_type
+                    fatigue_cost = 2 if self.node_type == 'castle' else 1
+                    current_fatigue = app.army_fatigue.get(map_screen.marching_from_node.faction, 0)
+                    
+                    # เพิ่ม Fatigue (สูงสุดคือ 4)
+                    app.army_fatigue[map_screen.marching_from_node.faction] = min(4, current_fatigue + fatigue_cost)
+                    
                     map_screen.initiate_combat(map_screen.marching_from_node, self)
             else: 
                 map_screen.status_lbl.text = "[color=ff0000]TOO FAR! SELECT ADJACENT BASE.[/color]"
@@ -516,6 +553,7 @@ class CampaignMapScreen(Screen):
             app.turn_number = 1
             app.tax_points = {'white': 0, 'black': 0}
             app.prince_rewards = {'white': 0, 'black': 0} 
+            app.army_fatigue = {'white': 0, 'black': 0} # ✨ สร้างตัวแปรเก็บ Fatigue
             self.marching_from_node = None
             Clock.schedule_once(lambda dt: self.generate_procedural_map(), 0.1)
             app.campaign_initialized = True
@@ -594,8 +632,11 @@ class CampaignMapScreen(Screen):
             app.turn_number += 1
             self.status_lbl.text = f"DIVINE ORDER (WHITE) - TURN {app.turn_number}"
             self.status_lbl.color = (1, 0.8, 0.2, 1)
+            
+        # ✨ ล้างค่า Fatigue เมื่อเข้าเทิร์นใหม่ (-3 หน่วย แต่ไม่ต่ำกว่า 0)
+        current_fatigue = app.army_fatigue.get(app.current_map_turn, 0)
+        app.army_fatigue[app.current_map_turn] = max(0, current_fatigue - 3)
         
-        # เลื่อนกล้องไปหาฐานฝั่งที่เล่น
         self.jump_to_base(None)
 
     def trigger_rebellion(self, node):
