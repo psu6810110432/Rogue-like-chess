@@ -119,13 +119,13 @@ class CrashOverlay(BoxLayout):
             if "Blue" in res_str: return 3
             if "Red" in res_str: return 2
             if "Yellow" in res_str: return 1
-            if "Tails" in res_str and faction == "demon": return -3
+            # ✨ เปลี่ยนเช็คชื่อเผ่าเป็น the deep anomaly
+            if "Tails" in res_str and faction == "the deep anomaly": return -3
             return 0
 
         self.a_pts_array = [get_pt(r, self.a_faction) for r in self.a_results]
         self.d_pts_array = [get_pt(r, self.d_faction) for r in self.d_results]
 
-        # ✨ เพิ่มตัวแปรเพื่อนับเหรียญติดลบของ Demon ในแอนิเมชัน
         self.anim_state = {
             'side': 'atk', 'coin_idx': 0, 'ticks': 0, 'max_ticks': 10,
             'a_current_total': a_base, 'd_current_total': d_base,
@@ -138,7 +138,8 @@ class CrashOverlay(BoxLayout):
         mapping = {"Green": "coin9", "Cyan": "coin8", "Purple": "coin7", "Orange": "coin6", "Blue": "coin5", "Red": "coin4", "Yellow": "coin3"}
         for key, val in mapping.items():
             if key in res_str: return f"assets/coin/{val}.png"
-        if "Tails" in res_str: return "assets/coin/coin1.png" if faction == "demon" else "assets/coin/coin2.png"
+        # ✨ เปลี่ยนชื่อเผ่า
+        if "Tails" in res_str: return "assets/coin/coin1.png" if faction == "the deep anomaly" else "assets/coin/coin2.png"
         return "assets/coin/coin10.png"
 
     def animate_coin_step(self, dt):
@@ -170,32 +171,28 @@ class CrashOverlay(BoxLayout):
                     App.get_running_app().play_coin_sound()
                     self.last_coin_sound_time = time.time()
                 
-                # 1. บวกแต้มหน้าเหรียญปกติ
                 s[key] += pts[s['coin_idx']]
                 
-                # 2. ✨ FIX: ระบบนับจำนวนหัว (Heaven) และกะโหลก (Demon)
                 heads_key = 'a_heads' if side == 'atk' else 'd_heads'
                 demon_key = 'a_demon_minus' if side == 'atk' else 'd_demon_minus'
 
                 if "Heads" in res[s['coin_idx']]:
                     s[heads_key] += 1
-                    if fac == "heaven":
+                    # ✨ เปลี่ยนเผ่าเป็น the ancient runes
+                    if fac == "the ancient runes":
                         if s[heads_key] == 3:
                             s[key] += 3
                         elif s[heads_key] == 6: 
                             s[key] += 3
                 
-                # ✨ ลอจิกแอนิเมชันสำหรับเผ่า Demon
-                elif "Tails" in res[s['coin_idx']] and fac == "demon":
+                # ✨ เปลี่ยนเผ่าเป็น the deep anomaly
+                elif "Tails" in res[s['coin_idx']] and fac == "the deep anomaly":
                     s[demon_key] += 1
                     if s[demon_key] == 2:
-                        # ถ้าได้กะโหลกที่ 2 ให้คืนค่า 2 ครั้งที่เสียไป (-6 ให้บวก 12 จะกลายเป็น +6)
                         s[key] += 12
                     elif s[demon_key] > 2:
-                        # ถ้าได้กะโหลกตั้งแต่ครั้งที่ 3 เป็นต้นไป ให้คืนค่า 1 ครั้งที่เสียไป (-3 ให้บวก 6 จะกลายเป็น +3)
                         s[key] += 6
                             
-                # 3. อัปเดตตัวเลขขึ้นหน้าจอ
                 lbl.text = f"{s[key]}"
                 s['coin_idx'] += 1
                 s['ticks'] = 0
@@ -208,12 +205,12 @@ class CrashOverlay(BoxLayout):
         if a_tot > d_tot:
             self.crash_btn.text = "BREAKING!"
             self.crash_btn.font_size = '24sp'
-            self.crash_btn.background_color = (0, 0.8, 0, 1)  # เขียว
+            self.crash_btn.background_color = (0, 0.8, 0, 1)  
             Clock.schedule_once(lambda dt: self.on_finish(self.start_pos, self.end_pos, "won"), 1.2)
         elif a_tot == d_tot:
             self.crash_btn.text = "DRAW!"
             self.crash_btn.font_size = '24sp'
-            self.crash_btn.background_color = (1, 1, 0, 1)  # เหลือง
+            self.crash_btn.background_color = (1, 1, 0, 1)  
             App.get_running_app().play_draw_sound()
             Clock.schedule_once(lambda dt: self.start_crash_animation(), 1.2)
         else:
@@ -221,12 +218,12 @@ class CrashOverlay(BoxLayout):
             if self.crash_stagger_count < 2:
                 self.crash_btn.text = "STAGGER!"
                 self.crash_btn.font_size = '24sp'
-                self.crash_btn.background_color = (1, 0.5, 0, 1)  # ส้ม
+                self.crash_btn.background_color = (1, 0.5, 0, 1)  
                 Clock.schedule_once(lambda dt: self.start_crash_animation(), 1.2)
             else:
                 self.crash_btn.text = "DISTORTION!"
                 self.crash_btn.font_size = '24sp'
-                self.crash_btn.background_color = (1, 0, 0, 1)  # แดง
+                self.crash_btn.background_color = (1, 0, 0, 1)  
                 App.get_running_app().play_distortion_sound()
                 Clock.schedule_once(lambda dt: self.on_finish(self.start_pos, self.end_pos, "died"), 1.2)
 

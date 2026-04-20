@@ -50,34 +50,32 @@ def calculate_total_points(base_points, num_coins, faction):
     total = base_points
     results = []
     heads_count = 0
-    demon_minus_count = 0  # ✨ ตัวแปรใหม่สำหรับนับจำนวนเหรียญที่ได้ -3 ของเผ่า Demon
+    demon_minus_count = 0
 
     for _ in range(num_coins):
-        if faction == "medieval":
+        # ✨ เปลี่ยนชื่อเผ่าให้ตรงกับ Asset ใหม่
+        if faction == "the knight company":
             p, color = toss_coin_medieval()
-        elif faction == "demon":
+        elif faction == "the deep anomaly":
             p, color = toss_coin_demon()
             if p == -3:
-                demon_minus_count += 1  # ✨ นับจำนวนครั้งที่ทอยได้ -3
-        elif faction == "heaven":
+                demon_minus_count += 1
+        elif faction == "the ancient runes":
             p, color = toss_coin_heaven()
-        else:
+        else: # ครอบคลุมทั้ง "the chaos mankind" และ "bandit" (ใช้ระบบเดียวกันชั่วคราว)
             p, color = toss_coin_ayothaya()
             
         total += p
         results.append(color)
         if "Heads" in color: heads_count += 1
 
-    if faction == "heaven":
+    # ✨ เปลี่ยนชื่อเผ่าในเงื่อนไขพิเศษ
+    if faction == "the ancient runes":
         if heads_count >= 3: total += 3
         if heads_count >= 6: total += 3
         if heads_count >= 9: total += 3
 
-    # ✨ Logic ใหม่ของ Demon: ถ้าทอยได้ -3 มากกว่า 1 เหรียญ (คือ 2 เหรียญขึ้นไป)
-    if faction == "demon" and demon_minus_count > 1:
-        # ตอนทอยเหรียญใน Loop ด้านบน แต้มถูกลบไปแล้ว (-3)
-        # ดังนั้นการจะเปลี่ยนให้กลายเป็น +3 เราต้องคืนค่าที่เสียไป (+3) และบวกแต้มเพิ่มอีก (+3) 
-        # สรุปคือต้องบวกเพิ่ม 6 แต้ม ต่อ 1 เหรียญที่เป็น -3
+    if faction == "the deep anomaly" and demon_minus_count > 1:
         total += (6 * demon_minus_count)
             
     return total, results
@@ -87,7 +85,6 @@ def resolve_crash(p1_name, p1_faction, p1_base, p1_coins, p2_name, p2_faction, p
         p1_total, p1_results = calculate_total_points(p1_base, p1_coins, p1_faction)
         p2_total, p2_results = calculate_total_points(p2_base, p2_coins, p2_faction)
         
-        # ✨ เพิ่มคำสั่ง Break ป้องกันเกมค้าง (Infinite Loop) หากมีการทอยใหม่ในกรณีที่แต้มเสมอกัน
         if p1_total != p2_total:
             break
     
@@ -102,15 +99,13 @@ def resolve_crash(p1_name, p1_faction, p1_base, p1_coins, p2_name, p2_faction, p
     }
 
 def simulate_ai_crash_result(attacker, defender, a_faction, d_faction):
-    """จำลองผลการต่อสู้สำหรับ AI (รองรับระบบ Draw/Stagger และ Item)"""
     a_base = getattr(attacker, 'base_points', 5)
     a_coins = getattr(attacker, 'coins', 3)
     d_base = getattr(defender, 'base_points', 5)
     d_coins = getattr(defender, 'coins', 3)
     
-    # ไอเทมที่มีผลก่อนเริ่ม Crash
     if getattr(defender, 'item', None) and defender.item.id == 4:
-        return "blocked" # โล่สะท้อนการโจมตี
+        return "blocked"
     if getattr(defender, 'item', None) and defender.item.id == 8: a_coins = max(0, a_coins - 1)
     if getattr(attacker, 'item', None) and attacker.item.id == 8: d_coins = max(0, d_coins - 1)
     if getattr(defender, 'item', None) and defender.item.id == 2: a_coins = 0
