@@ -1,7 +1,7 @@
 # components/passive/ayothaya_tribe.py
 class AyothayaTribe:
     def __init__(self):
-        self.tribe_name = "ayothaya"
+        self.tribe_name = "the chaos mankind"
         self.piece_passives = {
             "pawn":   {"starting_points": 5, "coin_tosses": 4, "max_points": 14, "description": "Brave Soldier: Strong base power and determination."},
             "knight": {"starting_points": 5, "coin_tosses": 4, "max_points": 20, "description": "Atamat Corps: Agile with high impact power."},

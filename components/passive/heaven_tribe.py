@@ -1,7 +1,7 @@
 # components/passive/heaven_tribe.py
 class HeavenTribe:
     def __init__(self):
-        self.tribe_name = "heaven"
+        self.tribe_name = "the ancient runes"
         self.piece_passives = {
             "pawn":   {"starting_points": 3, "coin_tosses": 6, "max_points": 6, "description": "Messenger: Relies on faith for coin tosses."},
             "knight": {"starting_points": 1, "coin_tosses": 8, "max_points": 12, "description": "Heavenly Guardian: Highly variable fate (6 tosses)."},

@@ -1,7 +1,7 @@
 # components/passive/medieval_tribe.py
 class MedievalTribe:
     def __init__(self):
-        self.tribe_name = "medieval"
+        self.tribe_name = "the knight company"
         self.piece_passives = {
             "pawn":   {"starting_points": 2, "coin_tosses": 1, "max_points": 12, "description": "Apprentice Knight: Stable base power."},
             "knight": {"starting_points": 1, "coin_tosses": 2, "max_points": 12, "description": "Cavalry Knight: Fast and balanced movement."},

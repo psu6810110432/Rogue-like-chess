@@ -7,10 +7,11 @@ from .ayothaya_tribe import AyothayaTribe
 class PassiveManager:
     # Pre-loading instances to avoid re-creation
     _instances = {
-        'medieval': MedievalTribe(),
-        'demon': DemonTribe(),
-        'heaven': HeavenTribe(),
-        'ayothaya': AyothayaTribe()
+        'the knight company': MedievalTribe(),
+        'the deep anomaly': DemonTribe(),
+        'the ancient runes': HeavenTribe(),
+        'the chaos mankind': AyothayaTribe(),
+        'bandit': AyothayaTribe() # ใช้ระบบทอยแบบ ayothaya ไปก่อน
     }
     
     @classmethod
