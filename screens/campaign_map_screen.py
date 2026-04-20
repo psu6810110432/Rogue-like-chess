@@ -14,6 +14,8 @@ from kivy.metrics import dp
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.modalview import ModalView
+from kivy.uix.spinner import Spinner
 from logic.pieces import Pawn, Knight, Bishop, Rook, Queen, King
 from logic.pieces import Princess, Menatarm, Praetorian, Royalguard, Hastati, Levies
 from components.hidden_passive import HiddenPassive
@@ -55,6 +57,9 @@ def generate_piece(piece_name, faction, app):
     if not hasattr(p, 'hidden_passive') or p.hidden_passive is None:
         p.hidden_passive = HiddenPassive()
         p.base_points, p.coins = p.hidden_passive.apply_passive(p.base_points, p.coins)
+    
+    p.base_atk = getattr(p, 'base_atk', p.base_points)
+    p.base_def = getattr(p, 'base_def', p.base_points)
     return p
 
 def clone_piece(p, faction, app):
@@ -67,6 +72,11 @@ def clone_piece(p, faction, app):
     new_p.coins = p.coins
     new_p.item = getattr(p, 'item', None)
     new_p.hidden_passive = getattr(p, 'hidden_passive', None)
+    new_p.second_hidden_passive = getattr(p, 'second_hidden_passive', None)
+    new_p.base_atk = getattr(p, 'base_atk', p.base_points)
+    new_p.base_def = getattr(p, 'base_def', p.base_points)
+    new_p.upgrade_level = getattr(p, 'upgrade_level', 0)
+    new_p.upgrade_path = getattr(p, 'upgrade_path', 'standard')
     return new_p
 
 def ensure_header(army_list, faction, app):
@@ -75,6 +85,207 @@ def ensure_header(army_list, faction, app):
         commander = generate_piece('king', faction, app)
         commander.name = "Garrison Commander"
         army_list.append(commander)
+
+# ----------------- ระบบ Upgrade Tree UI -----------------
+class TechCard(ButtonBehavior, BoxLayout):
+    def __init__(self, title, desc, atk, def_pt, coins, img_path, is_unlocked, is_available, on_click_cb, **kwargs):
+        super().__init__(orientation='vertical', padding=dp(5), spacing=dp(2), size_hint=(None, None), size=(dp(120), dp(160)), **kwargs)
+        self.is_unlocked = is_unlocked
+        self.is_available = is_available
+        self.on_click_cb = on_click_cb
+        
+        with self.canvas.before:
+            Color(0.15, 0.15, 0.2, 0.9)
+            self.bg = RoundedRectangle(radius=[dp(8)])
+            
+            if is_unlocked:
+                Color(0.9, 0.8, 0.2, 1) 
+                width = 2
+            elif is_available:
+                Color(0.4, 0.8, 0.4, 1) 
+                width = 1.5
+            else:
+                Color(0.3, 0.3, 0.35, 1) 
+                width = 1
+                
+            self.border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, dp(8)], width=width)
+            
+        self.bind(pos=self._update_bg, size=self._update_bg)
+
+        self.add_widget(Label(text=f"[b]{title}[/b]", markup=True, font_size='13sp', size_hint_y=0.15))
+        
+        img = Image(source=img_path, allow_stretch=True, keep_ratio=True, size_hint_y=0.4)
+        if not is_unlocked and not is_available: img.opacity = 0.4
+        self.add_widget(img)
+        
+        stats_color = "aaaaaa" if not is_unlocked and not is_available else "ffffff"
+        self.add_widget(Label(text=f"[color={stats_color}]ATK: {atk} | DEF: {def_pt}\nCoins: {coins}[/color]", markup=True, font_size='11sp', size_hint_y=0.25, halign='center'))
+        self.add_widget(Label(text=f"[color=00ffcc]{desc}[/color]", markup=True, font_size='10sp', size_hint_y=0.2, halign='center'))
+
+    def _update_bg(self, instance, value):
+        self.bg.pos, self.bg.size = instance.pos, instance.size
+        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(8)]
+
+    def on_release(self):
+        if self.is_available and self.on_click_cb:
+            self.on_click_cb()
+
+class UpgradeTreePopup(ModalView):
+    def __init__(self, piece_obj, update_callback, **kwargs):
+        super().__init__(size_hint=(0.85, 0.85), background_color=(0, 0, 0, 0.8), auto_dismiss=False, **kwargs)
+        self.piece = piece_obj
+        self.update_callback = update_callback
+        
+        self.root_layout = FloatLayout()
+        with self.root_layout.canvas.before:
+            Color(0.08, 0.08, 0.1, 0.95)
+            self.bg = RoundedRectangle(radius=[dp(15)])
+            Color(0.83, 0.68, 0.21, 1)
+            self.border_line = Line(rounded_rectangle=[self.root_layout.x, self.root_layout.y, self.root_layout.width, self.root_layout.height, dp(15)], width=2)
+        self.root_layout.bind(pos=self._update_bg, size=self._update_bg)
+
+        # Header
+        header = BoxLayout(orientation='horizontal', size_hint=(1, 0.1), pos_hint={'top': 1}, padding=[dp(15), dp(5)])
+        p_name = getattr(self.piece, 'name', self.piece.__class__.__name__.capitalize())
+        header.add_widget(Label(text=f"[b]UPGRADE PATH: {p_name}[/b]", markup=True, font_size='20sp', halign='left', color=(1, 0.8, 0.2, 1)))
+        
+        close_btn = Button(text="CLOSE", size_hint_x=None, width=dp(80), background_color=(0.8, 0.2, 0.2, 1))
+        close_btn.bind(on_release=self.dismiss)
+        header.add_widget(close_btn)
+        self.root_layout.add_widget(header)
+
+        # Tree Container
+        self.tree_layout = FloatLayout(size_hint=(1, 0.9), pos_hint={'y': 0})
+        self.root_layout.add_widget(self.tree_layout)
+        
+        self.bind(size=self.draw_tree)
+        Clock.schedule_once(lambda dt: self.draw_tree(), 0.1)
+        self.add_widget(self.root_layout)
+
+    def _update_bg(self, instance, value):
+        self.bg.pos, self.bg.size = instance.pos, instance.size
+        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(15)]
+
+    def draw_tree(self, *args):
+        self.tree_layout.clear_widgets()
+        self.tree_layout.canvas.before.clear()
+        
+        p = self.piece
+        c_name = p.__class__.__name__.lower()
+        tribe = getattr(p, 'tribe', 'the knight company')
+        color = p.color
+        
+        lvl = getattr(p, 'upgrade_level', 0)
+        path = getattr(p, 'upgrade_path', 'standard')
+        
+        if c_name in ['pawn', 'hastati', 'levies']: filename = f"{c_name}{getattr(p, 'variant', 1)}.png"
+        else: filename = f"{c_name}.png"
+        if getattr(p, 'name', '') == 'Prince': filename = 'prince.png'
+            
+        base_img = f"assets/pieces/{tribe}/{color}/1base/{filename}"
+        atk1_img = f"assets/pieces/{tribe}/{color}/2upATK/{filename}"
+        def2_img = f"assets/pieces/{tribe}/{color}/3upDEF/{filename}"
+        
+        has_special = c_name in ['praetorian', 'menatarm']
+        spec1_img = f"assets/pieces/{tribe}/{color}/4up_rehidden/{filename}" if has_special else None
+        spec2_img = f"assets/pieces/{tribe}/{color}/5up_reroll_ATK_DEF/{filename}" if has_special else None
+
+        def draw_line(p1, p2, is_active):
+            with self.tree_layout.canvas.before:
+                Color(0.9, 0.8, 0.2, 1) if is_active else Color(0.4, 0.4, 0.4, 1)
+                Line(points=[p1[0], p1[1], p2[0], p2[1]], width=2 if is_active else 1.5)
+
+        cx = self.width / 2 if self.width > 1 else dp(400)
+        cy = self.height / 2 if self.height > 1 else dp(300)
+        card_w, card_h = dp(120), dp(160)
+        
+        y_top = cy + dp(120)
+        y_mid = cy - dp(40)
+        y_bot = cy - dp(200)
+
+        b_atk = getattr(p, 'base_atk', p.base_points) if lvl == 0 else p.base_points
+        b_def = getattr(p, 'base_def', p.base_points) if lvl == 0 else p.base_points
+        
+        node_base = TechCard("Base Form", "Default Stats", b_atk, b_def, p.coins, base_img, (lvl == 0), False, None)
+        node_base.pos = (cx - card_w/2, y_top - card_h/2)
+        self.tree_layout.add_widget(node_base)
+
+        if not has_special:
+            n1_unlocked = (lvl >= 1)
+            n1_avail = (lvl == 0)
+            n1_atk = b_atk + 2
+            node_u1 = TechCard("Rank I", "+2 Base ATK", n1_atk, b_def, p.coins, atk1_img, n1_unlocked, n1_avail, lambda: self.do_upgrade("standard"))
+            node_u1.pos = (cx - card_w/2, y_mid - card_h/2)
+            self.tree_layout.add_widget(node_u1)
+            
+            n2_unlocked = (lvl == 2)
+            n2_avail = (lvl == 1)
+            n2_def = b_def + 2
+            node_u2 = TechCard("Rank II", "+2 Base DEF", n1_atk, n2_def, p.coins, def2_img, n2_unlocked, n2_avail, lambda: self.do_upgrade("standard"))
+            node_u2.pos = (cx - card_w/2, y_bot - card_h/2)
+            self.tree_layout.add_widget(node_u2)
+            
+            Clock.schedule_once(lambda dt: draw_line((node_base.center_x, node_base.y), (node_u1.center_x, node_u1.top), n1_unlocked), 0.1)
+            Clock.schedule_once(lambda dt: draw_line((node_u1.center_x, node_u1.y), (node_u2.center_x, node_u2.top), n2_unlocked), 0.1)
+            
+        else:
+            lx = cx - dp(100)
+            rx = cx + dp(100)
+            
+            n1_std_unlocked = (lvl >= 1 and path == "standard")
+            n1_std_avail = (lvl == 0)
+            node_u1_std = TechCard("Rank I (Combat)", "+2 Base ATK", b_atk+2, b_def, p.coins, atk1_img, n1_std_unlocked, n1_std_avail, lambda: self.do_upgrade("standard"))
+            node_u1_std.pos = (lx - card_w/2, y_mid - card_h/2)
+            self.tree_layout.add_widget(node_u1_std)
+            
+            n2_std_unlocked = (lvl == 2 and path == "standard")
+            n2_std_avail = (lvl == 1 and path == "standard")
+            node_u2_std = TechCard("Rank II (Combat)", "+2 Base DEF", b_atk+2, b_def+2, p.coins, def2_img, n2_std_unlocked, n2_std_avail, lambda: self.do_upgrade("standard"))
+            node_u2_std.pos = (lx - card_w/2, y_bot - card_h/2)
+            self.tree_layout.add_widget(node_u2_std)
+            
+            Clock.schedule_once(lambda dt: draw_line((node_base.center_x, node_base.y), (node_u1_std.center_x, node_u1_std.top), n1_std_unlocked), 0.1)
+            Clock.schedule_once(lambda dt: draw_line((node_u1_std.center_x, node_u1_std.y), (node_u2_std.center_x, node_u2_std.top), n2_std_unlocked), 0.1)
+
+            n1_spc_unlocked = (lvl >= 1 and path == "special")
+            n1_spc_avail = (lvl == 0)
+            desc1 = "Reroll Hidden Passive" if not n1_spc_unlocked else getattr(p.hidden_passive, 'description', 'Passive Re-rolled')
+            n1_spc_atk = b_atk if not n1_spc_unlocked else p.base_atk
+            n1_spc_def = b_def if not n1_spc_unlocked else p.base_def
+            
+            node_u1_spc = TechCard("Rank I (Utility)", desc1, n1_spc_atk, n1_spc_def, p.coins, spec1_img, n1_spc_unlocked, n1_spc_avail, lambda: self.do_upgrade("special"))
+            node_u1_spc.pos = (rx - card_w/2, y_mid - card_h/2)
+            self.tree_layout.add_widget(node_u1_spc)
+            
+            n2_spc_unlocked = (lvl == 2 and path == "special")
+            n2_spc_avail = (lvl == 1 and path == "special")
+            desc2 = "Gain 2nd Hidden Passive" if not n2_spc_unlocked else getattr(p.second_hidden_passive, 'description', '2nd Passive Active')
+            
+            node_u2_spc = TechCard("Rank II (Utility)", desc2, p.base_atk, p.base_def, p.coins, spec2_img, n2_spc_unlocked, n2_spc_avail, lambda: self.do_upgrade("special"))
+            node_u2_spc.pos = (rx - card_w/2, y_bot - card_h/2)
+            self.tree_layout.add_widget(node_u2_spc)
+            
+            Clock.schedule_once(lambda dt: draw_line((node_base.center_x, node_base.y), (node_u1_spc.center_x, node_u1_spc.top), n1_spc_unlocked), 0.1)
+            Clock.schedule_once(lambda dt: draw_line((node_u1_spc.center_x, node_u1_spc.y), (node_u2_spc.center_x, node_u2_spc.top), n2_spc_unlocked), 0.1)
+
+    def do_upgrade(self, path):
+        app = App.get_running_app()
+        app.play_click_sound()
+        
+        cost = 3 if getattr(self.piece, 'upgrade_level', 0) == 0 else 5
+        faction = app.current_map_turn
+        
+        if app.tax_points.get(faction, 0) < cost:
+            return
+            
+        app.tax_points[faction] -= cost
+        
+        if hasattr(self.piece, 'upgrade_piece'):
+            self.piece.upgrade_piece(path)
+            
+        self.draw_tree()
+        if self.update_callback:
+            self.update_callback()
 
 # ----------------- UI การ์ดทหารสไตล์ Total War -----------------
 class PieceCard(ButtonBehavior, FloatLayout):
@@ -94,7 +305,14 @@ class PieceCard(ButtonBehavior, FloatLayout):
         tribe = getattr(piece_obj, 'tribe', 'the knight company')
         color = piece_obj.color
         
-        # ✨ อัปเดต Path เป็นโฟลเดอร์แบบใหม่ (/1base/)
+        lvl = getattr(piece_obj, 'upgrade_level', 0)
+        path = getattr(piece_obj, 'upgrade_path', 'standard')
+        
+        stage_folder = "1base"
+        if lvl > 0:
+            if path == 'standard': stage_folder = "2upATK" if lvl == 1 else "3upDEF"
+            elif path == 'special': stage_folder = "4up_rehidden" if lvl == 1 else "5up_reroll_ATK_DEF"
+            
         if p_name in ['pawn', 'hastati', 'levies']:
             num = getattr(piece_obj, 'variant', 1)
             filename = f"{p_name}{num}.png"
@@ -103,11 +321,13 @@ class PieceCard(ButtonBehavior, FloatLayout):
             
         if getattr(piece_obj, 'name', '') == 'Prince': filename = 'prince.png'
         
-        img_path = f"assets/pieces/{tribe}/{color}/1base/{filename}"
+        img_path = f"assets/pieces/{tribe}/{color}/{stage_folder}/{filename}"
         
         self.add_widget(Image(source=img_path, size_hint=(0.7, 0.6), pos_hint={'center_x': 0.5, 'top': 0.9}))
         display_name = getattr(piece_obj, 'name', p_name.capitalize())
-        self.add_widget(Label(text=f"[b]{display_name}[/b]", markup=True, font_size='13sp', pos_hint={'center_x': 0.5, 'y': 0.15}, size_hint=(1, 0.2)))
+        
+        lvl_str = f" [color=ffff00]+{lvl}[/color]" if lvl > 0 else ""
+        self.add_widget(Label(text=f"[b]{display_name}{lvl_str}[/b]", markup=True, font_size='13sp', pos_hint={'center_x': 0.5, 'y': 0.15}, size_hint=(1, 0.2)))
         
         hp = getattr(piece_obj, 'hidden_passive', None)
         passive_text = hp.description if hp and hp.passive_type else "No Passive"
@@ -122,6 +342,7 @@ class PieceCard(ButtonBehavior, FloatLayout):
 
     def on_release(self):
         App.get_running_app().play_click_sound()
+        # เปลี่ยนสถานะแค่กรอบเพื่อทำการเลือก unit
         self.is_selected = not self.is_selected
         self.border_color.rgba = (1, 0.8, 0, 1) if self.is_selected else (0.3, 0.3, 0.35, 1)
         self.border_line.width = 2.5 if self.is_selected else 1.5
@@ -149,7 +370,6 @@ class RecruitCard(ButtonBehavior, FloatLayout):
         }
         tribe = theme_map.get(theme, theme.lower())
         
-        # ✨ อัปเดต Path เป็นโฟลเดอร์แบบใหม่ (/1base/)
         if piece_name in ['pawn', 'hastati', 'levies']:
             filename = f"{piece_name}1.png"
         else:
@@ -211,16 +431,18 @@ class CampaignArmyPanel(FloatLayout):
         self.content_scroll.add_widget(self.content_grid)
         self.add_widget(self.content_scroll)
 
+        # ✨ แก้ไข Action Box แบบเรียบง่าย ไม่มีปุ่ม Return มีแค่ March กับ Upgrade
         self.action_box = BoxLayout(orientation='vertical', size_hint=(0.25, 0.7), pos_hint={'right': 0.98, 'y': 0.05}, spacing=dp(5))
-        self.btn_action = Button(text="[b]MARCH / ATTACK[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1))
-        self.btn_action.bind(on_release=self.execute_action)
-        self.btn_return = Button(text="[b]RETURN BASE[/b]", markup=True, background_color=(0.2, 0.4, 0.8, 1))
-        self.btn_return.bind(on_release=self.return_to_base)
         
+        self.btn_action = Button(text="[b]MARCH / ATTACK[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1), size_hint_y=0.5)
+        self.btn_action.bind(on_release=self.execute_action)
         self.action_box.add_widget(self.btn_action)
-        self.action_box.add_widget(self.btn_return)
+        
+        self.btn_upgrade = Button(text="[b]UPGRADE[/b]", markup=True, background_color=(0.6, 0.2, 0.8, 1), size_hint_y=0.5)
+        self.btn_upgrade.bind(on_release=self.execute_upgrade)
+        self.action_box.add_widget(self.btn_upgrade)
+        
         self.add_widget(self.action_box)
-
         self.piece_cards = []
 
     def _update_bg(self, instance, value):
@@ -243,6 +465,22 @@ class CampaignArmyPanel(FloatLayout):
         self.app.play_click_sound()
         Animation(pos_hint={'y': -0.5}, duration=0.2).start(self)
 
+    def execute_upgrade(self, instance):
+        self.app.play_click_sound()
+        selected_cards = [card for card in self.piece_cards if card.is_selected]
+        
+        if not selected_cards:
+            self.map_screen.status_lbl.text = "[color=ffff00]SELECT A UNIT FIRST TO UPGRADE![/color]"
+            return
+            
+        target_card = selected_cards[0] # เปิดอัปเกรดตัวแรกที่ถูกเลือก
+        def on_upgraded():
+            self.switch_tab('army') # รีเฟรช UI หลังอัปเกรดเสร็จ
+            
+        pop = UpgradeTreePopup(target_card.piece_obj, on_upgraded)
+        pop.bind(on_open=lambda instance: setattr(pop, 'width', self.map_screen.width * 0.85))
+        pop.open()
+
     def switch_tab(self, tab_name):
         self.app.play_click_sound()
         self.current_tab = tab_name
@@ -262,31 +500,34 @@ class CampaignArmyPanel(FloatLayout):
             lylt = getattr(self.current_node, 'loyalty', 100)
             color_lylt = '00ff00' if lylt > 60 else ('ffcc00' if lylt > 20 else 'ff0000')
             
-            # ✨ นำค่า Fatigue มาแสดงผล
             fatigue = self.app.army_fatigue.get(self.current_node.faction, 0)
             fatigue_color = '00ff00' if fatigue == 0 else ('ffaa00' if fatigue < 3 else 'ff0000')
             self.status_lbl.text = f"Loyalty: [color={color_lylt}]{lylt}%[/color] | Cap: [b]{total}/{max_cap}[/b] | Fatigue: [color={fatigue_color}]{fatigue}/4[/color]"
             
             self.btn_action.text = "[b]MARCH / ATTACK[/b]"
             self.btn_action.background_color = (0.8, 0.2, 0.2, 1)
+            self.btn_action.opacity = 1
+            self.btn_action.disabled = False
             
-            self.btn_return.opacity = 1
-            self.btn_return.disabled = False
+            self.btn_upgrade.opacity = 1
+            self.btn_upgrade.disabled = False
             
             for p in self.current_node.army_pieces:
-                card = PieceCard(p)
+                card = PieceCard(p) 
                 self.piece_cards.append(card)
                 self.content_grid.add_widget(card)
         else:
             self.btn_tab_army.background_color = (0.2, 0.2, 0.2, 1)
             self.btn_tab_recruit.background_color = (0.3, 0.8, 0.3, 1)
-            self.status_lbl.text = f"Tax: [color=00ff00]{self.app.tax_points[self.current_node.faction]}[/color] | Cap: {total}/{max_cap}"
+            self.status_lbl.text = f"Tax: [color=00ff00]{self.app.tax_points.get(self.current_node.faction, 0)}[/color] | Cap: {total}/{max_cap}"
             
             self.btn_action.text = "[b]QUICK RECRUIT\n(7 TAX)[/b]"
             self.btn_action.background_color = (0.8, 0.6, 0.1, 1)
+            self.btn_action.opacity = 1
+            self.btn_action.disabled = False
             
-            self.btn_return.opacity = 0
-            self.btn_return.disabled = True
+            self.btn_upgrade.opacity = 0
+            self.btn_upgrade.disabled = True
             
             can_heavy = (self.current_node.node_type == 'castle')
             units_to_sell = [
@@ -320,7 +561,6 @@ class CampaignArmyPanel(FloatLayout):
     def execute_action(self, instance):
         self.app.play_click_sound()
         if self.current_tab == 'army':
-            # ✨ เช็ค Fatigue ถ้ามากกว่าหรือเท่ากับ 3 จะเดินทัพไม่ได้
             fatigue = self.app.army_fatigue.get(self.current_node.faction, 0)
             if fatigue >= 3:
                 self.map_screen.status_lbl.text = "[color=ff0000]ARMY IS TOO EXHAUSTED (FATIGUE LEVEL 3+)! MUST REST.[/color]"
@@ -356,29 +596,6 @@ class CampaignArmyPanel(FloatLayout):
                     
                 self.current_node.army_pieces.append(generate_piece(actual_p, self.current_node.faction, self.app))
             self.switch_tab('recruit')
-
-    def return_to_base(self, instance):
-        self.app.play_click_sound()
-        if self.current_tab != 'army' or self.current_node.is_main_base: return
-        
-        selected_pieces = [card.piece_obj for card in self.piece_cards if card.is_selected]
-        if len(selected_pieces) == 0:
-            selected_pieces = self.current_node.army_pieces.copy()
-            
-        if len(selected_pieces) == 0: return
-        
-        main_base = None
-        for n in self.map_screen.nodes_list:
-            if n.faction == self.current_node.faction and n.is_main_base:
-                main_base = n
-                break
-                
-        if main_base:
-            for p in selected_pieces:
-                self.current_node.army_pieces.remove(p)
-                main_base.army_pieces.append(p)
-            self.close_panel()
-            self.map_screen.status_lbl.text = f"[color=00ff00]ARMY RETURNED TO CAPITAL ({main_base.node_id})![/color]"
 
 # ----------------- คลาส MapNode -----------------
 class MapNode(Button):
@@ -459,11 +676,8 @@ class MapNode(Button):
                         map_screen.status_lbl.text = "[color=ff0000]MERGE FAILED: CAPACITY LIMIT EXCEEDED![/color]"
                         map_screen.marching_from_node.army_pieces.extend(app.combat_marching_army)
                 else:
-                    # ✨ เช็คการเข้าโจมตี เพิ่ม Fatigue ตาม node_type
                     fatigue_cost = 2 if self.node_type == 'castle' else 1
                     current_fatigue = app.army_fatigue.get(map_screen.marching_from_node.faction, 0)
-                    
-                    # เพิ่ม Fatigue (สูงสุดคือ 4)
                     app.army_fatigue[map_screen.marching_from_node.faction] = min(4, current_fatigue + fatigue_cost)
                     
                     map_screen.initiate_combat(map_screen.marching_from_node, self)
@@ -553,7 +767,7 @@ class CampaignMapScreen(Screen):
             app.turn_number = 1
             app.tax_points = {'white': 0, 'black': 0}
             app.prince_rewards = {'white': 0, 'black': 0} 
-            app.army_fatigue = {'white': 0, 'black': 0} # ✨ สร้างตัวแปรเก็บ Fatigue
+            app.army_fatigue = {'white': 0, 'black': 0} 
             self.marching_from_node = None
             Clock.schedule_once(lambda dt: self.generate_procedural_map(), 0.1)
             app.campaign_initialized = True
@@ -633,7 +847,6 @@ class CampaignMapScreen(Screen):
             self.status_lbl.text = f"DIVINE ORDER (WHITE) - TURN {app.turn_number}"
             self.status_lbl.color = (1, 0.8, 0.2, 1)
             
-        # ✨ ล้างค่า Fatigue เมื่อเข้าเทิร์นใหม่ (-3 หน่วย แต่ไม่ต่ำกว่า 0)
         current_fatigue = app.army_fatigue.get(app.current_map_turn, 0)
         app.army_fatigue[app.current_map_turn] = max(0, current_fatigue - 3)
         

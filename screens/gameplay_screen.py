@@ -361,12 +361,19 @@ class GameplayScreen(Screen):
         
         tf = getattr(piece, 'tribe', 'the knight company')
         
-        # ตอนนี้ยังไม่มีระบบเปลี่ยนร่างอัปเกรด ให้ใช้โฟลเดอร์ 1base เป็นค่าเริ่มต้น
+        # ✨ เปลี่ยนโฟลเดอร์ตามระดับการอัปเกรด
         stage_folder = "1base"
+        lvl = getattr(piece, 'upgrade_level', 0)
+        path = getattr(piece, 'upgrade_path', 'standard')
         
-        # ดึงหมายเลข variant สำหรับหมากที่มีหลายหน้าตา
+        if lvl > 0:
+            if path == 'standard':
+                stage_folder = "2upATK" if lvl == 1 else "3upDEF"
+            elif path == 'special':
+                stage_folder = "4up_rehidden" if lvl == 1 else "5up_reroll_ATK_DEF"
+        
         if p_n in ['pawn', 'hastati', 'levies']:
-            num = getattr(piece, 'variant', 1) # ถ้าไม่มีตัวแปร variant จะใช้รูป 1
+            num = getattr(piece, 'variant', 1) 
             filename = f"{p_n}{num}.png"
         else:
             filename = f"{p_n}.png"
@@ -640,7 +647,13 @@ class GameplayScreen(Screen):
         App.get_running_app().play_coin_sound()
         atk_tribe = getattr(attacker, 'tribe', self.get_tribe_name(attacker.color))
         def_tribe = getattr(defender, 'tribe', self.get_tribe_name(defender.color))
-        self.crash_popup = CrashOverlay(attacker, defender, start, end, atk_tribe, def_tribe, self.get_piece_image_path, self.execute_board_move, self.cancel_crash)
+        
+        # ✨ ส่ง game_mode เข้าไปด้วย
+        self.crash_popup = CrashOverlay(
+            attacker, defender, start, end, atk_tribe, def_tribe, 
+            self.get_piece_image_path, self.execute_board_move, self.cancel_crash, 
+            game_mode=getattr(self, 'game_mode', 'PVP')
+        )
         self.info_zone.add_widget(self.crash_popup)
         
     def cancel_crash(self): self.info_zone.clear_widgets(); self.crash_popup = None; self.refresh_ui()

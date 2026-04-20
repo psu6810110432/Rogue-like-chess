@@ -11,7 +11,8 @@ from kivy.app import App
 from kivy.core.audio import SoundLoader
 
 class CrashOverlay(BoxLayout):
-    def __init__(self, attacker, defender, start_pos, end_pos, a_faction, d_faction, get_img_path_func, on_finish, on_cancel, **kwargs):
+    # ✨ เพิ่มพารามิเตอร์ game_mode และกำหนดค่าเริ่มต้นเป็น 'PVP'
+    def __init__(self, attacker, defender, start_pos, end_pos, a_faction, d_faction, get_img_path_func, on_finish, on_cancel, game_mode="PVP", **kwargs):
         kwargs.setdefault('size_hint', (1, 1))
         super().__init__(orientation='vertical', padding=5, spacing=5, **kwargs)
         
@@ -21,6 +22,7 @@ class CrashOverlay(BoxLayout):
         self.get_img_path_func = get_img_path_func
         self.on_finish = on_finish
         self.on_cancel = on_cancel
+        self.game_mode = game_mode # ✨ เก็บค่าโหมดเกมไว้ใช้ต่อ
         self.crash_stagger_count = 0
         
         with self.canvas.before:
@@ -29,11 +31,7 @@ class CrashOverlay(BoxLayout):
         self.bind(pos=self._update_bg, size=self._update_bg)
         self._setup_ui()
 
-        app = App.get_running_app()
-        screen = app.root.get_screen('gameplay') if app.root and app.root.has_screen('gameplay') else None
-        game_mode = getattr(screen, 'game_mode', 'PVP') if screen else 'PVP'
-        
-        if game_mode == 'PVE' and getattr(self.attacker, 'color', '') == 'black':
+        if self.game_mode == 'PVE' and getattr(self.attacker, 'color', '') == 'black':
             self.crash_btn.disabled = True
             self.crash_btn.text = "AI ATTACKING..."
             Clock.schedule_once(self.start_crash_animation, 1.2)
@@ -45,6 +43,18 @@ class CrashOverlay(BoxLayout):
         self.add_widget(Label(text="CRASH!", bold=True, font_size='28sp', color=(1, 0.2, 0.2, 1), size_hint_y=0.12))
         vs_box = BoxLayout(orientation='horizontal', size_hint_y=0.58)
         
+        # ✨ กำหนดค่าเริ่มต้นและข้อความตามโหมดเกม
+        if self.game_mode == "Divide_Conquer":
+            a_base = getattr(self.attacker, 'base_atk', getattr(self.attacker, 'base_points', 5))
+            d_base = getattr(self.defender, 'base_def', getattr(self.defender, 'base_points', 5))
+            a_text = f"ATK: {a_base}"
+            d_text = f"DEF: {d_base}"
+        else:
+            a_base = getattr(self.attacker, 'base_points', 5)
+            d_base = getattr(self.defender, 'base_points', 5)
+            a_text = f"PTS: {a_base}"
+            d_text = f"PTS: {d_base}"
+
         # ATK
         atk = BoxLayout(orientation='vertical', padding=5, spacing=2)
         atk.add_widget(Image(source=self.get_img_path_func(self.attacker), size_hint_y=0.45, allow_stretch=True, keep_ratio=True))
@@ -52,7 +62,8 @@ class CrashOverlay(BoxLayout):
         atk.add_widget(Label(text=atk_name, bold=True, font_size='13sp', color=(1, 0.85, 0.4, 1), size_hint_y=0.08))
         self.a_coins_layout = GridLayout(cols=3, spacing=2, size_hint_y=0.22)
         atk.add_widget(self.a_coins_layout)
-        self.a_val_lbl = Label(text=f"ATK: {getattr(self.attacker, 'base_points', 5)}", bold=True, size_hint_y=0.25)
+        # ✨ ใช้ข้อความที่กำหนดไว้ด้านบน
+        self.a_val_lbl = Label(text=a_text, bold=True, size_hint_y=0.25)
         atk.add_widget(self.a_val_lbl)
         vs_box.add_widget(atk)
         
@@ -65,7 +76,8 @@ class CrashOverlay(BoxLayout):
         dfn.add_widget(Label(text=def_name, bold=True, font_size='13sp', color=(1, 0.85, 0.4, 1), size_hint_y=0.08))
         self.d_coins_layout = GridLayout(cols=3, spacing=2, size_hint_y=0.22)
         dfn.add_widget(self.d_coins_layout)
-        self.d_val_lbl = Label(text=f"DEF: {getattr(self.defender, 'base_points', 5)}", bold=True, size_hint_y=0.25)
+        # ✨ ใช้ข้อความที่กำหนดไว้ด้านบน
+        self.d_val_lbl = Label(text=d_text, bold=True, size_hint_y=0.25)
         dfn.add_widget(self.d_val_lbl)
         vs_box.add_widget(dfn)
         
@@ -81,9 +93,15 @@ class CrashOverlay(BoxLayout):
             self.on_finish(self.start_pos, self.end_pos, "blocked")
             return 
 
-        a_base = getattr(self.attacker, 'base_points', 5)
+        # ✨ ดึงค่าตามโหมดเกม สำหรับการคำนวณคะแนน
+        if self.game_mode == "Divide_Conquer":
+            a_base = getattr(self.attacker, 'base_atk', getattr(self.attacker, 'base_points', 5))
+            d_base = getattr(self.defender, 'base_def', getattr(self.defender, 'base_points', 5))
+        else:
+            a_base = getattr(self.attacker, 'base_points', 5)
+            d_base = getattr(self.defender, 'base_points', 5)
+
         a_coins = getattr(self.attacker, 'coins', 3)
-        d_base = getattr(self.defender, 'base_points', 5)
         d_coins = getattr(self.defender, 'coins', 3)
 
         if getattr(self.defender, 'item', None) and self.defender.item.id == 8: a_coins = max(0, a_coins - 1)
@@ -119,7 +137,6 @@ class CrashOverlay(BoxLayout):
             if "Blue" in res_str: return 3
             if "Red" in res_str: return 2
             if "Yellow" in res_str: return 1
-            # ✨ เปลี่ยนเช็คชื่อเผ่าเป็น the deep anomaly
             if "Tails" in res_str and faction == "the deep anomaly": return -3
             return 0
 
@@ -138,7 +155,6 @@ class CrashOverlay(BoxLayout):
         mapping = {"Green": "coin9", "Cyan": "coin8", "Purple": "coin7", "Orange": "coin6", "Blue": "coin5", "Red": "coin4", "Yellow": "coin3"}
         for key, val in mapping.items():
             if key in res_str: return f"assets/coin/{val}.png"
-        # ✨ เปลี่ยนชื่อเผ่า
         if "Tails" in res_str: return "assets/coin/coin1.png" if faction == "the deep anomaly" else "assets/coin/coin2.png"
         return "assets/coin/coin10.png"
 
@@ -178,14 +194,12 @@ class CrashOverlay(BoxLayout):
 
                 if "Heads" in res[s['coin_idx']]:
                     s[heads_key] += 1
-                    # ✨ เปลี่ยนเผ่าเป็น the ancient runes
                     if fac == "the ancient runes":
                         if s[heads_key] == 3:
                             s[key] += 3
                         elif s[heads_key] == 6: 
                             s[key] += 3
                 
-                # ✨ เปลี่ยนเผ่าเป็น the deep anomaly
                 elif "Tails" in res[s['coin_idx']] and fac == "the deep anomaly":
                     s[demon_key] += 1
                     if s[demon_key] == 2:

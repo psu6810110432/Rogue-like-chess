@@ -98,10 +98,16 @@ def resolve_crash(p1_name, p1_faction, p1_base, p1_coins, p2_name, p2_faction, p
         "winner": winner
     }
 
-def simulate_ai_crash_result(attacker, defender, a_faction, d_faction):
-    a_base = getattr(attacker, 'base_points', 5)
+def simulate_ai_crash_result(attacker, defender, a_faction, d_faction, game_mode="PVP"):
+    # ✨ แยกระบบ ATK และ DEF เฉพาะโหมด Divide_Conquer
+    if game_mode == "Divide_Conquer":
+        a_base = getattr(attacker, 'base_atk', getattr(attacker, 'base_points', 5))
+        d_base = getattr(defender, 'base_def', getattr(defender, 'base_points', 5))
+    else:
+        a_base = getattr(attacker, 'base_points', 5)
+        d_base = getattr(defender, 'base_points', 5)
+        
     a_coins = getattr(attacker, 'coins', 3)
-    d_base = getattr(defender, 'base_points', 5)
     d_coins = getattr(defender, 'coins', 3)
     
     if getattr(defender, 'item', None) and defender.item.id == 4:

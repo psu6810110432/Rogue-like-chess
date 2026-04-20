@@ -7,8 +7,15 @@ class Piece:
     def __init__(self, color, name):
         self.color, self.name, self.item, self.has_moved = color, name, None, False
         self.hidden_passive = HiddenPassive()
+        self.second_hidden_passive = None # ✨ สำหรับอัปเกรดขั้น 2 สายพิเศษ
         self.passive_desc = "" 
         self.tribe = "the knight company" 
+        
+        # ✨ ระบบสถานะใหม่สำหรับโหมด D&C
+        self.base_atk = 0
+        self.base_def = 0
+        self.upgrade_level = 0
+        self.upgrade_path = "standard" # "standard" หรือ "special"
 
     def is_path_clear(self, start, end, board):
         sr, sc, er, ec = start[0], start[1], end[0], end[1]
@@ -23,8 +30,7 @@ class Piece:
         return True
 
     def setup_stats(self, piece_type, tribe):
-        if not tribe:
-            tribe = 'the knight company'
+        if not tribe: tribe = 'the knight company'
         self.tribe = tribe 
         
         passive = PassiveManager.get_passive_handler(piece_type, tribe)
@@ -35,6 +41,39 @@ class Piece:
             self.passive_desc = stats['desc']
         else:
             self.base_points, self.coins, self.max_stats, self.passive_desc = 5, 3, 12, ""
+            
+        # ✨ กำหนดค่าเริ่มต้นให้ ATK และ DEF เท่ากับคะแนนพื้นฐาน
+        self.base_atk = self.base_points
+        self.base_def = self.base_points
+
+    def upgrade_piece(self, path="standard"):
+        if self.upgrade_level >= 2: return False
+        
+        self.upgrade_path = path
+        p_name = self.__class__.__name__.lower()
+        
+        if path == "standard":
+            if self.upgrade_level == 0:
+                self.base_atk += 2 # อัปเกรดขั้น 1 เพิ่ม ATK
+                self.upgrade_level = 1
+            elif self.upgrade_level == 1:
+                self.base_def += 2 # อัปเกรดขั้น 2 เพิ่ม DEF
+                self.upgrade_level = 2
+                
+        elif path == "special" and p_name in ['praetorian', 'menatarm']:
+            if self.upgrade_level == 0:
+                self.hidden_passive = HiddenPassive() # ขั้น 1: สุ่มสกิลแฝงใหม่
+                # นำโบนัสเก่าออกและคำนวณใหม่
+                base, coins = self.hidden_passive.apply_passive(5, 3) 
+                self.base_points, self.base_atk, self.base_def, self.coins = base, base, base, coins
+                self.upgrade_level = 1
+            elif self.upgrade_level == 1:
+                self.second_hidden_passive = HiddenPassive() # ขั้น 2: ได้สกิลแฝงที่สอง
+                # คำนวณโบนัสทบเข้าไปอีก
+                base, coins = self.second_hidden_passive.apply_passive(self.base_points, self.coins)
+                self.base_points, self.base_atk, self.base_def, self.coins = base, base, base, coins
+                self.upgrade_level = 2
+        return True
 
     def check_knight_move(self, s, e):
         rd, cd = abs(s[0]-e[0]), abs(s[1]-e[1])
