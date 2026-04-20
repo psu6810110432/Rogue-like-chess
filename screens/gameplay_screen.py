@@ -499,51 +499,76 @@ class GameplayScreen(Screen):
     def trigger_ai_move(self, dt):
         if self.game.game_result: return
         
-        inv = getattr(self.game, 'inventory_black', [])
-        if inv:
-            import random; from logic.ai_logic import ChessAI
-            difficulty = getattr(App.get_running_app(), 'ai_difficulty', 'normal')
-            use_chance = 0.6 if difficulty == 'hard' else 0.4 if difficulty == 'normal' else 0.25
+        # ดึงระดับความยาก
+        difficulty = getattr(App.get_running_app(), 'ai_difficulty', 'normal')
+        
+        # ✨แยกลอจิก AI ตามโหมดเกม
+        if getattr(self, 'game_mode', 'PVP') == 'Divide_Conquer':
+            # === AI โหมด Divide & Conquer ===
+            from logic.dac_ai import DACBot
             
-            if len(inv) >= 5 or random.random() < use_chance:
-                item_to_use = random.choice(inv)
-                valid_pieces = [p for row in self.game.board for p in row if p and p.color == 'black' and getattr(p, 'item', None) is None]
-                if valid_pieces:
-                    candidates = []
-                    item_id = item_to_use.id
-                    if item_id == 10: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() == 'pawn']
-                    elif item_id == 9: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() != 'knight']
-                    elif item_id in [1, 2, 4, 8]: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() in ['king', 'queen', 'rook']]
-                    elif item_id in [5, 7]: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() in ['pawn', 'knight']]
-                    else: candidates = [p for p in valid_pieces if p.__class__.__name__.lower() not in ['king']]
+            # 1. ให้ DACBot ตัดสินใจเรื่องไอเทม
+            target_piece, item_to_use = DACBot.decide_item_usage(self.game, 'black', difficulty)
+            if target_piece and item_to_use:
+                target_piece.item = item_to_use
+                if item_to_use.id == 6: 
+                    target_piece.coins += 1
+                    target_piece.base_points = max(0, target_piece.base_points - 1)
+                elif item_to_use.id == 10 and target_piece.__class__.__name__.lower() == 'pawn': 
+                    target_piece.base_points = 5
+                    target_piece.coins = 3
                     
-                    if not candidates: candidates = valid_pieces
+                self.game.inventory_black.remove(item_to_use)
+                App.get_running_app().play_click_sound()
+                self.init_board_ui()
+                self.update_inventory_ui()
 
-                    if candidates:
-                        if difficulty == 'easy': chosen_piece = random.choice(candidates)
-                        elif difficulty == 'normal':
-                            candidates.sort(key=lambda p: ChessAI.get_piece_value(p), reverse=True)
-                            chosen_piece = random.choice(candidates[:3])
-                        else:
-                            candidates.sort(key=lambda p: ChessAI.get_piece_value(p), reverse=True)
-                            chosen_piece = random.choice(candidates[:2])
-                        
+            # 2. ให้ DACBot คำนวณการเดิน
+            move = DACBot.get_best_move(self.game, 'black')
+            
+        else:
+            # === AI โหมด Classic (PVE) ปกติ ===
+            from logic.ai_logic import ChessAI
+            
+            # โลจิกไอเทมของบอทโหมดปกติ (คล้ายๆ กัน แต่เก็บไว้เผื่อปรับแยก)
+            inv = getattr(self.game, 'inventory_black', [])
+            if inv:
+                import random
+                use_chance = 0.6 if difficulty == 'hard' else 0.4 if difficulty == 'normal' else 0.25
+                if len(inv) >= 5 or random.random() < use_chance:
+                    item_to_use = random.choice(inv)
+                    valid_pieces = [p for row in self.game.board for p in row if p and p.color == 'black' and getattr(p, 'item', None) is None]
+                    if valid_pieces:
+                        chosen_piece = random.choice(valid_pieces) # สุ่มง่ายๆ ไปก่อนสำหรับโหมดธรรมดา
                         chosen_piece.item = item_to_use
-                        if item_to_use.id == 6: chosen_piece.coins += 1; chosen_piece.base_points = max(0, chosen_piece.base_points - 1)
-                        elif item_to_use.id == 10 and chosen_piece.__class__.__name__.lower() == 'pawn': chosen_piece.base_points = 5; chosen_piece.coins = 3
+                        if item_to_use.id == 6: 
+                            chosen_piece.coins += 1; chosen_piece.base_points = max(0, chosen_piece.base_points - 1)
+                        elif item_to_use.id == 10 and chosen_piece.__class__.__name__.lower() == 'pawn': 
+                            chosen_piece.base_points, chosen_piece.coins = 5, 3
                             
                         inv.remove(item_to_use)
-                        App.get_running_app().play_click_sound(); self.init_board_ui(); self.update_inventory_ui()
+                        App.get_running_app().play_click_sound()
+                        self.init_board_ui()
+                        self.update_inventory_ui()
 
-        from logic.ai_logic import ChessAI
-        move = ChessAI.get_best_move(self.game, ai_color='black')
+            # การเดินโหมดปกติ
+            move = ChessAI.get_best_move(self.game, ai_color='black')
+
+        # === รันผลลัพธ์การเดิน (เหมือนกันทั้งสองโหมด) ===
         if move:
-            (sr, sc), (er, ec) = move; res = self.game.move_piece(sr, sc, er, ec)
+            (sr, sc), (er, ec) = move
+            res = self.game.move_piece(sr, sc, er, ec)
+            
             if isinstance(res, tuple) and res[0] == "crash":
                 atk, df = res[1], res[2]
                 if not atk or not df: return
                 if getattr(df, 'item', None) and df.item.id == 4:
-                    df.item = None; atk.has_moved = True; self.game.history.save_state(self.game, "Shield Blocked!"); self.game.complete_turn(); self.init_board_ui(); return 
+                    df.item = None
+                    atk.has_moved = True
+                    self.game.history.save_state(self.game, "Shield Blocked!")
+                    self.game.complete_turn()
+                    self.init_board_ui()
+                    return 
                 self.show_crash_overlay(atk, df, (sr, sc), (er, ec))
                 return
                 
@@ -551,10 +576,12 @@ class GameplayScreen(Screen):
                 from logic.pieces import Queen
                 self.game.promote_pawn(er, ec, Queen)
                 
-            if res in [True, "promote", "died"]: App.get_running_app().play_move_sound()
+            if res in [True, "promote", "died"]: 
+                App.get_running_app().play_move_sound()
             self.init_board_ui()
 
-        self.ai_event = None; self.check_ai_turn()
+        self.ai_event = None
+        self.check_ai_turn()
 
     def on_quit(self): 
         App.get_running_app().play_click_sound()
