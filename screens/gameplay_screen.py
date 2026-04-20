@@ -440,8 +440,16 @@ class GameplayScreen(Screen):
 
             if res == "promote":
                 self.hide_piece_status(); promoted_pawn = self.game.board[r][c] 
+                
+                # ✨ ค้นหาว่ามีเจ้าชาย (Prince) ในกระดานสีนี้หรือไม่
+                is_prince = any(
+                    getattr(p, 'name', '') == 'Prince' 
+                    for row in self.game.board for p in row 
+                    if p and p.color == promoted_pawn.color
+                )
+
                 def do_p(cls): self.game.promote_pawn(r, c, cls); pop.dismiss(); self.init_board_ui(); self.check_ai_turn()
-                pop = PromotionPopup(promoted_pawn.color, getattr(promoted_pawn, 'tribe', self.get_tribe_name(promoted_pawn.color)), do_p)
+                pop = PromotionPopup(promoted_pawn.color, getattr(promoted_pawn, 'tribe', self.get_tribe_name(promoted_pawn.color)), do_p, is_prince=is_prince)
                 pop.open()
             elif res in [True, "died"]: self.selected = None; self.hide_piece_status(); self.init_board_ui(); self.check_ai_turn()
             else: self.selected = None; self.hide_piece_status(); self.refresh_ui()
@@ -465,13 +473,23 @@ class GameplayScreen(Screen):
         if res == "promote":
             pcolor = self.game.board[end_pos[0]][end_pos[1]].color
             ptribe = getattr(self.game.board[end_pos[0]][end_pos[1]], 'tribe', self.get_tribe_name(pcolor))
+            
+            # ✨ ค้นหาว่ามีเจ้าชาย (Prince) ในกระดานสีนี้หรือไม่
+            is_prince = any(
+                getattr(p, 'name', '') == 'Prince' 
+                for row in self.game.board for p in row 
+                if p and p.color == pcolor
+            )
+
             if getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer'] and pcolor == 'black':
-                from logic.pieces import Queen
-                self.game.promote_pawn(end_pos[0], end_pos[1], Queen)
+                from logic.pieces import Queen, Princess
+                # บอทอัปเกรดอัตโนมัติเป็น Princess ถ้าหัวหน้าคือ Prince, ถ้าไม่ใช่ให้เป็น Queen
+                self.game.promote_pawn(end_pos[0], end_pos[1], Princess if is_prince else Queen)
                 self.init_board_ui(); self.check_ai_turn()
             else:
                 def do_p(cls): self.game.promote_pawn(end_pos[0], end_pos[1], cls); pop.dismiss(); self.init_board_ui(); self.check_ai_turn()
-                pop = PromotionPopup(pcolor, ptribe, do_p); pop.open()
+                pop = PromotionPopup(pcolor, ptribe, do_p, is_prince=is_prince)
+                pop.open()
         elif res in [True, "died", "survived", "defender_survived"]: self.selected = None; self.init_board_ui(); self.check_ai_turn()
         else: self.selected = None; self.refresh_ui(); self.check_ai_turn()
 

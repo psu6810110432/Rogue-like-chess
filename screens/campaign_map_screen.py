@@ -108,7 +108,7 @@ class TechCard(ButtonBehavior, BoxLayout):
                 Color(0.3, 0.3, 0.35, 1) 
                 width = 1
                 
-            self.border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, dp(8)], width=width)
+            self.border_line = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(8)), width=width)
             
         self.bind(pos=self._update_bg, size=self._update_bg)
 
@@ -124,7 +124,7 @@ class TechCard(ButtonBehavior, BoxLayout):
 
     def _update_bg(self, instance, value):
         self.bg.pos, self.bg.size = instance.pos, instance.size
-        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(8)]
+        self.border_line.rounded_rectangle = (instance.x, instance.y, instance.width, instance.height, dp(8))
 
     def on_release(self):
         if self.is_available and self.on_click_cb:
@@ -141,10 +141,9 @@ class UpgradeTreePopup(ModalView):
             Color(0.08, 0.08, 0.1, 0.95)
             self.bg = RoundedRectangle(radius=[dp(15)])
             Color(0.83, 0.68, 0.21, 1)
-            self.border_line = Line(rounded_rectangle=[self.root_layout.x, self.root_layout.y, self.root_layout.width, self.root_layout.height, dp(15)], width=2)
+            self.border_line = Line(rounded_rectangle=(self.root_layout.x, self.root_layout.y, self.root_layout.width, self.root_layout.height, dp(15)), width=2)
         self.root_layout.bind(pos=self._update_bg, size=self._update_bg)
 
-        # Header
         header = BoxLayout(orientation='horizontal', size_hint=(1, 0.1), pos_hint={'top': 1}, padding=[dp(15), dp(5)])
         p_name = getattr(self.piece, 'name', self.piece.__class__.__name__.capitalize())
         header.add_widget(Label(text=f"[b]UPGRADE PATH: {p_name}[/b]", markup=True, font_size='20sp', halign='left', color=(1, 0.8, 0.2, 1)))
@@ -154,17 +153,16 @@ class UpgradeTreePopup(ModalView):
         header.add_widget(close_btn)
         self.root_layout.add_widget(header)
 
-        # Tree Container
         self.tree_layout = FloatLayout(size_hint=(1, 0.9), pos_hint={'y': 0})
         self.root_layout.add_widget(self.tree_layout)
         
-        self.bind(size=self.draw_tree)
+        self.bind(size=self.draw_tree) 
         Clock.schedule_once(lambda dt: self.draw_tree(), 0.1)
         self.add_widget(self.root_layout)
 
     def _update_bg(self, instance, value):
         self.bg.pos, self.bg.size = instance.pos, instance.size
-        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(15)]
+        self.border_line.rounded_rectangle = (instance.x, instance.y, instance.width, instance.height, dp(15))
 
     def draw_tree(self, *args):
         self.tree_layout.clear_widgets()
@@ -289,16 +287,17 @@ class UpgradeTreePopup(ModalView):
 
 # ----------------- UI การ์ดทหารสไตล์ Total War -----------------
 class PieceCard(ButtonBehavior, FloatLayout):
-    def __init__(self, piece_obj, **kwargs):
+    def __init__(self, piece_obj, map_screen_ref=None, **kwargs):
         super().__init__(size_hint=(None, 1), width=dp(110), **kwargs)
         self.piece_obj = piece_obj
         self.is_selected = False
+        self.map_screen_ref = map_screen_ref 
         
         with self.canvas.before:
             Color(0.12, 0.12, 0.15, 0.95)
             self.bg = RoundedRectangle(radius=[dp(8)])
             self.border_color = Color(0.3, 0.3, 0.35, 1)
-            self.border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, dp(8)], width=1.5)
+            self.border_line = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(8)), width=1.5)
         self.bind(pos=self._update_bg, size=self._update_bg)
 
         p_name = piece_obj.__class__.__name__.lower()
@@ -338,26 +337,36 @@ class PieceCard(ButtonBehavior, FloatLayout):
 
     def _update_bg(self, instance, value):
         self.bg.pos, self.bg.size = instance.pos, instance.size
-        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(8)]
+        self.border_line.rounded_rectangle = (instance.x, instance.y, instance.width, instance.height, dp(8))
 
     def on_release(self):
         App.get_running_app().play_click_sound()
-        # เปลี่ยนสถานะแค่กรอบเพื่อทำการเลือก unit
-        self.is_selected = not self.is_selected
-        self.border_color.rgba = (1, 0.8, 0, 1) if self.is_selected else (0.3, 0.3, 0.35, 1)
-        self.border_line.width = 2.5 if self.is_selected else 1.5
+        
+        # ✨ ถ้าอยู่ในโหมดอัปเกรด ให้เปิด Popup เลย
+        if self.map_screen_ref and getattr(self.map_screen_ref.army_panel, 'is_upgrade_mode', False):
+            def on_upgraded():
+                self.map_screen_ref.army_panel.switch_tab('army') 
+            pop = UpgradeTreePopup(self.piece_obj, on_upgraded)
+            pop.open()
+        else:
+            self.is_selected = not self.is_selected
+            self.border_color.rgba = (1, 0.8, 0, 1) if self.is_selected else (0.3, 0.3, 0.35, 1)
+            self.border_line.width = 2.5 if self.is_selected else 1.5
 
+# ✨ เพิ่มระบบ Locked Status ลงใน RecruitCard
 class RecruitCard(ButtonBehavior, FloatLayout):
-    def __init__(self, piece_name, cost, faction, app, click_cb, **kwargs):
+    def __init__(self, piece_name, cost, faction, app, click_cb, is_locked=False, unlock_cost=0, **kwargs):
         super().__init__(size_hint=(None, 1), width=dp(110), **kwargs)
         self.click_cb = click_cb
         self.piece_name = piece_name
         self.cost = cost
+        self.is_locked = is_locked
+        self.unlock_cost = unlock_cost
         
         with self.canvas.before:
-            Color(0.12, 0.2, 0.12, 0.95)
+            Color(0.25, 0.1, 0.1, 0.95) if is_locked else Color(0.12, 0.2, 0.12, 0.95)
             self.bg = RoundedRectangle(radius=[dp(8)])
-            self.border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, dp(8)], width=1.5)
+            self.border_line = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(8)), width=1.5)
         self.bind(pos=self._update_bg, size=self._update_bg)
 
         theme = getattr(app, f'selected_unit_{faction}', 'Medieval Knights')
@@ -377,16 +386,23 @@ class RecruitCard(ButtonBehavior, FloatLayout):
             
         img_path = f"assets/pieces/{tribe}/{faction}/1base/{filename}"
         
-        self.add_widget(Image(source=img_path, size_hint=(0.7, 0.6), pos_hint={'center_x': 0.5, 'top': 0.9}))
+        img = Image(source=img_path, size_hint=(0.7, 0.6), pos_hint={'center_x': 0.5, 'top': 0.9})
+        if is_locked: img.opacity = 0.3
+        self.add_widget(img)
+        
         self.add_widget(Label(text=f"[b]{piece_name.capitalize()}[/b]", markup=True, font_size='13sp', pos_hint={'center_x': 0.5, 'y': 0.15}, size_hint=(1, 0.2)))
-        self.add_widget(Label(text=f"[size=12sp][color=ffff00]Cost: {cost}[/color][/size]", markup=True, pos_hint={'center_x': 0.5, 'y': 0.05}, size_hint=(1, 0.15)))
+        
+        if is_locked:
+            self.add_widget(Label(text=f"[size=12sp][color=ff5555]Unlock: {unlock_cost}[/color][/size]", markup=True, pos_hint={'center_x': 0.5, 'y': 0.05}, size_hint=(1, 0.15)))
+        else:
+            self.add_widget(Label(text=f"[size=12sp][color=ffff00]Cost: {cost}[/color][/size]", markup=True, pos_hint={'center_x': 0.5, 'y': 0.05}, size_hint=(1, 0.15)))
 
     def _update_bg(self, instance, value):
         self.bg.pos, self.bg.size = instance.pos, instance.size
-        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(8)]
+        self.border_line.rounded_rectangle = (instance.x, instance.y, instance.width, instance.height, dp(8))
 
     def on_release(self):
-        self.click_cb(self.piece_name, self.cost)
+        self.click_cb(self.piece_name, self.cost, self.is_locked, self.unlock_cost)
 
 
 # ----------------- UI แถบซ้ายล่าง (Total War Army Panel) -----------------
@@ -397,12 +413,13 @@ class CampaignArmyPanel(FloatLayout):
         self.app = app
         self.current_node = None
         self.current_tab = 'army'
+        self.is_upgrade_mode = False 
 
         with self.canvas.before:
             Color(0.05, 0.05, 0.08, 0.9)
             self.bg = RoundedRectangle(radius=[dp(12)])
             self.border_color = Color(0.5, 0.5, 0.5, 1)
-            self.border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, dp(12)], width=2)
+            self.border_line = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(12)), width=2)
         self.bind(pos=self._update_bg, size=self._update_bg)
 
         self.header_box = BoxLayout(orientation='horizontal', size_hint=(1, 0.2), pos_hint={'top': 1, 'x': 0}, padding=[dp(10), dp(5)])
@@ -431,28 +448,33 @@ class CampaignArmyPanel(FloatLayout):
         self.content_scroll.add_widget(self.content_grid)
         self.add_widget(self.content_scroll)
 
-        # ✨ แก้ไข Action Box แบบเรียบง่าย ไม่มีปุ่ม Return มีแค่ March กับ Upgrade
         self.action_box = BoxLayout(orientation='vertical', size_hint=(0.25, 0.7), pos_hint={'right': 0.98, 'y': 0.05}, spacing=dp(5))
         
-        self.btn_action = Button(text="[b]MARCH / ATTACK[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1), size_hint_y=0.5)
+        self.btn_action = Button(text="[b]MARCH / ATTACK[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1), size_hint_y=0.6)
         self.btn_action.bind(on_release=self.execute_action)
         self.action_box.add_widget(self.btn_action)
         
-        self.btn_upgrade = Button(text="[b]UPGRADE[/b]", markup=True, background_color=(0.6, 0.2, 0.8, 1), size_hint_y=0.5)
-        self.btn_upgrade.bind(on_release=self.execute_upgrade)
-        self.action_box.add_widget(self.btn_upgrade)
+        # ✨ เพิ่มปุ่ม Upgrade แบบ Toggle
+        self.sub_action_box = BoxLayout(orientation='horizontal', spacing=dp(5), size_hint_y=0.4)
         
+        self.btn_upgrade = Button(text="[b]UPGRADE[/b]", markup=True, background_color=(0.6, 0.2, 0.8, 1))
+        self.btn_upgrade.bind(on_release=self.toggle_upgrade_mode)
+        self.sub_action_box.add_widget(self.btn_upgrade)
+        
+        self.action_box.add_widget(self.sub_action_box)
         self.add_widget(self.action_box)
+
         self.piece_cards = []
 
     def _update_bg(self, instance, value):
         self.bg.pos, self.bg.size = instance.pos, instance.size
-        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(12)]
+        self.border_line.rounded_rectangle = (instance.x, instance.y, instance.width, instance.height, dp(12))
 
     def open_for_node(self, node):
         from kivy.animation import Animation
         self.current_node = node
         self.header_lbl.text = f"{node.faction.upper()} {node.node_type.upper()}"
+        self.is_upgrade_mode = False
         
         if node.faction == 'white': self.border_color.rgba = (0.9, 0.9, 0.9, 1)
         elif node.faction == 'black': self.border_color.rgba = (0.3, 0.3, 0.4, 1)
@@ -465,25 +487,25 @@ class CampaignArmyPanel(FloatLayout):
         self.app.play_click_sound()
         Animation(pos_hint={'y': -0.5}, duration=0.2).start(self)
 
-    def execute_upgrade(self, instance):
+    def toggle_upgrade_mode(self, instance):
         self.app.play_click_sound()
-        selected_cards = [card for card in self.piece_cards if card.is_selected]
+        self.is_upgrade_mode = not self.is_upgrade_mode
         
-        if not selected_cards:
-            self.map_screen.status_lbl.text = "[color=ffff00]SELECT A UNIT FIRST TO UPGRADE![/color]"
-            return
+        if self.is_upgrade_mode:
+            self.btn_upgrade.background_color = (0.8, 0.8, 0.2, 1)
+            self.map_screen.status_lbl.text = f"[color=ffff00]UPGRADE MODE: Tax {self.app.tax_points.get(self.current_node.faction, 0)} | Select a unit to open Tech Tree.[/color]"
             
-        target_card = selected_cards[0] # เปิดอัปเกรดตัวแรกที่ถูกเลือก
-        def on_upgraded():
-            self.switch_tab('army') # รีเฟรช UI หลังอัปเกรดเสร็จ
-            
-        pop = UpgradeTreePopup(target_card.piece_obj, on_upgraded)
-        pop.bind(on_open=lambda instance: setattr(pop, 'width', self.map_screen.width * 0.85))
-        pop.open()
+            for card in self.piece_cards:
+                card.is_selected = False
+                card.border_color.rgba = (0.3, 0.3, 0.35, 1)
+                card.border_line.width = 1.5
+        else:
+            self.switch_tab('army')
 
     def switch_tab(self, tab_name):
         self.app.play_click_sound()
         self.current_tab = tab_name
+        self.is_upgrade_mode = False
         self.content_grid.clear_widgets()
         self.piece_cards.clear()
 
@@ -509,11 +531,12 @@ class CampaignArmyPanel(FloatLayout):
             self.btn_action.opacity = 1
             self.btn_action.disabled = False
             
-            self.btn_upgrade.opacity = 1
+            self.sub_action_box.opacity = 1
             self.btn_upgrade.disabled = False
+            self.btn_upgrade.background_color = (0.6, 0.2, 0.8, 1)
             
             for p in self.current_node.army_pieces:
-                card = PieceCard(p) 
+                card = PieceCard(p, map_screen_ref=self.map_screen) 
                 self.piece_cards.append(card)
                 self.content_grid.add_widget(card)
         else:
@@ -526,23 +549,39 @@ class CampaignArmyPanel(FloatLayout):
             self.btn_action.opacity = 1
             self.btn_action.disabled = False
             
-            self.btn_upgrade.opacity = 0
+            self.sub_action_box.opacity = 0
             self.btn_upgrade.disabled = True
             
+            # ✨ นำ Queen และ Princess ออก และปรับราคาตามที่สั่ง
             can_heavy = (self.current_node.node_type == 'castle')
             units_to_sell = [
-                ('princess', 2), ('menatarm', 2), ('praetorian', 2), ('royalguard', 2),
-                ('queen', 2), ('rook', 2), ('bishop', 2), ('knight', 2), 
-                ('hastati', 1), ('levies', 1), ('pawn', 1)
+                ('praetorian', 7), ('royalguard', 7), ('menatarm', 5),
+                ('knight', 4), ('bishop', 4), ('rook', 4), 
+                ('hastati', 3), ('levies', 2), ('pawn', 2)
             ]
+            unlock_costs = {'praetorian': 14, 'royalguard': 14, 'hastati': 6} # ค่าใช้จ่ายปลดล็อคตั้งต้น (แก้ไขได้)
+            
             for p_name, cost in units_to_sell:
-                if cost == 2 and not can_heavy: continue
-                card = RecruitCard(p_name, cost, self.current_node.faction, self.app, self.buy_piece)
+                if cost > 3 and not can_heavy: continue # เฉพาะปราสาทที่สร้างตัวแพงได้
+                
+                is_locked = p_name not in self.app.unlocked_units.get(self.current_node.faction, set())
+                ucost = unlock_costs.get(p_name, 0)
+                card = RecruitCard(p_name, cost, self.current_node.faction, self.app, self.buy_piece, is_locked=is_locked, unlock_cost=ucost)
                 self.content_grid.add_widget(card)
 
-    def buy_piece(self, piece_name, cost):
+    def buy_piece(self, piece_name, cost, is_locked, unlock_cost):
         self.app.play_click_sound()
-        tax = self.app.tax_points[self.current_node.faction]
+        faction = self.current_node.faction
+        
+        # ✨ ถ้าติดล็อคอยู่ ให้ใช้คำสั่งซื้อเป็นการปลดล็อคแทน
+        if is_locked:
+            if self.app.tax_points.get(faction, 0) >= unlock_cost:
+                self.app.tax_points[faction] -= unlock_cost
+                self.app.unlocked_units[faction].add(piece_name)
+                self.switch_tab('recruit')
+            return
+            
+        tax = self.app.tax_points[faction]
         if tax < cost: return
         
         headers = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince')
@@ -553,8 +592,8 @@ class CampaignArmyPanel(FloatLayout):
         
         if piece_name in ['pawn', 'hastati', 'levies'] and heavies > 9: return 
         
-        self.app.tax_points[self.current_node.faction] -= cost
-        new_p = generate_piece(piece_name, self.current_node.faction, self.app)
+        self.app.tax_points[faction] -= cost
+        new_p = generate_piece(piece_name, faction, self.app)
         self.current_node.army_pieces.append(new_p)
         self.switch_tab('recruit') 
 
@@ -768,6 +807,11 @@ class CampaignMapScreen(Screen):
             app.tax_points = {'white': 0, 'black': 0}
             app.prince_rewards = {'white': 0, 'black': 0} 
             app.army_fatigue = {'white': 0, 'black': 0} 
+            # ✨ สร้าง Set เริ่มต้นสำหรับเก็บยูนิตที่ปลดล็อคแล้ว (ตัวเบสิกจะมีมาให้แต่แรก)
+            app.unlocked_units = {
+                'white': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'},
+                'black': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'}
+            }
             self.marching_from_node = None
             Clock.schedule_once(lambda dt: self.generate_procedural_map(), 0.1)
             app.campaign_initialized = True
