@@ -17,12 +17,7 @@ class FactionCard(BoxLayout):
     def __init__(self, faction_name, **kwargs):
         super().__init__(orientation='vertical', padding=dp(10), spacing=dp(10), **kwargs)
         self.faction_name = faction_name
-        
-        # ✨ FIX: ดักจับถ้าเป็น Medieval Knight ให้ใช้ id เป็น "medieval" เพื่อดึงรูปให้ถูกต้อง
-        if faction_name == "Medieval Knight":
-            self.faction_id = "medieval"
-        else:
-            self.faction_id = faction_name.lower()
+        self.faction_id = faction_name.lower()
         
         with self.canvas.before:
             Color(0.1, 0.1, 0.15, 1)
@@ -61,16 +56,17 @@ class FactionCard(BoxLayout):
         self.border_line.rounded_rectangle = [self.x, self.y, self.width, self.height, dp(10)]
         
     def on_piece_select(self, instance, text):
-        # Map selection to Class and image number
+        # Map selection to Class and filename
         pieces_map = {
-            'King': (King, 1), 'Queen': (Queen, 2), 'Rook': (Rook, 3),
-            'Knight': (Knight, 4), 'Bishop': (Bishop, 5),
-            'Pawn 1': (Pawn, 6), 'Pawn 2': (Pawn, 7), 'Pawn 3': (Pawn, 8), 'Pawn 4': (Pawn, 9)
+            'King': (King, 'king'), 'Queen': (Queen, 'queen'), 'Rook': (Rook, 'rook'),
+            'Knight': (Knight, 'knight'), 'Bishop': (Bishop, 'bishop'),
+            'Pawn 1': (Pawn, 'pawn1'), 'Pawn 2': (Pawn, 'pawn2'), 'Pawn 3': (Pawn, 'pawn3'), 'Pawn 4': (Pawn, 'pawn4')
         }
-        cls, num = pieces_map[text]
+        cls, filename = pieces_map[text]
         dummy = cls('white', self.faction_id) # Instantiate dummy piece to get exact stats
         
-        self.img.source = f"assets/pieces/{self.faction_id}/white/chess {self.faction_id}{num}.png"
+        # ✨ FIX: อัปเดต Path ให้ใช้ระบบใหม่ และชี้ไปที่ /1base/
+        self.img.source = f"assets/pieces/{self.faction_id}/white/1base/{filename}.png"
         self.stats_lbl.text = f"Points: [b][color=ff5555]{dummy.base_points}[/color][/b] | Coins: [b][color=ffff55]{dummy.coins}[/color][/b]"
 
 class CoinChanceBox(BoxLayout):
@@ -157,10 +153,10 @@ class EncyclopediaPopup(ModalView):
         
         # ------------------ SECTION 1: LEGION ------------------
         content.add_widget(self._make_title("1. LEGION FACTIONS"))
-        legion_grid = GridLayout(cols=4, spacing=dp(10), size_hint_y=None, height=dp(240))
+        legion_grid = GridLayout(cols=5, spacing=dp(10), size_hint_y=None, height=dp(240))
         
-        # ✨ FIX: เปลี่ยนการส่งชื่อเป็น Medieval Knight
-        for f in ['Medieval Knight', 'Ayothaya', 'Demon', 'Heaven']:
+        # ✨ FIX: อัปเดตรายชื่อเผ่าให้ตรงกับระบบใหม่ (เพิ่ม Bandit เข้ามาด้วย)
+        for f in ['The Knight Company', 'The Chaos Mankind', 'The Deep Anomaly', 'The Ancient Runes']:
             legion_grid.add_widget(FactionCard(f))
         content.add_widget(legion_grid)
         
@@ -172,10 +168,11 @@ class EncyclopediaPopup(ModalView):
         crash_box = BoxLayout(orientation='vertical', spacing=dp(10), size_hint_y=None)
         crash_box.bind(minimum_height=crash_box.setter('height'))
         
-        crash_box.add_widget(CrashLogicCard("Medieval Knight", [("assets/coin/coin2.png", "50%"), ("assets/coin/coin8.png", "49.995%"), ("assets/coin/coin9.png", "0.005%")]))
-        crash_box.add_widget(CrashLogicCard("Ayothaya", [("assets/coin/coin2.png", "30%"), ("assets/coin/coin3.png", "57.2%"), ("assets/coin/coin4.png", "11.76%"), ("assets/coin/coin5.png", "1.04%")]))
-        crash_box.add_widget(CrashLogicCard("Demon", [("assets/coin/coin1.png", "40%"), ("assets/coin/coin6.png", "57.6%"), ("assets/coin/coin7.png", "2.4%")], special_rule="If Tails (-3) > 1 coin, convert -3 to +3 points."))
-        crash_box.add_widget(CrashLogicCard("Heaven", [("assets/coin/coin2.png", "50%"), ("assets/coin/coin3.png", "50%")], special_rule="If 3 Heads: +3 | 6 Heads: +3 | 9 Heads: +3 points."))
+        # ✨ FIX: อัปเดตชื่อเผ่าในส่วนนี้
+        crash_box.add_widget(CrashLogicCard("The Knight Company", [("assets/coin/coin2.png", "50%"), ("assets/coin/coin8.png", "49.995%"), ("assets/coin/coin9.png", "0.005%")]))
+        crash_box.add_widget(CrashLogicCard("The Chaos Mankind", [("assets/coin/coin2.png", "30%"), ("assets/coin/coin3.png", "57.2%"), ("assets/coin/coin4.png", "11.76%"), ("assets/coin/coin5.png", "1.04%")]))
+        crash_box.add_widget(CrashLogicCard("The Deep Anomaly", [("assets/coin/coin1.png", "40%"), ("assets/coin/coin6.png", "57.6%"), ("assets/coin/coin7.png", "2.4%")], special_rule="If Tails (-3) > 1 coin, convert -3 to +3 points."))
+        crash_box.add_widget(CrashLogicCard("The Ancient Runes", [("assets/coin/coin2.png", "50%"), ("assets/coin/coin3.png", "50%")], special_rule="If 3 Heads: +3 | 6 Heads: +3 | 9 Heads: +3 points."))
         content.add_widget(crash_box)
         
         # ------------------ SECTION 3: ITEMS ------------------

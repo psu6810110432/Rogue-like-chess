@@ -33,12 +33,11 @@ class TutPopup(ModalView):
         
         # แสดงหมากจำลอง (Step 1) พร้อมชื่อ
         if show_pieces:
-            board_sim = GridLayout(cols=3, spacing=2, size_hint_y=None, height=dp(150)) # เพิ่มความสูงเผื่อข้อความ
-            for i, p in enumerate(['pawn', 'rook', 'knight', 'bishop', 'queen', 'king']):
-                num = {'pawn':6, 'rook':3, 'knight':4, 'bishop':5, 'queen':2, 'king':1}[p]
+            board_sim = GridLayout(cols=3, spacing=2, size_hint_y=None, height=dp(150))
+            for i, p in enumerate(['pawn1', 'rook', 'knight', 'bishop', 'queen', 'king']):
+                display_name = 'pawn' if 'pawn' in p else p
                 bg_color = (0.7, 0.6, 0.5, 1) if i % 2 == 0 else (0.4, 0.3, 0.2, 1)
                 
-                # เปลี่ยนให้ cell เรียงเป็นแนวตั้งเพื่อวางรูปแล้วตามด้วยข้อความ
                 cell = BoxLayout(orientation='vertical', padding=5)
                 with cell.canvas.before:
                     Color(*bg_color)
@@ -48,24 +47,27 @@ class TutPopup(ModalView):
                     rect.size = instance.size
                 cell.bind(pos=update_rect, size=update_rect)
                 
-                cell.add_widget(Image(source=f"assets/pieces/medieval/white/chess medieval{num}.png", allow_stretch=True, keep_ratio=True, size_hint_y=0.75))
-                cell.add_widget(Label(text=f"[b]{p.upper()}[/b]", markup=True, font_size='11sp', color=(1, 1, 1, 1), size_hint_y=0.25))
+                # ✨ แก้ไข Path ของหมาก
+                cell.add_widget(Image(source=f"assets/pieces/the knight company/white/1base/{p}.png", allow_stretch=True, keep_ratio=True, size_hint_y=0.75))
+                cell.add_widget(Label(text=f"[b]{display_name.upper()}[/b]", markup=True, font_size='11sp', color=(1, 1, 1, 1), size_hint_y=0.25))
                 board_sim.add_widget(cell)
             content_box.add_widget(board_sim)
             
         if show_kings:
             grid = GridLayout(cols=4, spacing=5, size_hint_y=None, height=dp(100))
-            for f in ['medieval', 'ayothaya', 'demon', 'heaven']:
-                grid.add_widget(Image(source=f"assets/pieces/{f}/white/chess {f}1.png", allow_stretch=True, keep_ratio=True))
+            # ✨ แก้ไขรายชื่อเผ่า
+            for f in ['the knight company', 'the chaos mankind', 'the deep anomaly', 'the ancient runes']:
+                grid.add_widget(Image(source=f"assets/pieces/{f}/white/1base/king.png", allow_stretch=True, keep_ratio=True))
             content_box.add_widget(grid)
 
         # โชว์ภาพ Knight, Bishop, Rook พร้อมชื่อ (Step 5)
         if show_droppers:
-            grid = GridLayout(cols=3, spacing=10, size_hint_y=None, height=dp(100)) # เพิ่มความสูงเผื่อข้อความ
-            droppers = [(4, 'KNIGHT'), (5, 'BISHOP'), (3, 'ROOK')]
-            for num, name in droppers: 
+            grid = GridLayout(cols=3, spacing=10, size_hint_y=None, height=dp(100))
+            droppers = [('knight', 'KNIGHT'), ('bishop', 'BISHOP'), ('rook', 'ROOK')]
+            for filename, name in droppers: 
                 box = BoxLayout(orientation='vertical')
-                box.add_widget(Image(source=f"assets/pieces/medieval/white/chess medieval{num}.png", allow_stretch=True, keep_ratio=True, size_hint_y=0.75))
+                # ✨ แก้ไข Path
+                box.add_widget(Image(source=f"assets/pieces/the knight company/white/1base/{filename}.png", allow_stretch=True, keep_ratio=True, size_hint_y=0.75))
                 box.add_widget(Label(text=f"[b]{name}[/b]", markup=True, font_size='13sp', color=(0.8, 0.8, 0.8, 1), size_hint_y=0.25))
                 grid.add_widget(box)
             content_box.add_widget(grid)
@@ -211,19 +213,17 @@ class TutorialScreen(GameplayScreen):
 
     def set_board(self):
         self.game.board = [[None for _ in range(8)] for _ in range(8)]
-        # Add kings to corners to prevent game over
-        self.game.board[0][0] = self._create_dummy(King, 'white', 'medieval')
-        self.game.board[7][7] = self._create_dummy(King, 'black', 'ayothaya')
+        # ✨ อัปเดตเผ่าเริ่มต้นให้ King
+        self.game.board[0][0] = self._create_dummy(King, 'white', 'the knight company')
+        self.game.board[7][7] = self._create_dummy(King, 'black', 'the chaos mankind')
         
         if hasattr(self, 'board_anchor'): self._keep_grid_square(self.board_anchor, self.board_anchor.size)
         self.refresh_ui()
 
-    # ================== ป้องกันจบเกมใน Tutorial ==================
     def check_winner(self): pass
     def check_game_over(self): pass
     def end_game(self, *args, **kwargs): pass
 
-    # ================== TUTORIAL STEPS ==================
     def run_step1(self):
         txt = ("All pieces move exactly like traditional chess.\n"
                "(Pawns move 2 squares on their first move, then 1 square forward).")
@@ -240,16 +240,18 @@ class TutorialScreen(GameplayScreen):
     def setup_pair1(self):
         self.tut_state = 'pair1'
         self.set_board()
-        self.game.board[5][4] = self._create_dummy(Pawn, 'white', 'medieval')
-        self.game.board[4][3] = self._create_dummy(Pawn, 'black', 'ayothaya')
+        # ✨ อัปเดตชื่อเผ่า
+        self.game.board[5][4] = self._create_dummy(Pawn, 'white', 'the knight company')
+        self.game.board[4][3] = self._create_dummy(Pawn, 'black', 'the chaos mankind')
         self.game.current_turn = 'white'
         self.refresh_ui()
 
     def setup_pair2(self):
         self.tut_state = 'pair2_draw'
         self.set_board()
-        self.game.board[5][4] = self._create_dummy(Pawn, 'white', 'medieval')
-        self.game.board[4][3] = self._create_dummy(Pawn, 'black', 'medieval')
+        # ✨ อัปเดตชื่อเผ่า
+        self.game.board[5][4] = self._create_dummy(Pawn, 'white', 'the knight company')
+        self.game.board[4][3] = self._create_dummy(Pawn, 'black', 'the knight company')
         self.game.current_turn = 'white'
         self.refresh_ui()
 
@@ -270,8 +272,9 @@ class TutorialScreen(GameplayScreen):
     def setup_step5_attack1(self):
         self.tut_state = 'step5_attack1'
         self.set_board()
-        self.game.board[5][4] = self._create_dummy(Knight, 'white', 'medieval')
-        self.game.board[3][5] = self._create_dummy(Pawn, 'black', 'ayothaya')
+        # ✨ อัปเดตชื่อเผ่า
+        self.game.board[5][4] = self._create_dummy(Knight, 'white', 'the knight company')
+        self.game.board[3][5] = self._create_dummy(Pawn, 'black', 'the chaos mankind')
         self.game.current_turn = 'white'
         self.refresh_ui()
 
@@ -280,13 +283,12 @@ class TutorialScreen(GameplayScreen):
         txt = ("You obtained a [color=ff0000]Bloodlust Emblem[/color]!\n"
                "Effect: Gain +5 Base Points upon winning a Crash. (Consumable)\n\n"
                "Please equip it to your Knight by clicking the item in your inventory, then clicking the Knight.")
-        # แสดงรูปไอเทม 3
         self.show_popup("ITEM DROP", txt, item_img="assets/item/item3.png")
 
     def setup_step5_attack2(self):
         self.tut_state = 'step5_attack2'
-        # เสก Pawn ดำมาให้ตีอีกรอบที่เดิม
-        self.game.board[3][5] = self._create_dummy(Pawn, 'black', 'ayothaya')
+        # ✨ อัปเดตชื่อเผ่า
+        self.game.board[3][5] = self._create_dummy(Pawn, 'black', 'the chaos mankind')
         self.refresh_ui()
 
     def run_step6(self):
@@ -305,7 +307,6 @@ class TutorialScreen(GameplayScreen):
         
         self.show_popup("STEP 7: VICTORY & DEFEAT", txt, finish)
 
-    # ================== MOCK CRASH OVERRIDES (ไม่ต้องเดินจริง) ==================
     def show_crash_overlay(self, attacker, defender, start, end):
         App.get_running_app().play_coin_sound()
         atk_img = self.get_piece_image_path(attacker)
@@ -332,7 +333,6 @@ class TutorialScreen(GameplayScreen):
             db, dc, d_s = 5, ['tails'], 5
             res, color, real_status = "BREAKING", (0,1,0,1), 'won'
         elif self.tut_state == 'step5_attack2':
-            # Knight ใส่ item +5
             ab, ac, a_s = 10, ['heads'], 20
             db, dc, d_s = 5, ['tails'], 5
             res, color, real_status = "BREAKING", (0,1,0,1), 'won'
@@ -342,7 +342,6 @@ class TutorialScreen(GameplayScreen):
             res, color, real_status = "DRAW", (1,1,0,1), 'draw'
 
         def on_close():
-            # ❗ เคลียร์การเลือกและไม่ต้องเรียก execute_board_move (ป้องกันบัคการขยับหมาก)
             self.selected = None
             self.valid_moves = []
             self.game.current_turn = 'white' 
@@ -354,7 +353,6 @@ class TutorialScreen(GameplayScreen):
                 elif self.tut_state == 'pair2_distortion':
                     self.show_popup("DISTORTION!", "If you lose again after a Stagger, you suffer DISTORTION. Your piece is destroyed!", self.run_step3)
                 elif self.tut_state == 'step5_attack1':
-                    # เปลี่ยนให้ดึง ITEM_DATABASE[3] 
                     template = ITEM_DATABASE[3]
                     self.game.inventory_white.append(Item(template.id, template.name, template.description, template.image_path))
                     self.update_inventory_ui()
@@ -377,11 +375,9 @@ class TutorialScreen(GameplayScreen):
         self.tut_state = 'pair2_distortion'
         self.show_crash_overlay(self.game.board[5][4], self.game.board[4][3], (5,4), (4,3))
 
-    # ================== LOCK INPUTS ==================
     def on_square_tap(self, instance):
         r, c = instance.row, instance.col
         
-        # ล็อกตำแหน่งการกด (หมากอยู่ที่เดิมเสมอเพราะไม่ได้เรียก execute_board_move)
         if self.tut_state == 'pair1':
             if not ((r==5 and c==4) or (self.selected==(5,4) and r==4 and c==3)): return
         elif self.tut_state in ['pair2_draw', 'pair2_stagger', 'pair2_distortion']:
@@ -389,14 +385,12 @@ class TutorialScreen(GameplayScreen):
         elif self.tut_state == 'step5_attack1':
             if not ((r==5 and c==4) or (self.selected==(5,4) and r==3 and c==5)): return
         elif self.tut_state == 'step5_equip':
-            # Knight อยู่ที่เดิม 5,4 ตลอด
             if not self.selected_item and not (r==5 and c==4): return
         elif self.tut_state == 'step5_attack2':
             if not ((r==5 and c==4) or (self.selected==(5,4) and r==3 and c==5)): return
             
         super().on_square_tap(instance)
         
-        # เช็คการใส่ไอเทม
         if self.tut_state == 'step5_equip' and self.selected_item is None:
             piece = self.game.board[5][4]
             if piece and getattr(piece, 'item', None) is not None:

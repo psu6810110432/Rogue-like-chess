@@ -163,7 +163,7 @@ class SetupSection(BoxLayout):
         self.app.selected_unit_white = ''
         self.app.selected_unit_black = ''
 
-        # ✨ 1. SELECT MATCH TYPE
+        # 1. SELECT MATCH TYPE
         self.type_box = BoxLayout(orientation='vertical', size_hint_y=0.18, spacing=5)
         self.add_header(self.type_box, "1. SELECT MATCH TYPE")
         
@@ -179,7 +179,7 @@ class SetupSection(BoxLayout):
         self.type_box.add_widget(type_grid)
         self.add_widget(self.type_box)
 
-        # ✨ 2. SELECT GAME MODE
+        # 2. SELECT GAME MODE
         self.mode_box = BoxLayout(orientation='vertical', size_hint_y=0.18, spacing=5, opacity=0, disabled=True)
         self.add_header(self.mode_box, "2. SELECT GAME MODE")
         
@@ -199,7 +199,7 @@ class SetupSection(BoxLayout):
         self.mode_box.add_widget(mode_grid)
         self.add_widget(self.mode_box)
 
-        # ✨ 3. SELECT MAP / SIZE (Dynamically changes based on Mode)
+        # 3. SELECT MAP / SIZE (Dynamically changes based on Mode)
         self.map_box = BoxLayout(orientation='vertical', size_hint_y=0.22, spacing=5, opacity=0, disabled=True)
         self.map_header_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(10))
         self.map_box.add_widget(self.map_header_layout)
@@ -208,7 +208,7 @@ class SetupSection(BoxLayout):
         self.map_box.add_widget(self.map_grid)
         self.add_widget(self.map_box)
 
-        # ✨ 4. SELECT FACTIONS
+        # 4. SELECT FACTIONS
         self.fac_box = BoxLayout(orientation='vertical', size_hint_y=0.42, spacing=5, opacity=0, disabled=True)
         self.add_header(self.fac_box, "4. CHOOSE YOUR LEGION", clickable_info=True)
         
@@ -218,7 +218,8 @@ class SetupSection(BoxLayout):
         self.w_box = BoxLayout(orientation='vertical', spacing=8, opacity=0)
         self.w_box.add_widget(Label(text="DIVINE ORDER (WHITE)", font_size='14sp', color=(0.8, 0.8, 0.8, 1), bold=True, size_hint_y=None, height=20))
         self.white_cards = []
-        for f in ['Medieval Knights', 'Ayothaya', 'Demon', 'Heaven']:
+        # ✨ อัปเดตรายชื่อเผ่า และเพิ่ม Bandit
+        for f in ['The Knight Company', 'The Chaos Mankind', 'The Deep Anomaly', 'The Ancient Runes']:
             card = SelectionCard(text=f"[b][size=16sp]{f}[/size][/b]")
             card.val = f
             card.bind(on_press=self.play_sound, on_release=self.on_white_select)
@@ -229,7 +230,8 @@ class SetupSection(BoxLayout):
         self.b_box = BoxLayout(orientation='vertical', spacing=8, opacity=0)
         self.b_box.add_widget(Label(text="DARK ABYSS (BLACK)", font_size='14sp', color=(0.8, 0.8, 0.8, 1), bold=True, size_hint_y=None, height=20))
         self.black_cards = []
-        for f in ['Medieval Knights', 'Ayothaya', 'Demon', 'Heaven']:
+        # ✨ อัปเดตรายชื่อเผ่า และเพิ่ม Bandit
+        for f in ['The Knight Company', 'The Chaos Mankind', 'The Deep Anomaly', 'The Ancient Runes']:
             card = SelectionCard(text=f"[b][size=16sp]{f}[/size][/b]")
             card.val = f
             card.bind(on_press=self.play_sound, on_release=self.on_black_select)
@@ -276,7 +278,6 @@ class SetupSection(BoxLayout):
         for c in self.white_cards: c.set_selected(c.val == self.app.selected_unit_white)
         for c in self.black_cards: c.set_selected(c.val == self.app.selected_unit_black)
 
-    # ✨ จัดการการเลือกแต่ละ Step
     def on_type_select(self, instance):
         self.app.match_type = instance.val
         self.update_selections()
@@ -287,7 +288,6 @@ class SetupSection(BoxLayout):
     def on_mode_select(self, instance):
         self.app.sub_mode = instance.val
         
-        # ปรับเปลี่ยน UI ของกล่อง Map/Size ทันทีที่เปลี่ยนโหมด
         self.load_map_options()
         self.update_selections()
         
@@ -300,7 +300,6 @@ class SetupSection(BoxLayout):
         self.map_cards = []
         
         if self.app.sub_mode == 'Classic':
-            # Header
             lbl = Label(text=f"[color=d4af37][b]3. STRATEGIC BATTLEFIELD[/b][/color]", markup=True, font_size='20sp', halign='left', size_hint_x=None)
             lbl.bind(texture_size=lambda instance, value: setattr(instance, 'width', value[0]))
             self.map_header_layout.add_widget(lbl)
@@ -315,7 +314,6 @@ class SetupSection(BoxLayout):
             icon_container.add_widget(HoverInfoIcon(info_text=tooltip))
             self.map_header_layout.add_widget(icon_container)
             
-            # Buttons
             self.map_grid.cols = 5
             options = ['Classic Board', 'Enchanted Forest', 'Desert Ruins', 'Frozen Tundra', 'Random Board']
             for mp in options:
@@ -327,7 +325,6 @@ class SetupSection(BoxLayout):
                 self.map_grid.add_widget(card)
                 
         else: # Divide & Conquer
-            # Header
             lbl = Label(text=f"[color=d4af37][b]3. SELECT WORLD SIZE[/b][/color]", markup=True, font_size='20sp', halign='left', size_hint_x=None)
             lbl.bind(texture_size=lambda instance, value: setattr(instance, 'width', value[0]))
             self.map_header_layout.add_widget(lbl)
@@ -342,7 +339,6 @@ class SetupSection(BoxLayout):
             icon_container.add_widget(HoverInfoIcon(info_text=tooltip))
             self.map_header_layout.add_widget(icon_container)
             
-            # Buttons
             self.map_grid.cols = 3
             options = [('Size_S', 'SMALL WORLD\n[size=12sp](3 Farming Bases)[/size]'), 
                        ('Size_M', 'MEDIUM WORLD\n[size=12sp](5 Farming Bases)[/size]'), 
