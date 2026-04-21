@@ -7,15 +7,14 @@ class Piece:
     def __init__(self, color, name):
         self.color, self.name, self.item, self.has_moved = color, name, None, False
         self.hidden_passive = HiddenPassive()
-        self.second_hidden_passive = None # ✨ สำหรับอัปเกรดขั้น 2 สายพิเศษ
+        self.second_hidden_passive = None
         self.passive_desc = "" 
         self.tribe = "the knight company" 
         
-        # ✨ ระบบสถานะใหม่สำหรับโหมด D&C
         self.base_atk = 0
         self.base_def = 0
         self.upgrade_level = 0
-        self.upgrade_path = "standard" # "standard" หรือ "special"
+        self.upgrade_path = "standard"
 
     def is_path_clear(self, start, end, board):
         sr, sc, er, ec = start[0], start[1], end[0], end[1]
@@ -33,7 +32,10 @@ class Piece:
         if not tribe: tribe = 'the knight company'
         self.tribe = tribe 
         
-        passive = PassiveManager.get_passive_handler(piece_type, tribe)
+        # สำหรับ Prince ให้ดึงสแตทแบบ King ไปก่อน (ถ้าไม่ได้สร้างสแตทเฉพาะแยกไว้)
+        lookup_type = 'king' if piece_type == 'prince' else piece_type
+        
+        passive = PassiveManager.get_passive_handler(lookup_type, tribe)
         if passive:
             stats = passive['get_piece_stats']()
             self.base_points, self.coins = self.hidden_passive.apply_passive(stats['dice'], stats['coins'])
@@ -42,34 +44,30 @@ class Piece:
         else:
             self.base_points, self.coins, self.max_stats, self.passive_desc = 5, 3, 12, ""
             
-        # ✨ กำหนดค่าเริ่มต้นให้ ATK และ DEF เท่ากับคะแนนพื้นฐาน
         self.base_atk = self.base_points
         self.base_def = self.base_points
 
     def upgrade_piece(self, path="standard"):
         if self.upgrade_level >= 2: return False
-        
         self.upgrade_path = path
         p_name = self.__class__.__name__.lower()
         
         if path == "standard":
             if self.upgrade_level == 0:
-                self.base_atk += 2 # อัปเกรดขั้น 1 เพิ่ม ATK
+                self.base_atk += 2
                 self.upgrade_level = 1
             elif self.upgrade_level == 1:
-                self.base_def += 2 # อัปเกรดขั้น 2 เพิ่ม DEF
+                self.base_def += 2
                 self.upgrade_level = 2
                 
         elif path == "special" and p_name in ['praetorian', 'menatarm']:
             if self.upgrade_level == 0:
-                self.hidden_passive = HiddenPassive() # ขั้น 1: สุ่มสกิลแฝงใหม่
-                # นำโบนัสเก่าออกและคำนวณใหม่
+                self.hidden_passive = HiddenPassive() 
                 base, coins = self.hidden_passive.apply_passive(5, 3) 
                 self.base_points, self.base_atk, self.base_def, self.coins = base, base, base, coins
                 self.upgrade_level = 1
             elif self.upgrade_level == 1:
-                self.second_hidden_passive = HiddenPassive() # ขั้น 2: ได้สกิลแฝงที่สอง
-                # คำนวณโบนัสทบเข้าไปอีก
+                self.second_hidden_passive = HiddenPassive() 
                 base, coins = self.second_hidden_passive.apply_passive(self.base_points, self.coins)
                 self.base_points, self.base_atk, self.base_def, self.coins = base, base, base, coins
                 self.upgrade_level = 2
@@ -137,6 +135,20 @@ class King(Piece):
             return True
         return max(abs(s[0]-e[0]), abs(s[1]-e[1])) == 1
 
+# ✨ เพิ่มคลาส Prince เดิน 1 ช่อง 4 ทิศ
+class Prince(Piece):
+    def __init__(self, color, tribe='the knight company'):
+        super().__init__(color, 'PRC' if color == 'white' else 'prc')
+        self.setup_stats('prince', tribe)
+
+    def is_valid_move(self, s, e, b):
+        if s == e: return False
+        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e):
+            return True
+        rd, cd = abs(s[0]-e[0]), abs(s[1]-e[1])
+        # เดินได้แค่บน ล่าง ซ้าย ขวา 1 ช่อง
+        return (rd == 1 and cd == 0) or (rd == 0 and cd == 1)
+
 class Pawn(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'P' if color == 'white' else 'p')
@@ -163,91 +175,55 @@ class Pawn(Piece):
 
 class Princess(Piece):
     def __init__(self, color, tribe='the knight company'):
-        super().__init__(color, 'PR' if color == 'white' else 'pr')
+        super().__init__(color, 'PRS' if color == 'white' else 'prs')
         self.setup_stats('princess', tribe)
 
-    def get_valid_moves(self, board):
-        moves = []
-        directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
-        for d in directions:
-            for step in range(1, 4): 
-                r = self.row + d[0] * step
-                c = self.col + d[1] * step
-                if 0 <= r < 8 and 0 <= c < 8:
-                    if board[r][c] is None:
-                        moves.append((r, c))
-                    elif board[r][c].color != self.color:
-                        moves.append((r, c))
-                        break
-                    else:
-                        break
-                else:
-                    break
-        return moves
+    def is_valid_move(self, s, e, b):
+        if s == e: return False
+        rd, cd = abs(s[0]-e[0]), abs(s[1]-e[1])
+        if rd > 3 or cd > 3: return False
+        is_straight = (s[0] == e[0] or s[1] == e[1])
+        is_diagonal = (rd == cd)
+        return (is_straight or is_diagonal) and self.is_path_clear(s, e, b)
 
 class Menatarm(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'M' if color == 'white' else 'm')
         self.setup_stats('menatarm', tribe)
 
-    def get_valid_moves(self, board):
-        moves = []
+    def is_valid_move(self, s, e, b):
+        if s == e: return False
         fwd = -1 if self.color == 'white' else 1
-        directions = [(fwd, 0), (fwd, 1), (fwd, -1), (0, 1), (0, -1), (-fwd, 1), (-fwd, -1)]
-        for d in directions:
-            r = self.row + d[0]
-            c = self.col + d[1]
-            if 0 <= r < 8 and 0 <= c < 8:
-                if board[r][c] is None or board[r][c].color != self.color:
-                    moves.append((r, c))
-        return moves
+        rd, cd = e[0] - s[0], e[1] - s[1]
+        if abs(rd) <= 1 and abs(cd) <= 1:
+            if rd == -fwd and cd == 0: return False # ห้ามเดินถอยหลังตรงๆ
+            return True
+        return False
 
 class Praetorian(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'PT' if color == 'white' else 'pt')
         self.setup_stats('praetorian', tribe)
 
-    def get_valid_moves(self, board):
-        moves = []
-        for d in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            for step in range(1, 3):
-                r = self.row + d[0] * step
-                c = self.col + d[1] * step
-                if 0 <= r < 8 and 0 <= c < 8:
-                    if board[r][c] is None:
-                        moves.append((r, c))
-                    else:
-                        if board[r][c].color != self.color:
-                            moves.append((r, c))
-                        break
-        
-        knight_moves = [(-2, -1), (-2, 1), (2, -1), (2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2)]
-        for d in knight_moves:
-            r = self.row + d[0]
-            c = self.col + d[1]
-            if 0 <= r < 8 and 0 <= c < 8:
-                if board[r][c] is None or board[r][c].color != self.color:
-                    moves.append((r, c))
-        return moves
+    def is_valid_move(self, s, e, b):
+        if s == e: return False
+        rd, cd = abs(s[0]-e[0]), abs(s[1]-e[1])
+        if rd == 0 and cd <= 2: return self.is_path_clear(s, e, b)
+        if cd == 0 and rd <= 2: return self.is_path_clear(s, e, b)
+        if self.check_knight_move(s, e): return True
+        return False
 
 class Royalguard(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'RG' if color == 'white' else 'rg')
         self.setup_stats('royalguard', tribe)
 
-    def get_valid_moves(self, board):
-        moves = []
-        directions = [
-            (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1), 
-            (-2, -1), (-2, 1), (2, -1), (2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2)  
-        ]
-        for d in directions:
-            r = self.row + d[0]
-            c = self.col + d[1]
-            if 0 <= r < 8 and 0 <= c < 8:
-                if board[r][c] is None or board[r][c].color != self.color:
-                    moves.append((r, c))
-        return moves
+    def is_valid_move(self, s, e, b):
+        if s == e: return False
+        rd, cd = abs(s[0]-e[0]), abs(s[1]-e[1])
+        if max(rd, cd) == 1: return True
+        if self.check_knight_move(s, e): return True
+        return False
 
 class Hastati(Piece):
     def __init__(self, color, tribe='the knight company'):
@@ -255,21 +231,14 @@ class Hastati(Piece):
         self.setup_stats('hastati', tribe)
         self.variant = random.randint(1, 4)
 
-    def get_valid_moves(self, board):
-        moves = []
+    def is_valid_move(self, s, e, b):
+        if s == e: return False
         fwd = -1 if self.color == 'white' else 1
-        for step in range(1, 4): 
-            r = self.row + fwd * step
-            c = self.col
-            if 0 <= r < 8 and 0 <= c < 8:
-                if board[r][c] is None:
-                    moves.append((r, c))
-                elif board[r][c].color != self.color:
-                    moves.append((r, c))
-                    break
-                else:
-                    break
-        return moves
+        if s[1] != e[1]: return False
+        rd = e[0] - s[0]
+        if (fwd == -1 and -3 <= rd <= -1) or (fwd == 1 and 1 <= rd <= 3):
+            return self.is_path_clear(s, e, b)
+        return False
 
 class Levies(Piece):
     def __init__(self, color, tribe='the knight company'):
@@ -277,15 +246,11 @@ class Levies(Piece):
         self.setup_stats('levies', tribe)
         self.variant = random.randint(1, 4)
 
-    def get_valid_moves(self, board):
-        moves = []
+    def is_valid_move(self, s, e, b):
+        if s == e: return False
         fwd = -1 if self.color == 'white' else 1
-        r = self.row + fwd
-        c = self.col
-        if 0 <= r < 8 and 0 <= c < 8:
-            if board[r][c] is None or board[r][c].color != self.color:
-                moves.append((r, c))
-        return moves
+        if s[1] == e[1] and e[0] - s[0] == fwd: return True
+        return False
 
 class Obstacle(Piece):
     def __init__(self, n, l):

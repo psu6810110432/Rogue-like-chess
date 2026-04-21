@@ -16,7 +16,7 @@ from kivy.clock import Clock
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.modalview import ModalView
 from kivy.uix.spinner import Spinner
-from logic.pieces import Pawn, Knight, Bishop, Rook, Queen, King
+from logic.pieces import Pawn, Knight, Bishop, Rook, Queen, King, Prince
 from logic.pieces import Princess, Menatarm, Praetorian, Royalguard, Hastati, Levies
 from components.hidden_passive import HiddenPassive
 
@@ -46,7 +46,7 @@ def generate_piece(piece_name, faction, app):
     color = faction if faction in ['white', 'black'] else 'black'
     
     classes = {
-        'pawn': Pawn, 'knight': Knight, 'bishop': Bishop, 'rook': Rook, 'queen': Queen, 'king': King, 'prince': King,
+        'pawn': Pawn, 'knight': Knight, 'bishop': Bishop, 'rook': Rook, 'queen': Queen, 'king': King, 'prince': Prince,
         'princess': Princess, 'menatarm': Menatarm, 'praetorian': Praetorian, 'royalguard': Royalguard,
         'hastati': Hastati, 'levies': Levies
     }
@@ -60,6 +60,7 @@ def generate_piece(piece_name, faction, app):
     
     p.base_atk = getattr(p, 'base_atk', p.base_points)
     p.base_def = getattr(p, 'base_def', p.base_points)
+    p.is_header = False 
     return p
 
 def clone_piece(p, faction, app):
@@ -80,11 +81,24 @@ def clone_piece(p, faction, app):
     return new_p
 
 def ensure_header(army_list, faction, app):
-    has_header = any(p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' for p in army_list)
-    if not has_header:
-        commander = generate_piece('king', faction, app)
-        commander.name = "Garrison Commander"
-        army_list.append(commander)
+    has_header = any(p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False) for p in army_list)
+    if not has_header and army_list:
+        army_list[0].is_header = True
+        
+        def king_move(s, e, b, ep=None):
+            if s == e: return False
+            if getattr(army_list[0], 'item', None) and army_list[0].item.id == 9 and army_list[0].check_knight_move(s, e): return True
+            return max(abs(s[0]-e[0]), abs(s[1]-e[1])) == 1
+            
+        army_list[0].is_valid_move = king_move
+        army_list[0].name = f"{army_list[0].__class__.__name__.capitalize()} (Commander)"
+
+def clear_temp_headers(army_list):
+    for p in army_list:
+        if getattr(p, 'is_header', False):
+            p.is_header = False
+            if "(Commander)" in getattr(p, 'name', ''):
+                p.name = p.__class__.__name__.capitalize()
 
 # ----------------- ระบบ Upgrade Tree UI -----------------
 class TechCard(ButtonBehavior, BoxLayout):
@@ -136,6 +150,9 @@ class UpgradeTreePopup(ModalView):
         self.piece = piece_obj
         self.update_callback = update_callback
         
+        p_name = self.piece.__class__.__name__.lower()
+        self.upgrade_cost = {'praetorian': 7, 'royalguard': 7, 'menatarm': 5, 'knight': 4, 'bishop': 4, 'rook': 4, 'hastati': 3, 'levies': 2, 'pawn': 2}.get(p_name, 5)
+        
         self.root_layout = FloatLayout()
         with self.root_layout.canvas.before:
             Color(0.08, 0.08, 0.1, 0.95)
@@ -145,8 +162,8 @@ class UpgradeTreePopup(ModalView):
         self.root_layout.bind(pos=self._update_bg, size=self._update_bg)
 
         header = BoxLayout(orientation='horizontal', size_hint=(1, 0.1), pos_hint={'top': 1}, padding=[dp(15), dp(5)])
-        p_name = getattr(self.piece, 'name', self.piece.__class__.__name__.capitalize())
-        header.add_widget(Label(text=f"[b]UPGRADE PATH: {p_name}[/b]", markup=True, font_size='20sp', halign='left', color=(1, 0.8, 0.2, 1)))
+        p_name_display = getattr(self.piece, 'name', self.piece.__class__.__name__.capitalize())
+        header.add_widget(Label(text=f"[b]UPGRADE PATH: {p_name_display} (Cost: {self.upgrade_cost} Tax)[/b]", markup=True, font_size='20sp', halign='left', color=(1, 0.8, 0.2, 1)))
         
         close_btn = Button(text="CLOSE", size_hint_x=None, width=dp(80), background_color=(0.8, 0.2, 0.2, 1))
         close_btn.bind(on_release=self.dismiss)
@@ -270,13 +287,11 @@ class UpgradeTreePopup(ModalView):
         app = App.get_running_app()
         app.play_click_sound()
         
-        cost = 3 if getattr(self.piece, 'upgrade_level', 0) == 0 else 5
         faction = app.current_map_turn
-        
-        if app.tax_points.get(faction, 0) < cost:
+        if app.tax_points.get(faction, 0) < self.upgrade_cost:
             return
             
-        app.tax_points[faction] -= cost
+        app.tax_points[faction] -= self.upgrade_cost
         
         if hasattr(self.piece, 'upgrade_piece'):
             self.piece.upgrade_piece(path)
@@ -319,11 +334,16 @@ class PieceCard(ButtonBehavior, FloatLayout):
             filename = f"{p_name}.png"
             
         if getattr(piece_obj, 'name', '') == 'Prince': filename = 'prince.png'
+        if getattr(piece_obj, 'is_header', False):
+            with self.canvas.before:
+                Color(1, 0.8, 0, 0.3)
+                Ellipse(pos=(self.center_x - dp(20), self.top - dp(50)), size=(dp(40), dp(40)))
         
         img_path = f"assets/pieces/{tribe}/{color}/{stage_folder}/{filename}"
         
         self.add_widget(Image(source=img_path, size_hint=(0.7, 0.6), pos_hint={'center_x': 0.5, 'top': 0.9}))
         display_name = getattr(piece_obj, 'name', p_name.capitalize())
+        if "(Commander)" in display_name: display_name = display_name.replace(" (Commander)", "")
         
         lvl_str = f" [color=ffff00]+{lvl}[/color]" if lvl > 0 else ""
         self.add_widget(Label(text=f"[b]{display_name}{lvl_str}[/b]", markup=True, font_size='13sp', pos_hint={'center_x': 0.5, 'y': 0.15}, size_hint=(1, 0.2)))
@@ -342,18 +362,17 @@ class PieceCard(ButtonBehavior, FloatLayout):
     def on_release(self):
         App.get_running_app().play_click_sound()
         
-        # ✨ ถ้าอยู่ในโหมดอัปเกรด ให้เปิด Popup เลย
         if self.map_screen_ref and getattr(self.map_screen_ref.army_panel, 'is_upgrade_mode', False):
             def on_upgraded():
                 self.map_screen_ref.army_panel.switch_tab('army') 
             pop = UpgradeTreePopup(self.piece_obj, on_upgraded)
+            pop.bind(on_open=lambda instance: setattr(pop, 'width', self.map_screen_ref.width * 0.85))
             pop.open()
         else:
             self.is_selected = not self.is_selected
             self.border_color.rgba = (1, 0.8, 0, 1) if self.is_selected else (0.3, 0.3, 0.35, 1)
             self.border_line.width = 2.5 if self.is_selected else 1.5
 
-# ✨ เพิ่มระบบ Locked Status ลงใน RecruitCard
 class RecruitCard(ButtonBehavior, FloatLayout):
     def __init__(self, piece_name, cost, faction, app, click_cb, is_locked=False, unlock_cost=0, **kwargs):
         super().__init__(size_hint=(None, 1), width=dp(110), **kwargs)
@@ -448,14 +467,18 @@ class CampaignArmyPanel(FloatLayout):
         self.content_scroll.add_widget(self.content_grid)
         self.add_widget(self.content_scroll)
 
+        # ✨ แก้ไข Action Box
         self.action_box = BoxLayout(orientation='vertical', size_hint=(0.25, 0.7), pos_hint={'right': 0.98, 'y': 0.05}, spacing=dp(5))
         
         self.btn_action = Button(text="[b]MARCH / ATTACK[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1), size_hint_y=0.6)
         self.btn_action.bind(on_release=self.execute_action)
         self.action_box.add_widget(self.btn_action)
         
-        # ✨ เพิ่มปุ่ม Upgrade แบบ Toggle
         self.sub_action_box = BoxLayout(orientation='horizontal', spacing=dp(5), size_hint_y=0.4)
+        
+        self.btn_return = Button(text="[b]RETURN[/b]", markup=True, background_color=(0.2, 0.4, 0.8, 1))
+        self.btn_return.bind(on_release=self.return_to_base)
+        self.sub_action_box.add_widget(self.btn_return)
         
         self.btn_upgrade = Button(text="[b]UPGRADE[/b]", markup=True, background_color=(0.6, 0.2, 0.8, 1))
         self.btn_upgrade.bind(on_release=self.toggle_upgrade_mode)
@@ -463,7 +486,6 @@ class CampaignArmyPanel(FloatLayout):
         
         self.action_box.add_widget(self.sub_action_box)
         self.add_widget(self.action_box)
-
         self.piece_cards = []
 
     def _update_bg(self, instance, value):
@@ -476,6 +498,10 @@ class CampaignArmyPanel(FloatLayout):
         self.header_lbl.text = f"{node.faction.upper()} {node.node_type.upper()}"
         self.is_upgrade_mode = False
         
+        for n in self.map_screen.nodes_list:
+            n.is_selected_node = (n == node)
+            n.update_graphics()
+        
         if node.faction == 'white': self.border_color.rgba = (0.9, 0.9, 0.9, 1)
         elif node.faction == 'black': self.border_color.rgba = (0.3, 0.3, 0.4, 1)
         
@@ -485,6 +511,11 @@ class CampaignArmyPanel(FloatLayout):
     def close_panel(self, *args):
         from kivy.animation import Animation
         self.app.play_click_sound()
+        
+        for n in self.map_screen.nodes_list:
+            n.is_selected_node = False
+            n.update_graphics()
+            
         Animation(pos_hint={'y': -0.5}, duration=0.2).start(self)
 
     def toggle_upgrade_mode(self, instance):
@@ -509,7 +540,7 @@ class CampaignArmyPanel(FloatLayout):
         self.content_grid.clear_widgets()
         self.piece_cards.clear()
 
-        headers = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince')
+        headers = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False))
         heavy_names = ['queen', 'rook', 'bishop', 'knight', 'princess', 'menatarm', 'praetorian', 'royalguard']
         heavies = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() in heavy_names)
         total = len(self.current_node.army_pieces)
@@ -523,15 +554,17 @@ class CampaignArmyPanel(FloatLayout):
             color_lylt = '00ff00' if lylt > 60 else ('ffcc00' if lylt > 20 else 'ff0000')
             
             fatigue = self.app.army_fatigue.get(self.current_node.faction, 0)
-            fatigue_color = '00ff00' if fatigue == 0 else ('ffaa00' if fatigue < 3 else 'ff0000')
-            self.status_lbl.text = f"Loyalty: [color={color_lylt}]{lylt}%[/color] | Cap: [b]{total}/{max_cap}[/b] | Fatigue: [color={fatigue_color}]{fatigue}/4[/color]"
+            fatigue_color = '00ff00' if fatigue == 0 else ('ffaa00' if fatigue < 6 else 'ff0000')
+            self.status_lbl.text = f"Loyalty: [color={color_lylt}]{lylt}%[/color] | Cap: [b]{total}/{max_cap}[/b] | Fatigue: [color={fatigue_color}]{fatigue}/6[/color]"
             
+            # ✨ ทำให้ปุ่มแสดงผลถูกต้อง
             self.btn_action.text = "[b]MARCH / ATTACK[/b]"
             self.btn_action.background_color = (0.8, 0.2, 0.2, 1)
             self.btn_action.opacity = 1
             self.btn_action.disabled = False
             
             self.sub_action_box.opacity = 1
+            self.btn_return.disabled = False
             self.btn_upgrade.disabled = False
             self.btn_upgrade.background_color = (0.6, 0.2, 0.8, 1)
             
@@ -544,25 +577,26 @@ class CampaignArmyPanel(FloatLayout):
             self.btn_tab_recruit.background_color = (0.3, 0.8, 0.3, 1)
             self.status_lbl.text = f"Tax: [color=00ff00]{self.app.tax_points.get(self.current_node.faction, 0)}[/color] | Cap: {total}/{max_cap}"
             
+            # ✨ ทำให้ปุ่มแสดงผลถูกต้อง
             self.btn_action.text = "[b]QUICK RECRUIT\n(7 TAX)[/b]"
             self.btn_action.background_color = (0.8, 0.6, 0.1, 1)
             self.btn_action.opacity = 1
             self.btn_action.disabled = False
             
             self.sub_action_box.opacity = 0
+            self.btn_return.disabled = True
             self.btn_upgrade.disabled = True
             
-            # ✨ นำ Queen และ Princess ออก และปรับราคาตามที่สั่ง
             can_heavy = (self.current_node.node_type == 'castle')
             units_to_sell = [
                 ('praetorian', 7), ('royalguard', 7), ('menatarm', 5),
                 ('knight', 4), ('bishop', 4), ('rook', 4), 
                 ('hastati', 3), ('levies', 2), ('pawn', 2)
             ]
-            unlock_costs = {'praetorian': 14, 'royalguard': 14, 'hastati': 6} # ค่าใช้จ่ายปลดล็อคตั้งต้น (แก้ไขได้)
+            unlock_costs = {'praetorian': 14, 'royalguard': 14, 'hastati': 6}
             
             for p_name, cost in units_to_sell:
-                if cost > 3 and not can_heavy: continue # เฉพาะปราสาทที่สร้างตัวแพงได้
+                if cost > 3 and not can_heavy: continue 
                 
                 is_locked = p_name not in self.app.unlocked_units.get(self.current_node.faction, set())
                 ucost = unlock_costs.get(p_name, 0)
@@ -573,7 +607,6 @@ class CampaignArmyPanel(FloatLayout):
         self.app.play_click_sound()
         faction = self.current_node.faction
         
-        # ✨ ถ้าติดล็อคอยู่ ให้ใช้คำสั่งซื้อเป็นการปลดล็อคแทน
         if is_locked:
             if self.app.tax_points.get(faction, 0) >= unlock_cost:
                 self.app.tax_points[faction] -= unlock_cost
@@ -601,8 +634,8 @@ class CampaignArmyPanel(FloatLayout):
         self.app.play_click_sound()
         if self.current_tab == 'army':
             fatigue = self.app.army_fatigue.get(self.current_node.faction, 0)
-            if fatigue >= 3:
-                self.map_screen.status_lbl.text = "[color=ff0000]ARMY IS TOO EXHAUSTED (FATIGUE LEVEL 3+)! MUST REST.[/color]"
+            if fatigue >= 6:
+                self.map_screen.status_lbl.text = "[color=ff0000]ARMY IS EXHAUSTED (FATIGUE = 6)! MUST REST.[/color]"
                 return
                 
             selected_pieces = [card.piece_obj for card in self.piece_cards if card.is_selected]
@@ -636,6 +669,29 @@ class CampaignArmyPanel(FloatLayout):
                 self.current_node.army_pieces.append(generate_piece(actual_p, self.current_node.faction, self.app))
             self.switch_tab('recruit')
 
+    def return_to_base(self, instance):
+        self.app.play_click_sound()
+        if self.current_tab != 'army' or self.current_node.is_main_base: return
+        
+        selected_pieces = [card.piece_obj for card in self.piece_cards if card.is_selected]
+        if len(selected_pieces) == 0:
+            selected_pieces = self.current_node.army_pieces.copy()
+            
+        if len(selected_pieces) == 0: return
+        
+        main_base = None
+        for n in self.map_screen.nodes_list:
+            if n.faction == self.current_node.faction and n.is_main_base:
+                main_base = n
+                break
+                
+        if main_base:
+            for p in selected_pieces:
+                self.current_node.army_pieces.remove(p)
+                main_base.army_pieces.append(p)
+            self.close_panel()
+            self.map_screen.status_lbl.text = f"[color=00ff00]ARMY RETURNED TO CAPITAL ({main_base.node_id})![/color]"
+
 # ----------------- คลาส MapNode -----------------
 class MapNode(Button):
     def __init__(self, node_type, faction, node_id, is_main_base=False, app=None, **kwargs):
@@ -648,6 +704,7 @@ class MapNode(Button):
         self.size_hint = (None, None)
         self.size = (dp(50), dp(50))
         self.background_color = (0, 0, 0, 0) 
+        self.is_selected_node = False 
         
         self.loyalty = 100 
 
@@ -682,17 +739,23 @@ class MapNode(Button):
                 self.color_inst = Color(0.85, 0.85, 0.85, 1)
                 self.shape = Ellipse(pos=self.pos, size=self.size)
                 
-            if self.faction == 'white': fac_color = (0.9, 0.9, 0.9, 1)
-            elif self.faction == 'black': fac_color = (0.1, 0.1, 0.1, 1)
-            else: fac_color = (0.8, 0.2, 0.2, 1) 
-            
-            Color(*fac_color)
-            self.border_line = Line(circle=(self.center_x, self.center_y, dp(28)), width=3)
+            if self.is_selected_node:
+                Color(0.2, 0.5, 1.0, 1)
+                self.border_line = Line(circle=(self.center_x, self.center_y, dp(32)), width=4)
+            else:
+                if self.faction == 'white': fac_color = (0.9, 0.9, 0.9, 1)
+                elif self.faction == 'black': fac_color = (0.1, 0.1, 0.1, 1)
+                else: fac_color = (0.8, 0.2, 0.2, 1) 
+                
+                Color(*fac_color)
+                self.border_line = Line(circle=(self.center_x, self.center_y, dp(28)), width=3)
 
     def update_canvas(self, *args):
         if hasattr(self, 'shape'):
             self.shape.pos, self.shape.size = self.pos, self.size
-            self.border_line.circle = (self.center_x, self.center_y, dp(28))
+            
+            radius = dp(32) if self.is_selected_node else dp(28)
+            self.border_line.circle = (self.center_x, self.center_y, radius)
             if self.aura: self.aura.pos, self.aura.size = (self.x - dp(10), self.y - dp(10)), (self.width + dp(20), self.height + dp(20))
 
     def on_release(self):
@@ -703,21 +766,24 @@ class MapNode(Button):
         if map_screen.marching_from_node:
             if self in map_screen.marching_from_node.neighbors:
                 if self.faction == map_screen.marching_from_node.faction:
-                    headers = sum(1 for p in self.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince')
-                    m_headers = sum(1 for p in app.combat_marching_army if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince')
+                    headers = sum(1 for p in self.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False))
+                    m_headers = sum(1 for p in app.combat_marching_army if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False))
                     max_cap = 16 if (headers + m_headers) > 0 else 8
                     
                     if len(self.army_pieces) + len(app.combat_marching_army) <= max_cap:
                         self.army_pieces.extend(app.combat_marching_army)
                         app.combat_marching_army = []
                         map_screen.status_lbl.text = "[color=00ff00]ARMY MERGED SUCCESSFUL![/color]"
+                        
+                        current_fatigue = app.army_fatigue.get(map_screen.marching_from_node.faction, 0)
+                        app.army_fatigue[map_screen.marching_from_node.faction] = min(6, current_fatigue + 1)
                     else:
                         map_screen.status_lbl.text = "[color=ff0000]MERGE FAILED: CAPACITY LIMIT EXCEEDED![/color]"
                         map_screen.marching_from_node.army_pieces.extend(app.combat_marching_army)
                 else:
                     fatigue_cost = 2 if self.node_type == 'castle' else 1
                     current_fatigue = app.army_fatigue.get(map_screen.marching_from_node.faction, 0)
-                    app.army_fatigue[map_screen.marching_from_node.faction] = min(4, current_fatigue + fatigue_cost)
+                    app.army_fatigue[map_screen.marching_from_node.faction] = min(6, current_fatigue + fatigue_cost)
                     
                     map_screen.initiate_combat(map_screen.marching_from_node, self)
             else: 
@@ -794,6 +860,43 @@ class CampaignMapScreen(Screen):
             self.scroll_view.scroll_x = x_ratio
             self.scroll_view.scroll_y = y_ratio
 
+    def show_game_over(self, winner_faction, reason="MAIN BASE CAPTURED"):
+        if hasattr(self, 'army_panel'):
+            self.army_panel.close_panel()
+            
+        pop = ModalView(size_hint=(0.6, 0.4), auto_dismiss=False, background_color=(0,0,0,0.8))
+        box = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(15))
+        
+        with box.canvas.before:
+            Color(0.1, 0.1, 0.15, 1)
+            bg_rect = RoundedRectangle(radius=[dp(15)])
+            
+        def update_bg(*args):
+            bg_rect.pos = box.pos
+            bg_rect.size = box.size
+            
+        box.bind(pos=update_bg, size=update_bg)
+                 
+        box.add_widget(Label(text=f"[b][color=ffcc00]{winner_faction.upper()} WINS THE CAMPAIGN![/color][/b]", markup=True, font_size='24sp'))
+        box.add_widget(Label(text=f"REASON: {reason}", font_size='16sp'))
+        
+        btn = Button(text="RETURN TO MENU", size_hint_y=0.4, background_color=(0.8, 0.2, 0.2, 1))
+        btn.bind(on_release=lambda x: (pop.dismiss(), self.go_back(None)))
+        box.add_widget(btn)
+        
+        pop.add_widget(box)
+        pop.open()
+
+    def get_nearest_friendly_base(self, node):
+        best_node, min_d = None, float('inf')
+        for n in self.nodes_list:
+            if n.faction == node.faction and n != node:
+                d = get_distance(n.base_pos, node.base_pos)
+                if d < min_d:
+                    min_d = d
+                    best_node = n
+        return best_node
+
     def on_enter(self):
         app = App.get_running_app()
         
@@ -807,7 +910,6 @@ class CampaignMapScreen(Screen):
             app.tax_points = {'white': 0, 'black': 0}
             app.prince_rewards = {'white': 0, 'black': 0} 
             app.army_fatigue = {'white': 0, 'black': 0} 
-            # ✨ สร้าง Set เริ่มต้นสำหรับเก็บยูนิตที่ปลดล็อคแล้ว (ตัวเบสิกจะมีมาให้แต่แรก)
             app.unlocked_units = {
                 'white': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'},
                 'black': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'}
@@ -825,9 +927,30 @@ class CampaignMapScreen(Screen):
                 
                 clean_atk = [clone_piece(p, src.faction, app) for p in app.survivors_atk]
                 clean_def = [clone_piece(p, tgt.faction, app) for p in app.survivors_def]
+                clear_temp_headers(clean_atk)
+                clear_temp_headers(clean_def)
+                
+                def had_real_king(army): return any(p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' for p in army) and not any(getattr(p, 'is_header', False) for p in army)
+                
+                atk_had_king = had_real_king(app.combat_marching_army)
+                atk_has_king = had_real_king(app.survivors_atk)
+                def_had_king = had_real_king(app.combat_target_army)
+                def_has_king = had_real_king(app.survivors_def)
+
+                if atk_had_king and not atk_has_king and src.faction in ['white', 'black']:
+                    self.show_game_over(winner_faction=tgt.faction, reason="ATTACKING KING KILLED")
+                    return
+                if def_had_king and not def_has_king and tgt.faction in ['white', 'black']:
+                    self.show_game_over(winner_faction=src.faction, reason="DEFENDING KING KILLED")
+                    return
                 
                 if winner == 'attacker':
                     orig_tgt_faction = tgt.faction
+                    
+                    if tgt.is_main_base and tgt.faction in ['white', 'black']:
+                        self.show_game_over(winner_faction=src.faction, reason="MAIN BASE CAPTURED")
+                        return
+
                     tgt.faction = src.faction
                     tgt.army_pieces = clean_atk
                     tgt.loyalty = 100 
@@ -837,13 +960,24 @@ class CampaignMapScreen(Screen):
                         app.prince_rewards[src.faction] += 1
                         
                     self.status_lbl.text = f"[color=00ff00]VICTORY! YOU CAPTURED {tgt.node_id}.[/color]"
+                    
+                    if orig_tgt_faction in ['white', 'black'] and clean_def:
+                        retreat_node = self.get_nearest_friendly_base(tgt)
+                        if retreat_node:
+                            retreat_node.army_pieces.extend(clean_def)
+                            self.status_lbl.text += f" ENEMY RETREATED TO {retreat_node.node_id}."
+                            
                 elif winner == 'defender':
                     tgt.army_pieces = clean_def
-                    src.army_pieces.extend(clean_atk) 
-                    self.status_lbl.text = f"[color=ff0000]DEFEAT! YOUR ARMY RETREATED TO {src.node_id}.[/color]"
+                    if src.faction in ['white', 'black']:
+                        if clean_atk:
+                            src.army_pieces.extend(clean_atk) 
+                            self.status_lbl.text = f"[color=ff0000]DEFEAT! YOUR ARMY RETREATED TO {src.node_id}.[/color]"
+                        else:
+                            self.status_lbl.text = f"[color=ff0000]CRUSHING DEFEAT! ARMY DESTROYED.[/color]"
                 else:
                     tgt.army_pieces = clean_def
-                    src.army_pieces.extend(clean_atk) 
+                    if src.faction in ['white', 'black']: src.army_pieces.extend(clean_atk) 
                     
                 app.battle_finished = False
 
@@ -862,7 +996,6 @@ class CampaignMapScreen(Screen):
         app.combat_target = target_node
         
         target_army = target_node.army_pieces.copy()
-        ensure_header(target_army, target_node.faction, app) 
         
         if target_node.faction == 'red':
             target_count = random.randint(8, 12)
@@ -872,6 +1005,7 @@ class CampaignMapScreen(Screen):
                 p_to_remove = random.choice(removable_pieces)
                 target_army.remove(p_to_remove)
                 
+        ensure_header(target_army, target_node.faction, app) 
         app.combat_target_army = target_army
         ensure_header(app.combat_marching_army, source_node.faction, app)
         
@@ -881,6 +1015,10 @@ class CampaignMapScreen(Screen):
 
     def switch_turn(self):
         app = App.get_running_app()
+        
+        if hasattr(self, 'army_panel'):
+            self.army_panel.close_panel()
+
         if app.current_map_turn == 'white':
             app.current_map_turn = 'black'
             self.status_lbl.text = f"DARK ABYSS (BLACK) - TURN {app.turn_number}"
@@ -922,6 +1060,10 @@ class CampaignMapScreen(Screen):
     def end_turn(self, instance):
         app = App.get_running_app()
         app.play_click_sound()
+        
+        if hasattr(self, 'army_panel'):
+            self.army_panel.close_panel()
+
         if self.marching_from_node:
             self.marching_from_node.army_pieces.extend(app.combat_marching_army)
             self.marching_from_node = None
@@ -933,10 +1075,13 @@ class CampaignMapScreen(Screen):
             if node.faction == app.current_map_turn:
                 tax_collected += 3 if node.node_type == 'village' else 6
                 
-                if len(node.army_pieces) < 3: node.loyalty -= 20
-                else: node.loyalty += 10
-                
-                node.loyalty = max(0, min(100, node.loyalty))
+                if node.is_main_base:
+                    node.loyalty = 100
+                else:
+                    if len(node.army_pieces) < 3: node.loyalty -= 20
+                    else: node.loyalty += 10
+                    node.loyalty = max(0, min(100, node.loyalty))
+                    
                 if node.loyalty == 0:
                     rebellions.append(node)
                 
