@@ -32,20 +32,26 @@ class Piece:
         if not tribe: tribe = 'the knight company'
         self.tribe = tribe 
         
-        # สำหรับ Prince ให้ดึงสแตทแบบ King ไปก่อน (ถ้าไม่ได้สร้างสแตทเฉพาะแยกไว้)
         lookup_type = 'king' if piece_type == 'prince' else piece_type
         
         passive = PassiveManager.get_passive_handler(lookup_type, tribe)
         if passive:
-            stats = passive['get_piece_stats']()
+            stats = passive['get_piece_stats']("classic") # ดึงข้อมูลโหมด Classic ก่อน
             self.base_points, self.coins = self.hidden_passive.apply_passive(stats['dice'], stats['coins'])
             self.max_stats = stats['max']
             self.passive_desc = stats['desc']
-        else:
-            self.base_points, self.coins, self.max_stats, self.passive_desc = 5, 3, 12, ""
             
-        self.base_atk = self.base_points
-        self.base_def = self.base_points
+            # ✨ สำหรับ Base ATK / DEF ให้ใช้ค่าที่ตั้งไว้ในโหมด DNC แทนถ้ามีค่า
+            # แต่ถ้ายังไม่มี (เพราะบางเผ่ายังไม่ได้ตั้งค่า) ให้ดึงจากโหมด Classic (base_points)
+            dnc_atk = stats.get('base_atk', 0)
+            dnc_def = stats.get('base_def', 0)
+            
+            self.base_atk = dnc_atk if dnc_atk > 0 else self.base_points
+            self.base_def = dnc_def if dnc_def > 0 else self.base_points
+        else:
+            self.base_points, self.coins, self.max_stats, self.passive_desc = 5, 3, 999, ""
+            self.base_atk = self.base_points
+            self.base_def = self.base_points
 
     def upgrade_piece(self, path="standard"):
         if self.upgrade_level >= 2: return False
@@ -135,7 +141,6 @@ class King(Piece):
             return True
         return max(abs(s[0]-e[0]), abs(s[1]-e[1])) == 1
 
-# ✨ เพิ่มคลาส Prince เดิน 1 ช่อง 4 ทิศ
 class Prince(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'PRC' if color == 'white' else 'prc')
@@ -146,7 +151,6 @@ class Prince(Piece):
         if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e):
             return True
         rd, cd = abs(s[0]-e[0]), abs(s[1]-e[1])
-        # เดินได้แค่บน ล่าง ซ้าย ขวา 1 ช่อง
         return (rd == 1 and cd == 0) or (rd == 0 and cd == 1)
 
 class Pawn(Piece):

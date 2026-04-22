@@ -13,9 +13,10 @@ from kivy.clock import Clock
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.modalview import ModalView
 
+# ----------------- หน้าต่าง Army Status -----------------
 class ArmyStatusPopup(ModalView):
     def __init__(self, army_pieces, **kwargs):
-        super().__init__(size_hint=(0.85, 0.85), background_color=(0, 0, 0, 0.8), auto_dismiss=True, **kwargs)
+        super().__init__(size_hint=(0.9, 0.9), background_color=(0, 0, 0, 0.8), auto_dismiss=True, **kwargs)
         self.root_layout = FloatLayout()
         with self.root_layout.canvas.before:
             Color(0.08, 0.08, 0.1, 0.95)
@@ -33,11 +34,12 @@ class ArmyStatusPopup(ModalView):
         self.root_layout.add_widget(header)
 
         scroll = ScrollView(size_hint=(1, 0.9), pos_hint={'y': 0})
-        grid = GridLayout(cols=1, spacing=dp(10), padding=dp(10), size_hint_y=None)
+        # ✨ จัด Layout เป็น 3 คอลัมน์
+        grid = GridLayout(cols=3, spacing=dp(10), padding=dp(10), size_hint_y=None)
         grid.bind(minimum_height=grid.setter('height'))
 
         for p in army_pieces:
-            box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(100), padding=dp(10))
+            box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(200), padding=dp(5), spacing=dp(2))
             with box.canvas.before:
                 Color(0.15, 0.15, 0.18, 1)
                 box_bg = RoundedRectangle(radius=[dp(8)])
@@ -47,23 +49,56 @@ class ArmyStatusPopup(ModalView):
                 bg.size = instance.size
             box.bind(pos=update_box_bg, size=update_box_bg)
             
+            # ✨ 1. ดึงและแสดงรูปภาพของหมากตัวนั้นๆ
+            p_cls_name = p.__class__.__name__.lower()
+            tribe = getattr(p, 'tribe', 'the knight company')
+            color = p.color
+            
+            lvl = getattr(p, 'upgrade_level', 0)
+            path = getattr(p, 'upgrade_path', 'standard')
+            
+            stage_folder = "1base"
+            if lvl > 0:
+                if path == 'standard': stage_folder = "2upATK" if lvl == 1 else "3upDEF"
+                elif path == 'special': stage_folder = "4up_rehidden" if lvl == 1 else "5up_reroll_ATK_DEF"
+                
+            if p_cls_name in ['pawn', 'hastati', 'levies']:
+                num = getattr(p, 'variant', 1)
+                filename = f"{p_cls_name}{num}.png"
+            else:
+                filename = f"{p_cls_name}.png"
+                
+            if getattr(p, 'name', '') == 'Prince': filename = 'prince.png'
+            
+            img_path = f"assets/pieces/{tribe}/{color}/{stage_folder}/{filename}"
+            
+            img = Image(source=img_path, size_hint_y=0.35, allow_stretch=True, keep_ratio=True)
+            box.add_widget(img)
+            
+            # ✨ 2. ชื่อหมากแบบเต็ม
             p_name = getattr(p, 'name', p.__class__.__name__.capitalize())
             if "(Commander)" in p_name: 
                 p_name = p_name.replace(" (Commander)", "") + " [color=ffff00](Commander)[/color]"
             
-            title_lbl = Label(text=f"[b]{p_name}[/b]", markup=True, font_size='16sp', size_hint_y=0.3)
-            stats_lbl = Label(text=f"[color=aaaaaa]BP:[/color] {p.base_points}  |  [color=ff5555]ATK:[/color] {p.base_atk}  |  [color=5555ff]DEF:[/color] {p.base_def}", markup=True, font_size='14sp', size_hint_y=0.3)
+            lvl_str = f" [color=ffff00]+{lvl}[/color]" if lvl > 0 else ""
+            title_lbl = Label(text=f"[b]{p_name}{lvl_str}[/b]", markup=True, font_size='14sp', size_hint_y=0.15)
             
+            # ✨ 3, 4, 5. แสดงสเตตัส Coin, ATK, DEF
+            stats_lbl = Label(text=f"[color=ffffaa]Coin:[/color] {p.coins}  [color=ff5555]ATK:[/color] {p.base_atk}  [color=5555ff]DEF:[/color] {p.base_def}", markup=True, font_size='12sp', size_hint_y=0.15)
+            
+            # ✨ แสดง Passive 1
             hp1 = getattr(p, 'hidden_passive', None)
             desc1 = hp1.description if hp1 and getattr(hp1, 'passive_type', None) else "None"
-            passives_text = f"[color=00ffcc]Passive 1:[/color] {desc1}"
+            passives_text = f"[color=00ffcc]P1:[/color] {desc1}"
             
+            # ✨ 6. แสดง Second Passive (ถ้ามี)
             hp2 = getattr(p, 'second_hidden_passive', None)
             if hp2 and getattr(hp2, 'passive_type', None):
                 desc2 = hp2.description
-                passives_text += f"  |  [color=ff00cc]Passive 2:[/color] {desc2}"
+                passives_text += f"\n[color=ff00cc]P2:[/color] {desc2}"
             
-            pass_lbl = Label(text=passives_text, markup=True, font_size='12sp', size_hint_y=0.4, halign='center')
+            pass_lbl = Label(text=passives_text, markup=True, font_size='11sp', size_hint_y=0.35, halign='center', valign='middle')
+            pass_lbl.bind(size=pass_lbl.setter('text_size')) # ช่วยให้ข้อความขึ้นบรรทัดใหม่ได้เมื่อเกินกรอบ
             
             box.add_widget(title_lbl)
             box.add_widget(stats_lbl)
@@ -80,6 +115,7 @@ class ArmyStatusPopup(ModalView):
         self.border_line.rounded_rectangle = (instance.x, instance.y, instance.width, instance.height, dp(15))
 
 
+# ----------------- ระบบ Upgrade Tree UI -----------------
 class TechCard(ButtonBehavior, BoxLayout):
     def __init__(self, title, desc, atk, def_pt, coins, img_path, is_unlocked, is_available, on_click_cb, **kwargs):
         super().__init__(orientation='vertical', padding=dp(5), spacing=dp(2), size_hint=(None, None), size=(dp(120), dp(160)), **kwargs)
