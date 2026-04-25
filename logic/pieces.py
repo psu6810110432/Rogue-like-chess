@@ -15,6 +15,15 @@ class Piece:
         self.base_def = 0
         self.upgrade_level = 0
         self.upgrade_path = "standard"
+        
+        self.cannot_get_items = False
+        self.has_moved_this_turn = False
+
+    def tick_turn(self):
+        pass # Override in subclasses for turn-based mechanics
+
+    def mark_moved(self):
+        self.has_moved_this_turn = True
 
     def is_path_clear(self, start, end, board):
         sr, sc, er, ec = start[0], start[1], end[0], end[1]
@@ -36,13 +45,11 @@ class Piece:
         
         passive = PassiveManager.get_passive_handler(lookup_type, tribe)
         if passive:
-            stats = passive['get_piece_stats']("classic") # ดึงข้อมูลโหมด Classic ก่อน
+            stats = passive['get_piece_stats']("classic")
             self.base_points, self.coins = self.hidden_passive.apply_passive(stats['dice'], stats['coins'])
             self.max_stats = stats['max']
             self.passive_desc = stats['desc']
             
-            # ✨ สำหรับ Base ATK / DEF ให้ใช้ค่าที่ตั้งไว้ในโหมด DNC แทนถ้ามีค่า
-            # แต่ถ้ายังไม่มี (เพราะบางเผ่ายังไม่ได้ตั้งค่า) ให้ดึงจากโหมด Classic (base_points)
             dnc_atk = stats.get('base_atk', 0)
             dnc_def = stats.get('base_def', 0)
             
@@ -90,8 +97,7 @@ class Rook(Piece):
 
     def is_valid_move(self, s, e, b):
         if s == e: return False
-        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e):
-            return True
+        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
         return (s[0] == e[0] or s[1] == e[1]) and self.is_path_clear(s, e, b)
 
 class Knight(Piece):
@@ -102,8 +108,7 @@ class Knight(Piece):
     def is_valid_move(self, s, e, b):
         if s == e: return False
         target = b[e[0]][e[1]]
-        if self.check_knight_move(s, e):
-            return target is None or target.color != self.color
+        if self.check_knight_move(s, e): return target is None or target.color != self.color
         return False
 
 class Bishop(Piece):
@@ -113,8 +118,7 @@ class Bishop(Piece):
 
     def is_valid_move(self, s, e, b):
         if s == e: return False
-        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e):
-            return True
+        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
         return abs(s[0]-e[0]) == abs(s[1]-e[1]) and self.is_path_clear(s, e, b)
 
 class Queen(Piece):
@@ -124,8 +128,7 @@ class Queen(Piece):
 
     def is_valid_move(self, s, e, b):
         if s == e: return False
-        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e):
-            return True
+        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
         is_straight = (s[0] == e[0] or s[1] == e[1])
         is_diagonal = (abs(s[0]-e[0]) == abs(s[1]-e[1]))
         return (is_straight or is_diagonal) and self.is_path_clear(s, e, b)
@@ -137,8 +140,7 @@ class King(Piece):
 
     def is_valid_move(self, s, e, b):
         if s == e: return False
-        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e):
-            return True
+        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
         return max(abs(s[0]-e[0]), abs(s[1]-e[1])) == 1
 
 class Prince(Piece):
@@ -148,8 +150,7 @@ class Prince(Piece):
 
     def is_valid_move(self, s, e, b):
         if s == e: return False
-        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e):
-            return True
+        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
         rd, cd = abs(s[0]-e[0]), abs(s[1]-e[1])
         return (rd == 1 and cd == 0) or (rd == 0 and cd == 1)
 
@@ -161,8 +162,7 @@ class Pawn(Piece):
 
     def is_valid_move(self, s, e, b, ep_target=None):
         if s == e: return False
-        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e):
-            return True
+        if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
             
         sr, sc, er, ec, dr = s[0], s[1], e[0], e[1], (-1 if self.color == 'white' else 1)
         target = b[er][ec]
@@ -173,8 +173,7 @@ class Pawn(Piece):
             if target: return True
             if ep_target and (er, ec) == ep_target:
                 ep_pawn = b[sr][ec]
-                if ep_pawn and getattr(ep_pawn, 'color', None) != self.color and isinstance(ep_pawn, Pawn):
-                    return True
+                if ep_pawn and getattr(ep_pawn, 'color', None) != self.color and isinstance(ep_pawn, Pawn): return True
         return False
 
 class Princess(Piece):
@@ -194,13 +193,32 @@ class Menatarm(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'M' if color == 'white' else 'm')
         self.setup_stats('menatarm', tribe)
+        self.cannot_get_items = True
+        self.charge_stacks = 0
+
+    def tick_turn(self):
+        if not self.has_moved_this_turn:
+            if self.charge_stacks < 3:
+                self.charge_stacks += 1
+        self.has_moved_this_turn = False
+
+    def reset_movement_stacks(self):
+        self.charge_stacks = 0
+        self.has_moved_this_turn = True
+
+    def consume_charge_for_attack(self):
+        bonus = 0
+        if self.charge_stacks >= 3:
+            bonus = self.coins // 2
+        self.reset_movement_stacks()
+        return bonus
 
     def is_valid_move(self, s, e, b):
         if s == e: return False
         fwd = -1 if self.color == 'white' else 1
         rd, cd = e[0] - s[0], e[1] - s[1]
         if abs(rd) <= 1 and abs(cd) <= 1:
-            if rd == -fwd and cd == 0: return False # ห้ามเดินถอยหลังตรงๆ
+            if rd == -fwd and cd == 0: return False
             return True
         return False
 
@@ -208,6 +226,26 @@ class Praetorian(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'PT' if color == 'white' else 'pt')
         self.setup_stats('praetorian', tribe)
+        self.cannot_get_items = True
+        self.active_buffs = [] 
+
+    def tick_turn(self):
+        expired = 0
+        new_buffs = []
+        for duration in self.active_buffs:
+            if duration > 1:
+                new_buffs.append(duration - 1)
+            else:
+                expired += 1
+        self.active_buffs = new_buffs
+        self.base_atk -= expired
+        self.base_def -= expired
+
+    def on_attack_win(self):
+        if len(self.active_buffs) < 5:
+            self.active_buffs.append(6) # อยู่ 6 เทิร์น
+            self.base_atk += 1
+            self.base_def += 1
 
     def is_valid_move(self, s, e, b):
         if s == e: return False
@@ -221,6 +259,16 @@ class Royalguard(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'RG' if color == 'white' else 'rg')
         self.setup_stats('royalguard', tribe)
+        self.cannot_get_items = True
+        self.rg_upgrades = 0
+
+    def on_crash_win(self):
+        if self.rg_upgrades < 8:
+            if random.choice([True, False]):
+                self.base_atk += 1
+            else:
+                self.base_def += 1
+            self.rg_upgrades += 1
 
     def is_valid_move(self, s, e, b):
         if s == e: return False
@@ -234,6 +282,20 @@ class Hastati(Piece):
         super().__init__(color, 'H' if color == 'white' else 'h')
         self.setup_stats('hastati', tribe)
         self.variant = random.randint(1, 4)
+        self.cannot_get_items = True
+        self.def_stacks = 0
+
+    def tick_turn(self):
+        if not self.has_moved_this_turn:
+            if self.def_stacks < 5:
+                self.def_stacks += 1
+                self.base_def += 1
+        self.has_moved_this_turn = False
+
+    def reset_movement_stacks(self):
+        self.base_def -= self.def_stacks
+        self.def_stacks = 0
+        self.has_moved_this_turn = True
 
     def is_valid_move(self, s, e, b):
         if s == e: return False
@@ -249,6 +311,7 @@ class Levies(Piece):
         super().__init__(color, 'L' if color == 'white' else 'l')
         self.setup_stats('levies', tribe)
         self.variant = random.randint(1, 4)
+        self.cannot_get_items = True
 
     def is_valid_move(self, s, e, b):
         if s == e: return False

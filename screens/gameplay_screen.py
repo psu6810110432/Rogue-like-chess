@@ -59,7 +59,7 @@ class _PromotionOption(ButtonBehavior, BoxLayout):
         self.add_widget(Image(source=img_path, fit_mode='contain'))
 
 class PromotionPopup(ModalView):
-    def __init__(self, color, tribe, callback, **kwargs):
+    def __init__(self, color, tribe, callback, is_prince=False, **kwargs):
         super().__init__(size_hint=(0.45, 0.3), auto_dismiss=False, background='', background_color=(0, 0, 0, 0), **kwargs)
         from kivy.graphics import Color as GColor, RoundedRectangle as GRRect
         root = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(8))
@@ -70,12 +70,19 @@ class PromotionPopup(ModalView):
         root.add_widget(Label(text='Choose Your Piece', font_size='16sp', bold=True, color=(1, 0.25, 0.25, 1), size_hint_y=0.18))
 
         layout = GridLayout(cols=4, padding=dp(5), spacing=dp(10), size_hint_y=0.82)
-        from logic.pieces import Queen, Rook, Bishop, Knight
-        ops = [Queen, Rook, Bishop, Knight]; names = ['queen', 'rook', 'bishop', 'knight']
-        display_names = {'queen': 'Queen', 'rook': 'Rook', 'bishop': 'Bishop', 'knight': 'Knight'}
+        
+        from logic.pieces import Queen, Princess, Rook, Bishop, Knight
+        # ถ้าคนนำทัพคือ Prince เปลี่ยนโปรโมทเป็น Princess แทน Queen
+        if is_prince:
+            ops = [Princess, Knight, Bishop, Rook]; names = ['princess', 'knight', 'bishop', 'rook']
+            display_names = {'princess': 'Princess', 'knight': 'Knight', 'bishop': 'Bishop', 'rook': 'Rook'}
+        else:
+            ops = [Queen, Knight, Bishop, Rook]; names = ['queen', 'knight', 'bishop', 'rook']
+            display_names = {'queen': 'Queen', 'knight': 'Knight', 'bishop': 'Bishop', 'rook': 'Rook'}
 
         for cls, n in zip(ops, names):
             col = BoxLayout(orientation='vertical', spacing=dp(2))
+            # ✨ เรียกใช้ไฟล์รูป 1base เพื่อให้ตรงกับโครงสร้างใหม่
             opt = _PromotionOption(img_path=f"assets/pieces/{tribe}/{color}/1base/{n}.png")
             opt.bind(on_release=lambda b, c=cls: (App.get_running_app().play_click_sound(), callback(c)))
             col.add_widget(opt)
@@ -409,6 +416,8 @@ class GameplayScreen(Screen):
         
         if self.selected_item:
             if piece and piece.color == self.game.current_turn:
+                if getattr(piece, 'cannot_get_items', False):
+                    self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); return
                 if getattr(piece, 'item', None) is not None:
                     self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); return
                 if self.selected_item.id == 9 and piece.__class__.__name__.lower() == 'knight':
@@ -432,26 +441,49 @@ class GameplayScreen(Screen):
         else:
             sr, sc = self.selected
             if sr == r and sc == c: self.selected = None; self.hide_piece_status(); self.refresh_ui(); return
-                
-            res = self.game.move_piece(sr, sc, r, c)
-            if isinstance(res, tuple) and res[0] == "crash": self.show_crash_overlay(res[1], res[2], (sr, sc), (r, c)); return
             
+            # ✨ บัฟให้ Menatarm ก่อนเข้า Crash
+            atk_piece = self.game.board[sr][sc]
+            if atk_piece and atk_piece.__class__.__name__.lower() == 'menatarm':
+                bonus = atk_piece.consume_charge_for_attack()
+                if bonus > 0:
+                    atk_piece.coins += bonus
+                    atk_piece.temp_bonus_coins = bonus
+
+            res = self.game.move_piece(sr, sc, r, c)
+            if isinstance(res, tuple) and res[0] == "crash": 
+                self.show_crash_overlay(res[1], res[2], (sr, sc), (r, c)); return
+            
+            # ✨ จัดการการเดินปกติ
+            if atk_piece:
+                atk_piece.mark_moved()
+                if hasattr(atk_piece, 'reset_movement_stacks'): atk_piece.reset_movement_stacks()
+
+            # ✨ เช็คโปรโมท Levies
+            if res == True and atk_piece and atk_piece.__class__.__name__.lower() == 'levies':
+                if (atk_piece.color == 'white' and r == 0) or (atk_piece.color == 'black' and r == 7):
+                    res = "promote"
+
             if res in [True, "promote", "died"]: App.get_running_app().play_move_sound()
+            old_color = 'white' if self.game.current_turn == 'black' else 'black'
 
             if res == "promote":
                 self.hide_piece_status(); promoted_pawn = self.game.board[r][c] 
                 
-                # ✨ ค้นหาว่ามีเจ้าชาย (Prince) ในกระดานสีนี้หรือไม่
-                is_prince = any(
-                    getattr(p, 'name', '') == 'Prince' 
-                    for row in self.game.board for p in row 
-                    if p and p.color == promoted_pawn.color
-                )
+                is_prince = any(getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False) for row in self.game.board for p in row if p and p.color == promoted_pawn.color)
+                is_levies = promoted_pawn.__class__.__name__.lower() == 'levies'
+                
+                if is_levies and not is_prince:
+                    self.selected = None; self.init_board_ui(); self.trigger_end_turn_logic(old_color); return
 
-                def do_p(cls): self.game.promote_pawn(r, c, cls); pop.dismiss(); self.init_board_ui(); self.check_ai_turn()
+                def do_p(cls): 
+                    self.game.promote_pawn(r, c, cls)
+                    pop.dismiss(); self.init_board_ui(); self.trigger_end_turn_logic(old_color)
+                
                 pop = PromotionPopup(promoted_pawn.color, getattr(promoted_pawn, 'tribe', self.get_tribe_name(promoted_pawn.color)), do_p, is_prince=is_prince)
                 pop.open()
-            elif res in [True, "died"]: self.selected = None; self.hide_piece_status(); self.init_board_ui(); self.check_ai_turn()
+            elif res in [True, "died"]: 
+                self.selected = None; self.hide_piece_status(); self.init_board_ui(); self.trigger_end_turn_logic(old_color)
             else: self.selected = None; self.hide_piece_status(); self.refresh_ui()
 
     def execute_board_move(self, start_pos, end_pos, crash_status):
@@ -459,39 +491,66 @@ class GameplayScreen(Screen):
         if crash_status in ["won", "died"]: App.get_running_app().play_crash_win_sound()
         elif crash_status == "draw": App.get_running_app().play_draw_sound()
 
+        atk_piece = self.game.board[start_pos[0]][start_pos[1]]
+        if atk_piece:
+            # เอาเหรียญบัฟของ Menatarm ออก
+            if hasattr(atk_piece, 'temp_bonus_coins') and atk_piece.temp_bonus_coins > 0:
+                atk_piece.coins -= atk_piece.temp_bonus_coins
+                atk_piece.temp_bonus_coins = 0
+            atk_piece.mark_moved()
+            if hasattr(atk_piece, 'reset_movement_stacks'): atk_piece.reset_movement_stacks()
+
         if crash_status == "blocked":
             atk, df = self.game.board[start_pos[0]][start_pos[1]], self.game.board[end_pos[0]][end_pos[1]]
             if df: df.item = None
             if atk: atk.has_moved = True
             self.game.en_passant_target = None
-            self.game.history.save_state(self.game, "Shield Blocked!"); self.game.complete_turn(); self.init_board_ui(); self.check_ai_turn()
+            self.game.history.save_state(self.game, "Shield Blocked!"); self.game.complete_turn(); self.init_board_ui()
+            self.trigger_end_turn_logic(atk.color)
             return
             
         res = self.game.move_piece(start_pos[0], start_pos[1], end_pos[0], end_pos[1], resolve_crash=True, crash_won=crash_status)
+        end_piece = self.game.board[end_pos[0]][end_pos[1]]
+        
+        # ✨ เพิ่ม Stack ให้ Praetorian / Royalguard
+        if crash_status == "won" and end_piece:
+            if end_piece.__class__.__name__.lower() == 'praetorian': end_piece.on_attack_win()
+            if end_piece.__class__.__name__.lower() == 'royalguard': end_piece.on_crash_win()
+        elif crash_status == "died" and end_piece:
+            if end_piece.__class__.__name__.lower() == 'royalguard': end_piece.on_crash_win()
+
+        # ✨ เช็คการเข้าเส้นชัยของ Levies เพื่อกระตุ้นโปรโมท
+        if res in [True, "survived", "defender_survived"] and end_piece and end_piece.__class__.__name__.lower() == 'levies':
+            if (end_piece.color == 'white' and end_pos[0] == 0) or (end_piece.color == 'black' and end_pos[0] == 7):
+                res = "promote"
+
         if res in [True, "promote", "died"]: App.get_running_app().play_move_sound()
 
+        old_color = 'white' if self.game.current_turn == 'black' else 'black'
+
         if res == "promote":
-            pcolor = self.game.board[end_pos[0]][end_pos[1]].color
-            ptribe = getattr(self.game.board[end_pos[0]][end_pos[1]], 'tribe', self.get_tribe_name(pcolor))
+            pcolor = end_piece.color
+            ptribe = getattr(end_piece, 'tribe', self.get_tribe_name(pcolor))
             
-            # ✨ ค้นหาว่ามีเจ้าชาย (Prince) ในกระดานสีนี้หรือไม่
-            is_prince = any(
-                getattr(p, 'name', '') == 'Prince' 
-                for row in self.game.board for p in row 
-                if p and p.color == pcolor
-            )
+            is_prince = any(getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False) for row in self.game.board for p in row if p and p.color == pcolor)
+            is_levies = end_piece.__class__.__name__.lower() == 'levies'
+            
+            if is_levies and not is_prince:
+                self.selected = None; self.init_board_ui(); self.trigger_end_turn_logic(old_color); return
 
             if getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer'] and pcolor == 'black':
                 from logic.pieces import Queen, Princess
-                # บอทอัปเกรดอัตโนมัติเป็น Princess ถ้าหัวหน้าคือ Prince, ถ้าไม่ใช่ให้เป็น Queen
                 self.game.promote_pawn(end_pos[0], end_pos[1], Princess if is_prince else Queen)
-                self.init_board_ui(); self.check_ai_turn()
+                self.init_board_ui(); self.trigger_end_turn_logic(old_color)
             else:
-                def do_p(cls): self.game.promote_pawn(end_pos[0], end_pos[1], cls); pop.dismiss(); self.init_board_ui(); self.check_ai_turn()
+                def do_p(cls): 
+                    self.game.promote_pawn(end_pos[0], end_pos[1], cls); pop.dismiss(); self.init_board_ui(); self.trigger_end_turn_logic(old_color)
                 pop = PromotionPopup(pcolor, ptribe, do_p, is_prince=is_prince)
                 pop.open()
-        elif res in [True, "died", "survived", "defender_survived"]: self.selected = None; self.init_board_ui(); self.check_ai_turn()
-        else: self.selected = None; self.refresh_ui(); self.check_ai_turn()
+        elif res in [True, "died", "survived", "defender_survived"]: 
+            self.selected = None; self.init_board_ui(); self.trigger_end_turn_logic(old_color)
+        else: 
+            self.selected = None; self.refresh_ui(); self.trigger_end_turn_logic(old_color)
 
     def update_inventory_ui(self):
         self.inventory_layout.clear_widgets()
@@ -519,6 +578,20 @@ class GameplayScreen(Screen):
         if self.selected_item is item: self.selected_item = None; self.hide_item_tooltip()
         else: self.selected_item = item; self.show_item_tooltip(item)
         self.update_inventory_ui() 
+
+    def trigger_end_turn_logic(self, finished_color):
+        """ อัปเดตสแตคของหมากทุกตัวและลบไอเทมที่ผิดเงื่อนไขในตอนจบเทิร์น """
+        for row in self.game.board:
+            for p in row:
+                if p and p.color == finished_color:
+                    if hasattr(p, 'tick_turn'): p.tick_turn()
+        
+        for row in self.game.board:
+            for p in row:
+                if p and getattr(p, 'cannot_get_items', False):
+                    p.item = None 
+                    
+        self.check_ai_turn()
 
     def check_ai_turn(self):
         app = App.get_running_app()
