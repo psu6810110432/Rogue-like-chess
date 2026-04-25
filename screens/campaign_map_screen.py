@@ -212,6 +212,20 @@ class CampaignMapScreen(Screen):
         
         target_army = target_node.army_pieces.copy()
         
+        # ✨ เสกทหาร Guard ออกมากันบ้านตามระดับ
+        def spawn_guards(addons_dict):
+            if addons_dict.get('special') == 'guard':
+                lvl = addons_dict.get('special_lvl', 1)
+                g_list = ['levies', 'levies', 'pawn']
+                if lvl >= 2: g_list.extend(['bishop', 'knight', 'rook'])
+                if lvl >= 3: g_list.extend(['menatarm', 'rook', 'rook', 'bishop'])
+                for p_name in g_list:
+                    target_army.append(generate_piece(p_name, target_node.faction, app))
+                    
+        if hasattr(target_node, 'addons'): spawn_guards(target_node.addons)
+        if target_node.node_type == 'castle' and hasattr(target_node, 'sub_villages'):
+            for sv in target_node.sub_villages: spawn_guards(sv['addons'])
+        
         if target_node.faction == 'red':
             target_count = random.randint(8, 12)
             while len(target_army) > target_count:
@@ -288,8 +302,20 @@ class CampaignMapScreen(Screen):
         
         for node in self.nodes_list:
             if node.faction == app.current_map_turn:
-                tax_collected += 3 if node.node_type == 'village' else 6
+                # ✨ คิดภาษีฐานหลักตาม Addon
+                base_tax = 3 if node.node_type == 'village' else 6
+                farm_bonus = getattr(node, 'addons', {}).get('farm', 0) * 2
+                mine_bonus = 3 if getattr(node, 'addons', {}).get('special') == 'mine' else 0
+                tax_collected += base_tax + farm_bonus + mine_bonus
                 
+                # ✨ คิดภาษีหมู่บ้านย่อย (ถ้าเป็นปราสาท)
+                if node.node_type == 'castle':
+                    for sv in getattr(node, 'sub_villages', []):
+                        sv_farm = sv['addons'].get('farm', 0) * 2
+                        sv_mine = 3 if sv['addons'].get('special') == 'mine' else 0
+                        tax_collected += 3 + sv_farm + sv_mine
+
+                # คิดค่า Loyalty
                 if node.is_main_base:
                     node.loyalty = 100
                 else:
@@ -297,8 +323,7 @@ class CampaignMapScreen(Screen):
                     else: node.loyalty += 10
                     node.loyalty = max(0, min(100, node.loyalty))
                     
-                if node.loyalty == 0:
-                    rebellions.append(node)
+                if node.loyalty == 0: rebellions.append(node)
                 
         app.tax_points[app.current_map_turn] += tax_collected
         

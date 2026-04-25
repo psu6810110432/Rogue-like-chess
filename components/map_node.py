@@ -1,10 +1,20 @@
 # components/map_node.py
+import random
 from kivy.uix.button import Button
 from kivy.graphics import Color, Rectangle, Line, Ellipse
 from kivy.metrics import dp
 from kivy.app import App
 
 from logic.campaign_helpers import generate_piece
+
+def roll_special_addon():
+    roll = random.randint(1, 100)
+    if roll <= 50: return None
+    elif roll <= 70: return 'mine'
+    elif roll <= 75: return 'blacksmith'
+    elif roll <= 80: return 'weaponsmith'
+    elif roll <= 85: return 'guard'
+    else: return 'statue'
 
 class MapNode(Button):
     def __init__(self, node_type, faction, node_id, is_main_base=False, app=None, **kwargs):
@@ -20,8 +30,29 @@ class MapNode(Button):
         self.is_selected_node = False 
         
         self.loyalty = 100 
-
         self.army_pieces = []
+
+        # ✨ ระบบ Addon ของเมืองหลัก
+        self.addons = {
+            'farm': 1,
+            'tavern': 1,
+            'special': roll_special_addon(),
+            'special_lvl': 1
+        }
+
+        # ✨ ระบบปราสาทมีหมู่บ้านบริวาร (Sub-villages) 1-3 แห่ง
+        self.sub_villages = []
+        if self.node_type == 'castle':
+            num_subs = random.randint(1, 3)
+            for i in range(num_subs):
+                self.sub_villages.append({
+                    'id': f"V{i+1}",
+                    'addons': {
+                        'farm': 1, 'tavern': 1, 
+                        'special': roll_special_addon(), 'special_lvl': 1
+                    }
+                })
+
         if app:
             if self.is_main_base:
                 pieces_to_gen = ['king', 'queen', 'rook', 'rook', 'bishop', 'bishop', 'knight', 'knight'] + ['pawn']*8
