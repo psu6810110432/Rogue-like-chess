@@ -301,21 +301,22 @@ class CampaignMapScreen(Screen):
         rebellions = []
         
         for node in self.nodes_list:
+            if hasattr(node, 'refresh_recruits'):
+                node.refresh_recruits()
+
             if node.faction == app.current_map_turn:
-                # ✨ คิดภาษีฐานหลักตาม Addon
-                base_tax = 3 if node.node_type == 'village' else 6
+                # ✨ คิดภาษีฐานหลักเฉพาะจาก Addon เท่านั้น (farm, mine) ไม่รวมฐาน
                 farm_bonus = getattr(node, 'addons', {}).get('farm', 0) * 2
                 mine_bonus = 3 if getattr(node, 'addons', {}).get('special') == 'mine' else 0
-                tax_collected += base_tax + farm_bonus + mine_bonus
+                tax_collected += farm_bonus + mine_bonus
                 
-                # ✨ คิดภาษีหมู่บ้านย่อย (ถ้าเป็นปราสาท)
+                # ✨ คิดภาษีหมู่บ้านย่อยเฉพาะจาก Addon (farm, mine) เท่านั้น
                 if node.node_type == 'castle':
                     for sv in getattr(node, 'sub_villages', []):
                         sv_farm = sv['addons'].get('farm', 0) * 2
                         sv_mine = 3 if sv['addons'].get('special') == 'mine' else 0
-                        tax_collected += 3 + sv_farm + sv_mine
+                        tax_collected += sv_farm + sv_mine
 
-                # คิดค่า Loyalty
                 if node.is_main_base:
                     node.loyalty = 100
                 else:

@@ -27,14 +27,16 @@ def get_active_addons_list(addons_dict):
 class MapNode(Button):
     def __init__(self, node_type, faction, node_id, is_main_base=False, app=None, **kwargs):
         super().__init__(**kwargs)
+        self.background_normal = '' # ✨ แก้บั๊ก texture กดแล้วหาย
+        self.background_down = ''
+        self.background_color = (0, 0, 0, 0)
         self.node_type = node_type 
         self.faction = faction     
         self.node_id = node_id
         self.is_main_base = is_main_base 
         self.neighbors = []             
         self.size_hint = (None, None)
-        self.size = (dp(70), dp(70)) # ✨ ขยายขนาดรูปฐานหลัก
-        self.background_color = (0, 0, 0, 0) 
+        self.size = (dp(70), dp(70)) # ✨ ขยายขนาดโหนดหลัก
         self.is_selected_node = False 
         
         self.loyalty = 100 
@@ -53,7 +55,7 @@ class MapNode(Button):
             angles = [30, 150, 270] 
             for i in range(num_subs):
                 angle = math.radians(angles[i] + random.uniform(-15, 15))
-                dist = dp(random.uniform(110, 140)) # ✨ เพิ่มระยะห่างให้เกิดช่องว่าง > 30px
+                dist = dp(random.uniform(110, 140)) # ✨ เพิ่มระยะห่างให้ยาวขึ้น
                 self.sub_villages.append({
                     'id': f"V{i+1}",
                     'rel_pos': (math.cos(angle) * dist, math.sin(angle) * dist),
@@ -76,18 +78,46 @@ class MapNode(Button):
 
         self.update_graphics()
         self.bind(pos=self.update_canvas, size=self.update_canvas)
+        self.refresh_recruits() # สุ่มทหารครั้งแรก
+
+    def refresh_recruits(self):
+        # ✨ ฟังก์ชันสุ่มรายชื่อทหารให้ Tavern ใหม่ทุกเทิร์น
+        self.shop_recruits = self._generate_shop(self.node_type, self.addons)
+        for sv in self.sub_villages:
+            sv['shop_recruits'] = self._generate_shop('village', sv['addons'])
+
+    def _generate_shop(self, n_type, addons):
+        tav_lvl = addons.get('tavern', 1)
+        t1_opts = [('pawn', 2), ('levies', 2), ('knight', 4), ('bishop', 4), ('rook', 4)]
+        t2_opts = [('hastati', 3), ('menatarm', 5)]
+        t3_opts = [('praetorian', 7), ('royalguard', 7)]
+        
+        shop = {'T1': [], 'T2': [], 'T3': []}
+        
+        if tav_lvl >= 1:
+            shop['T1'] = random.sample(t1_opts, min(len(t1_opts), random.randint(3, 5)))
+            
+        if n_type == 'village':
+            if tav_lvl >= 3:
+                shop['T2'] = random.sample(t2_opts, min(len(t2_opts), random.randint(1, 2)))
+        elif n_type == 'castle':
+            if tav_lvl >= 2:
+                shop['T2'] = random.sample(t2_opts, min(len(t2_opts), random.randint(1, 2)))
+            if tav_lvl >= 4:
+                shop['T3'] = random.sample(t3_opts, min(len(t3_opts), random.randint(1, 2)))
+                
+        return shop
 
     def update_graphics(self):
         self.canvas.before.clear()
         
-        # จัดเตรียมข้อมูล Addon สำหรับวาดกราฟิก
         self.addon_data = []
         main_addons = get_active_addons_list(self.addons)
         a_step = 360 / max(1, len(main_addons))
         offset = 90 if self.node_type == 'castle' else 0
         for i, (a_name, a_lvl) in enumerate(main_addons):
             angle = math.radians(i * a_step + offset)
-            dist = dp(90) # ระยะห่าง Addon ฐานหลัก
+            dist = dp(90)
             self.addon_data.append({
                 'name': a_name, 'lvl': a_lvl,
                 'rel_pos': (math.cos(angle)*dist, math.sin(angle)*dist)
@@ -100,7 +130,7 @@ class MapNode(Button):
             for i, (a_name, a_lvl) in enumerate(sv_addons):
                 sv_angle = math.atan2(sv['rel_pos'][1], sv['rel_pos'][0])
                 angle = sv_angle + math.radians(-90 + i * sv_step)
-                dist = dp(70) # ระยะห่าง Addon หมู่บ้านย่อย
+                dist = dp(70) 
                 sv['addon_data'].append({
                     'name': a_name, 'lvl': a_lvl,
                     'rel_pos': (math.cos(angle)*dist, math.sin(angle)*dist)
@@ -113,7 +143,6 @@ class MapNode(Button):
             else:
                 self.aura = None
 
-            # ✨ วาดเส้นทาง (Paths) สีน้ำตาลอ่อน
             Color(0.4, 0.3, 0.2, 1)
             
             self.sv_lines = []
@@ -131,9 +160,8 @@ class MapNode(Button):
                 al = Line(width=1.5)
                 self.main_a_lines.append((al, ad['rel_pos']))
                 
-            Color(1, 1, 1, 1) # Reset color for Images
+            Color(1, 1, 1, 1) 
             
-            # ✨ วาดหมู่บ้านย่อยและ Addon
             self.sv_rects = []
             for sv in self.sub_villages:
                 sv['a_rects'] = []
@@ -147,7 +175,6 @@ class MapNode(Button):
                 rect = Rectangle(source=img_path, size=(dp(45), dp(45)))
                 self.sv_rects.append((rect, sv['rel_pos']))
 
-            # ✨ วาด Addon ฐานหลัก
             self.main_a_rects = []
             for ad in self.addon_data:
                 folder = "base1" if ad['lvl'] <= 1 else ("up1" if ad['lvl'] == 2 else "up2")
@@ -155,11 +182,9 @@ class MapNode(Button):
                 rect = Rectangle(source=img_path, size=(dp(30), dp(30)))
                 self.main_a_rects.append((rect, ad['rel_pos']))
                 
-            # ✨ วาดฐานหลัก
             main_img = f'assets/structure/base/{self.node_type}/{self.node_type}_{self.faction}.png'
             self.shape = Rectangle(source=main_img, size=self.size)
 
-            # วาดเส้นขอบวงกลมแสดงสถานะ (เลือก/ไม่เลือก)
             if self.is_selected_node:
                 Color(0.2, 0.5, 1.0, 1)
                 self.border_line = Line(width=3)
@@ -169,6 +194,9 @@ class MapNode(Button):
                 else: fac_color = (0.8, 0.2, 0.2, 1) 
                 Color(*fac_color)
                 self.border_line = Line(width=2)
+                
+        # ✨ สำคัญ: บังคับให้ Kivy อัปเดตตำแหน่ง Canvas ทันที เพื่อไม่ให้ Texture ไปอยู่มุมล่างซ้าย
+        self.update_canvas() 
 
     def update_canvas(self, *args):
         cx, cy = self.center_x, self.center_y
@@ -177,7 +205,6 @@ class MapNode(Button):
             self.aura.pos = (self.x - dp(15), self.y - dp(15))
             self.aura.size = (self.width + dp(30), self.height + dp(30))
         
-        # จัดตำแหน่งเส้นทางเชื่อมต่อให้ยึดติดกับจุดศูนย์กลาง
         for l, rpos in self.sv_lines:
             l.points = [cx, cy, cx + rpos[0], cy + rpos[1]]
             
@@ -189,7 +216,6 @@ class MapNode(Button):
         for al, rpos in self.main_a_lines:
             al.points = [cx, cy, cx + rpos[0], cy + rpos[1]]
             
-        # จัดตำแหน่งรูปภาพทั้งหมด (หักลบจุดกึ่งกลางของรูป)
         for sv in self.sub_villages:
             for rect, svrpos, arpos in sv.get('a_rects', []):
                 rect.pos = (cx + svrpos[0] + arpos[0] - dp(12.5), cy + svrpos[1] + arpos[1] - dp(12.5))

@@ -31,7 +31,6 @@ class BuildCard(ButtonBehavior, FloatLayout):
             self.bg = RoundedRectangle(radius=[dp(8)])
         self.bind(pos=self._update_bg, size=self._update_bg)
         
-        # แสดงรูปสิ่งก่อสร้างทางซ้าย และข้อความอยู่ทางขวา
         self.add_widget(Image(source=img_path, size_hint=(0.35, 0.8), pos_hint={'x': 0.05, 'center_y': 0.5}, allow_stretch=True, keep_ratio=True))
         
         lbl_box = BoxLayout(orientation='vertical', size_hint=(0.55, 0.9), pos_hint={'right': 0.95, 'center_y': 0.5})
@@ -94,6 +93,7 @@ class CampaignArmyPanel(FloatLayout):
         self.content_scroll.add_widget(self.content_grid)
         self.add_widget(self.content_scroll)
 
+        # ✨ แก้บั๊ก: การกำหนด Layout สำหรับปุ่ม Action ด้านขวา
         self.action_box = BoxLayout(orientation='vertical', size_hint=(0.25, 0.7), pos_hint={'right': 0.98, 'y': 0.05}, spacing=dp(5))
         self.btn_action = Button(text="[b]MARCH / ATTACK[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1), size_hint_y=0.6)
         self.btn_action.bind(on_release=self.execute_action)
@@ -193,13 +193,31 @@ class CampaignArmyPanel(FloatLayout):
     def switch_tab(self, tab_name):
         self.current_tab = tab_name
         self.is_upgrade_mode = False
-        self.content_grid.clear_widgets()
+        self.content_scroll.clear_widgets()
         self.piece_cards.clear()
         self.update_sub_village_nav()
 
         headers = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False))
         max_cap = 16 if headers > 0 else 8
         total = len(self.current_node.army_pieces)
+
+        if tab_name == 'army' or tab_name == 'build':
+            self.content_scroll.do_scroll_x = True
+            self.content_scroll.do_scroll_y = False
+            self.content_grid = GridLayout(rows=1, spacing=dp(8), size_hint_x=None, padding=dp(5))
+            self.content_grid.bind(minimum_width=self.content_grid.setter('width'))
+            self.content_scroll.add_widget(self.content_grid)
+        else:
+            self.content_scroll.do_scroll_x = False
+            self.content_scroll.do_scroll_y = True
+            self.content_grid = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(10), padding=dp(5))
+            self.content_grid.bind(minimum_height=self.content_grid.setter('height'))
+            self.content_scroll.add_widget(self.content_grid)
+
+        # ✨ คืนค่าปุ่มให้แสดงกลับมาทุกครั้งที่มีการกดสลับ Tab ป้องกันปุ่มหาย
+        self.btn_action.opacity = 1
+        self.btn_action.disabled = False
+        self.sub_action_box.opacity = 1
 
         if tab_name == 'army':
             self.btn_tab_army.background_color = (0.3, 0.5, 0.8, 1)
@@ -211,10 +229,10 @@ class CampaignArmyPanel(FloatLayout):
             
             self.btn_action.text = "[b]MARCH / ATTACK[/b]"
             self.btn_action.background_color = (0.8, 0.2, 0.2, 1)
-            self.btn_action.disabled = False
-            self.sub_action_box.opacity = 1
+            
             self.btn_status.disabled = False 
             self.btn_upgrade.disabled = False
+            self.btn_upgrade.background_color = (0.6, 0.2, 0.8, 1)
             
             for p in self.current_node.army_pieces:
                 card = PieceCard(p, map_screen_ref=self.map_screen) 
@@ -229,30 +247,41 @@ class CampaignArmyPanel(FloatLayout):
             tax = self.app.tax_points.get(self.current_node.faction, 0)
             addons = self.get_active_addons()
             tav_lvl = addons.get('tavern', 1)
-            is_castle = (self.current_node.node_type == 'castle' and self.active_sub_village is None)
             
             self.status_lbl.text = f"Tax: [color=00ff00]{tax}[/color] | Tavern Lvl: {tav_lvl}"
             
+            # ปิดปุ่มบางปุ่มที่ไม่ได้ใช้ในหน้านี้
             self.btn_action.text = "[b]SELECT UNIT TO RECRUIT[/b]"
             self.btn_action.background_color = (0.3, 0.3, 0.3, 1)
             self.btn_action.disabled = True
+            
             self.sub_action_box.opacity = 0
             self.btn_status.disabled = True 
             self.btn_upgrade.disabled = True
             
-            pool = []
-            if tav_lvl >= 1: pool.extend([('pawn', 2), ('levies', 2), ('knight', 4), ('bishop', 4), ('rook', 4)])
-            if tav_lvl >= 3 or (is_castle and tav_lvl >= 2): pool.extend([('hastati', 3), ('menatarm', 5)])
-            if is_castle and tav_lvl >= 4: pool.extend([('praetorian', 7), ('royalguard', 7)])
-            
+            shop = self.active_sub_village['shop_recruits'] if self.active_sub_village else getattr(self.current_node, 'shop_recruits', {})
             unlock_costs = {'praetorian': 14, 'royalguard': 14, 'hastati': 6}
             
-            for p_name, base_cost in pool:
-                final_cost = self.get_discounted_price(base_cost, addons)
-                is_locked = p_name not in self.app.unlocked_units.get(self.current_node.faction, set())
-                ucost = unlock_costs.get(p_name, 0)
-                card = RecruitCard(p_name, final_cost, self.current_node.faction, self.app, self.buy_piece, is_locked=is_locked, unlock_cost=ucost)
-                self.content_grid.add_widget(card)
+            def build_row(title, items):
+                if not items: return
+                self.content_grid.add_widget(Label(text=f"[b]{title}[/b]", markup=True, size_hint_y=None, height=dp(30), halign='left', color=(0.9,0.8,0.2,1)))
+                row_grid = GridLayout(rows=1, spacing=dp(8), size_hint_y=None, height=dp(110), size_hint_x=None)
+                row_grid.bind(minimum_width=row_grid.setter('width'))
+                
+                for p_name, base_cost in items:
+                    final_cost = self.get_discounted_price(base_cost, addons)
+                    is_locked = p_name not in self.app.unlocked_units.get(self.current_node.faction, set())
+                    ucost = unlock_costs.get(p_name, 0)
+                    card = RecruitCard(p_name, final_cost, self.current_node.faction, self.app, self.buy_piece, is_locked=is_locked, unlock_cost=ucost)
+                    row_grid.add_widget(card)
+                
+                row_scroll = ScrollView(size_hint_y=None, height=dp(120), do_scroll_x=True, do_scroll_y=False)
+                row_scroll.add_widget(row_grid)
+                self.content_grid.add_widget(row_scroll)
+
+            build_row("Tier 1: Militia & Villagers", shop.get('T1', []))
+            build_row("Tier 2: Regular Soldiers", shop.get('T2', []))
+            build_row("Tier 3: Veterans & Elites", shop.get('T3', []))
                 
         elif tab_name == 'build':
             self.btn_tab_army.background_color = (0.2, 0.2, 0.2, 1)
@@ -263,6 +292,7 @@ class CampaignArmyPanel(FloatLayout):
             addons = self.get_active_addons()
             
             self.status_lbl.text = f"Tax: [color=00ff00]{tax}[/color] | Upgrading Buildings"
+            
             self.btn_action.disabled = True
             self.btn_action.opacity = 0
             self.sub_action_box.opacity = 0
@@ -297,7 +327,6 @@ class CampaignArmyPanel(FloatLayout):
         addons = self.get_active_addons()
         addons[key] += 1
         self.switch_tab('build')
-        # ✨ เพิ่มบรรทัดนี้เพื่ออัปเดตภาพโหนดบนแผนที่ทันทีที่อัปเกรดสำเร็จ
         self.current_node.update_graphics()
 
     def buy_piece(self, piece_name, cost, is_locked, unlock_cost):
