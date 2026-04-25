@@ -6,19 +6,44 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.button import Button
 from kivy.uix.label import Label
+from kivy.uix.image import Image
 from kivy.graphics import Color, Line, RoundedRectangle
 from kivy.metrics import dp
 from kivy.app import App
+from kivy.uix.behaviors import ButtonBehavior
 from kivy.animation import Animation
 
 from components.campaign_cards import PieceCard, RecruitCard
 from components.campaign_popups import ArmyStatusPopup
 from logic.campaign_helpers import generate_piece
 
-class BuildCard(Button):
-    def __init__(self, title, desc, cost, on_click_cb, **kwargs):
-        super().__init__(text=f"[b]{title}[/b]\n[size=12sp]{desc}[/size]\n[color=ffff00]Cost: {cost} Tax[/color]", markup=True, halign='center', background_color=(0.2, 0.4, 0.2, 1), size_hint=(None, None), size=(dp(140), dp(100)), **kwargs)
+def get_addon_img(addon, lvl):
+    folder = "base1" if lvl <= 1 else ("up1" if lvl == 2 else "up2")
+    return f"assets/structure/addon/{folder}/{addon}.png"
+
+class BuildCard(ButtonBehavior, FloatLayout):
+    def __init__(self, title, desc, cost, img_path, on_click_cb, **kwargs):
+        super().__init__(size_hint=(None, None), size=(dp(160), dp(100)), **kwargs)
         self.bind(on_release=lambda x: on_click_cb())
+        
+        with self.canvas.before:
+            Color(0.15, 0.25, 0.15, 1)
+            self.bg = RoundedRectangle(radius=[dp(8)])
+        self.bind(pos=self._update_bg, size=self._update_bg)
+        
+        # แสดงรูปสิ่งก่อสร้างทางซ้าย และข้อความอยู่ทางขวา
+        self.add_widget(Image(source=img_path, size_hint=(0.35, 0.8), pos_hint={'x': 0.05, 'center_y': 0.5}, allow_stretch=True, keep_ratio=True))
+        
+        lbl_box = BoxLayout(orientation='vertical', size_hint=(0.55, 0.9), pos_hint={'right': 0.95, 'center_y': 0.5})
+        lbl_box.add_widget(Label(text=f"[b]{title}[/b]", markup=True, font_size='14sp', halign='center'))
+        lbl_box.add_widget(Label(text=f"[size=11sp]{desc}[/size]", markup=True, halign='center'))
+        lbl_box.add_widget(Label(text=f"[color=ffff00]Cost: {cost} Tax[/color]", markup=True, font_size='12sp', halign='center'))
+        self.add_widget(lbl_box)
+
+    def _update_bg(self, instance, value):
+        self.bg.pos = instance.pos
+        self.bg.size = instance.size
+
 
 class CampaignArmyPanel(FloatLayout):
     def __init__(self, map_screen, app, **kwargs):
@@ -28,7 +53,7 @@ class CampaignArmyPanel(FloatLayout):
         self.current_node = None
         self.current_tab = 'army'
         self.is_upgrade_mode = False 
-        self.active_sub_village = None # สำหรับเก็บ State ว่ากำลังดูหมู่บ้านย่อยไหนอยู่
+        self.active_sub_village = None 
 
         with self.canvas.before:
             Color(0.05, 0.05, 0.08, 0.9)
@@ -60,7 +85,6 @@ class CampaignArmyPanel(FloatLayout):
         self.header_box.add_widget(btn_close)
         self.add_widget(self.header_box)
 
-        # ✨ กล่องปุ่มสลับดูปราสาท/หมู่บ้านย่อย
         self.sub_village_nav = BoxLayout(orientation='horizontal', size_hint=(0.7, 0.1), pos_hint={'x': 0.02, 'y': 0.75}, spacing=dp(5))
         self.add_widget(self.sub_village_nav)
 
@@ -95,7 +119,7 @@ class CampaignArmyPanel(FloatLayout):
     def open_for_node(self, node):
         from kivy.animation import Animation
         self.current_node = node
-        self.active_sub_village = None # เริ่มต้นที่ฐานหลักเสมอ
+        self.active_sub_village = None 
         self.header_lbl.text = f"{node.faction.upper()} {node.node_type.upper()}"
         self.is_upgrade_mode = False
         
@@ -113,12 +137,10 @@ class CampaignArmyPanel(FloatLayout):
         self.sub_village_nav.clear_widgets()
         if self.current_tab == 'army' or self.current_node.node_type != 'castle': return
         
-        # ปุ่มปราสาทหลัก
         btn_main = Button(text="Castle", font_size='12sp', background_color=(0.5, 0.5, 0.2, 1) if self.active_sub_village is None else (0.2, 0.2, 0.2, 1))
         btn_main.bind(on_release=lambda x: self.select_sub_village(None))
         self.sub_village_nav.add_widget(btn_main)
         
-        # ปุ่มหมู่บ้านบริวาร
         for sv in self.current_node.sub_villages:
             btn_v = Button(text=f"Village {sv['id']}", font_size='12sp', background_color=(0.5, 0.5, 0.2, 1) if self.active_sub_village == sv else (0.2, 0.2, 0.2, 1))
             btn_v.bind(on_release=lambda x, v=sv: self.select_sub_village(v))
@@ -127,7 +149,7 @@ class CampaignArmyPanel(FloatLayout):
     def select_sub_village(self, sv):
         self.app.play_click_sound()
         self.active_sub_village = sv
-        self.switch_tab(self.current_tab) # Refresh view
+        self.switch_tab(self.current_tab) 
 
     def get_active_addons(self):
         if self.active_sub_village: return self.active_sub_village['addons']
@@ -218,7 +240,6 @@ class CampaignArmyPanel(FloatLayout):
             self.btn_status.disabled = True 
             self.btn_upgrade.disabled = True
             
-            # ✨ ระบบสระทหาร (Tavern Pool)
             pool = []
             if tav_lvl >= 1: pool.extend([('pawn', 2), ('levies', 2), ('knight', 4), ('bishop', 4), ('rook', 4)])
             if tav_lvl >= 3 or (is_castle and tav_lvl >= 2): pool.extend([('hastati', 3), ('menatarm', 5)])
@@ -249,13 +270,15 @@ class CampaignArmyPanel(FloatLayout):
             farm_lvl = addons.get('farm', 1)
             farm_cost = farm_lvl * 5
             if farm_lvl < 3:
-                self.content_grid.add_widget(BuildCard("Farm", f"Lvl {farm_lvl} -> {farm_lvl+1}\n(+2 Tax Income)", farm_cost, lambda: self.upgrade_addon('farm', farm_cost)))
+                img = get_addon_img('farm', farm_lvl)
+                self.content_grid.add_widget(BuildCard("Farm", f"Lvl {farm_lvl} -> {farm_lvl+1}\n(+2 Tax)", farm_cost, img, lambda: self.upgrade_addon('farm', farm_cost)))
                 
             tav_lvl = addons.get('tavern', 1)
             tav_max = 5 if (self.current_node.node_type == 'castle' and self.active_sub_village is None) else 3
             tav_cost = tav_lvl * 6
             if tav_lvl < tav_max:
-                self.content_grid.add_widget(BuildCard("Tavern", f"Lvl {tav_lvl} -> {tav_lvl+1}\n(Unlocks Units)", tav_cost, lambda: self.upgrade_addon('tavern', tav_cost)))
+                img = get_addon_img('tavern', tav_lvl)
+                self.content_grid.add_widget(BuildCard("Tavern", f"Lvl {tav_lvl} -> {tav_lvl+1}\n(Unlocks Units)", tav_cost, img, lambda: self.upgrade_addon('tavern', tav_cost)))
                 
             spec = addons.get('special')
             spec_lvl = addons.get('special_lvl', 0)
@@ -263,7 +286,8 @@ class CampaignArmyPanel(FloatLayout):
                 max_slvl = 3 if spec in ['guard', 'statue'] else 2
                 spec_cost = spec_lvl * 8
                 if spec_lvl < max_slvl:
-                    self.content_grid.add_widget(BuildCard(spec.capitalize(), f"Lvl {spec_lvl} -> {spec_lvl+1}", spec_cost, lambda: self.upgrade_addon('special_lvl', spec_cost)))
+                    img = get_addon_img(spec, spec_lvl)
+                    self.content_grid.add_widget(BuildCard(spec.capitalize(), f"Lvl {spec_lvl} -> {spec_lvl+1}", spec_cost, img, lambda: self.upgrade_addon('special_lvl', spec_cost)))
 
     def upgrade_addon(self, key, cost):
         self.app.play_click_sound()
@@ -273,6 +297,8 @@ class CampaignArmyPanel(FloatLayout):
         addons = self.get_active_addons()
         addons[key] += 1
         self.switch_tab('build')
+        # ✨ เพิ่มบรรทัดนี้เพื่ออัปเดตภาพโหนดบนแผนที่ทันทีที่อัปเกรดสำเร็จ
+        self.current_node.update_graphics()
 
     def buy_piece(self, piece_name, cost, is_locked, unlock_cost):
         self.app.play_click_sound()
@@ -294,7 +320,6 @@ class CampaignArmyPanel(FloatLayout):
         self.app.tax_points[faction] -= cost
         new_p = generate_piece(piece_name, faction, self.app)
         
-        # ✨ บัฟเสริมจากโรงเหล็ก / โรงตีอาวุธ
         addons = self.get_active_addons()
         spec = addons.get('special')
         slvl = addons.get('special_lvl', 0)
