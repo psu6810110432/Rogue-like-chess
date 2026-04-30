@@ -72,7 +72,7 @@ class PromotionPopup(ModalView):
         layout = GridLayout(cols=4, padding=dp(5), spacing=dp(10), size_hint_y=0.82)
         
         from logic.pieces import Queen, Princess, Rook, Bishop, Knight
-        # ถ้าคนนำทัพคือ Prince เปลี่ยนโปรโมทเป็น Princess แทน Queen
+        # ลบการเช็คเผ่าออก ให้ผู้เล่นโปรโมทได้ตามปกติ
         if is_prince:
             ops = [Princess, Knight, Bishop, Rook]; names = ['princess', 'knight', 'bishop', 'rook']
             display_names = {'princess': 'Princess', 'knight': 'Knight', 'bishop': 'Bishop', 'rook': 'Rook'}
@@ -82,7 +82,6 @@ class PromotionPopup(ModalView):
 
         for cls, n in zip(ops, names):
             col = BoxLayout(orientation='vertical', spacing=dp(2))
-            # ✨ เรียกใช้ไฟล์รูป 1base เพื่อให้ตรงกับโครงสร้างใหม่
             opt = _PromotionOption(img_path=f"assets/pieces/{tribe}/{color}/1base/{n}.png")
             opt.bind(on_release=lambda b, c=cls: (App.get_running_app().play_click_sound(), callback(c)))
             col.add_widget(opt)
@@ -156,8 +155,8 @@ class GameplayScreen(Screen):
 
     def setup_game(self, mode):
         self.main_layout.clear_widgets()
-        if hasattr(self, 'deploy_btn') and self.deploy_btn in self.root_layout.children:
-            self.root_layout.remove_widget(self.deploy_btn)
+        if hasattr(self, 'deployment_layer') and self.deployment_layer in self.root_layout.children:
+            self.root_layout.remove_widget(self.deployment_layer)
 
         self.status_popup = self.crash_popup = self.item_tooltip = self.selected_item = None
         self.game_mode, self._game_over_scheduled, self.selected = mode, False, None
@@ -176,8 +175,6 @@ class GameplayScreen(Screen):
 
         if mode == 'Divide_Conquer':
             self.setup_divide_conquer_board(app)
-            self.battle_phase = 'deployment' 
-            self.show_deployment_ui()
 
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
         self.info_label = Label(text="WHITE'S TURN", size_hint_y=0.08, color=(0.83, 0.68, 0.21, 1), bold=True, font_size='22sp', markup=True)
@@ -210,7 +207,6 @@ class GameplayScreen(Screen):
                 if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel()
                 if getattr(self, 'ai_event', None): self.ai_event.cancel()
                 
-                # ลอจิก Retreat: สุ่มฆ่าทหาร Light (Pawn)
                 retreating_color = self.game.current_turn
                 dead_count = 0
                 for r in range(8):
@@ -221,33 +217,106 @@ class GameplayScreen(Screen):
                                 self.game.board[r][c] = None
                                 dead_count += 1
                 
-                # ยอมแพ้ เพื่อตัดจบเกม
                 self.game.game_result = "BLACK WINS" if retreating_color == 'white' else "WHITE WINS"
                 
-                # แสดงหน้าต่าง RetreatPopup
-                def proceed_to_map():
-                    self.auto_quit_to_setup(0)
-                    
+                def proceed_to_map(): self.auto_quit_to_setup(0)
                 RetreatPopup(dead_count, proceed_to_map).open()
             else:
                 self.on_quit()
                 
         self.sidebar = SidebarUI(on_undo_callback=self.on_undo_click, on_quit_callback=on_quit_action, game_mode=mode)
         self.sidebar.size_hint_y = 0.55; self.sidebar_panel.add_widget(self.sidebar); self.main_layout.add_widget(self.sidebar_panel)
+        
         self.init_board_ui()
 
-    def show_deployment_ui(self):
-        self.deploy_btn = Button(text="[b]START BATTLE[/b]", markup=True, size_hint=(None, None), size=(dp(250), dp(60)), pos_hint={'center_x': 0.5, 'y': 0.2}, background_color=(0.8, 0.3, 0.1, 1), font_size='22sp')
-        self.deploy_btn.bind(on_release=self.finish_deployment)
-        self.root_layout.add_widget(self.deploy_btn)
+        if mode == 'Divide_Conquer':
+            self.battle_phase = 'deployment'
+            self.setup_deployment_ui()
+        else:
+            self.battle_phase = 'playing'
 
-    def finish_deployment(self, instance):
-        App.get_running_app().play_click_sound()
-        self.root_layout.remove_widget(self.deploy_btn)
+    def setup_deployment_ui(self):
+        if hasattr(self, 'deployment_layer') and self.deployment_layer:
+            self.root_layout.remove_widget(self.deployment_layer)
+
+        self.deployment_layer = FloatLayout()
+        self.root_layout.add_widget(self.deployment_layer)
+
+        self.black_mask = Widget()
+        with self.black_mask.canvas.before:
+            Color(0, 0, 0, 0.95)
+            self.mask_rect = Rectangle()
+            
+        def update_mask(*args):
+            if hasattr(self, 'grid') and self.grid:
+                self.mask_rect.pos = (self.grid.x, self.grid.y + self.grid.height * 3 / 8)
+                self.mask_rect.size = (self.grid.width, self.grid.height * 5 / 8)
+                
+        if hasattr(self, 'grid'):
+            self.grid.bind(pos=update_mask, size=update_mask)
+            update_mask()
+        self.deployment_layer.add_widget(self.black_mask)
+
+        lbl = Label(text="[b]DEPLOYMENT PHASE[/b]\nArrange your units (Bottom 3 rows)", markup=True, halign='center', pos_hint={'center_x': 0.5, 'center_y': 0.7}, font_size='24sp', color=(1, 0.8, 0, 1))
+        self.deployment_layer.add_widget(lbl)
+
+        btn_box = BoxLayout(orientation='horizontal', size_hint=(None, None), size=(dp(400), dp(60)), pos_hint={'center_x': 0.5, 'y': 0.1}, spacing=dp(20))
+        
+        btn_retreat = Button(text="[b]RETREAT[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1), font_size='18sp')
+        btn_retreat.bind(on_release=self.deployment_retreat)
+        
+        btn_start = Button(text="[b]START BATTLE[/b]", markup=True, background_color=(0.2, 0.8, 0.2, 1), font_size='18sp')
+        btn_start.bind(on_release=self.start_battle_phase)
+        
+        btn_box.add_widget(btn_retreat)
+        btn_box.add_widget(btn_start)
+        self.deployment_layer.add_widget(btn_box)
+
+    def deployment_retreat(self, instance):
+        app = App.get_running_app()
+        if hasattr(app, 'play_click_sound'): app.play_click_sound()
+        
+        if hasattr(app, 'combat_source') and hasattr(app, 'combat_marching_army'):
+            app.combat_source.army_pieces.extend(app.combat_marching_army)
+        
+        app.battle_finished = True
+        app.battle_winner = 'draw'
+        app.survivors_atk = app.combat_marching_army
+        app.survivors_def = app.combat_target_army
+        
+        self.manager.current = 'campaign_map'
+
+    def start_battle_phase(self, instance):
+        app = App.get_running_app()
+        if hasattr(app, 'play_click_sound'): app.play_click_sound()
+        
         self.battle_phase = 'playing'
         self.selected = None
+        
+        if hasattr(self, 'deployment_layer') and self.deployment_layer:
+            self.root_layout.remove_widget(self.deployment_layer)
+            self.deployment_layer = None
+            
         self.refresh_ui()
         self.check_ai_turn()
+
+    def highlight_headers(self):
+        for (r, c), square in self.squares.items():
+            if hasattr(square, 'header_line') and square.header_line in square.canvas.after.children:
+                square.canvas.after.remove(square.header_line)
+            if hasattr(square, 'header_color') and square.header_color in square.canvas.after.children:
+                square.canvas.after.remove(square.header_color)
+
+            piece = self.game.board[r][c]
+            if piece and getattr(piece, 'is_header', False):
+                with square.canvas.after:
+                    square.header_color = Color(1, 0.9, 0, 1)
+                    square.header_line = Line(rectangle=(square.x, square.y, square.width, square.height), width=dp(2.5))
+                
+                def update_line(inst, val, s=square):
+                    if hasattr(s, 'header_line'):
+                        s.header_line.rectangle = (s.x, s.y, s.width, s.height)
+                square.bind(pos=update_line, size=update_line)
 
     def setup_divide_conquer_board(self, app):
         self.game.board = [[None for _ in range(8)] for _ in range(8)]
@@ -354,6 +423,9 @@ class GameplayScreen(Screen):
             )
             p = self.game.board[r][c]; sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
         self.sidebar.update_history_text(self.game.history.move_text_history)
+        
+        if getattr(self, 'battle_phase', 'playing') == 'playing':
+            self.highlight_headers()
 
     def show_item_tooltip(self, item):
         self.hide_item_tooltip(); self.item_tooltip = ItemTooltip(item); self.root_layout.add_widget(self.item_tooltip)
@@ -368,7 +440,6 @@ class GameplayScreen(Screen):
         
         tf = getattr(piece, 'tribe', 'the knight company')
         
-        # ✨ เปลี่ยนโฟลเดอร์ตามระดับการอัปเกรด
         stage_folder = "1base"
         lvl = getattr(piece, 'upgrade_level', 0)
         path = getattr(piece, 'upgrade_path', 'standard')
@@ -442,7 +513,6 @@ class GameplayScreen(Screen):
             sr, sc = self.selected
             if sr == r and sc == c: self.selected = None; self.hide_piece_status(); self.refresh_ui(); return
             
-            # ✨ บัฟให้ Menatarm ก่อนเข้า Crash
             atk_piece = self.game.board[sr][sc]
             if atk_piece and atk_piece.__class__.__name__.lower() == 'menatarm':
                 bonus = atk_piece.consume_charge_for_attack()
@@ -454,12 +524,10 @@ class GameplayScreen(Screen):
             if isinstance(res, tuple) and res[0] == "crash": 
                 self.show_crash_overlay(res[1], res[2], (sr, sc), (r, c)); return
             
-            # ✨ จัดการการเดินปกติ
             if atk_piece:
                 atk_piece.mark_moved()
                 if hasattr(atk_piece, 'reset_movement_stacks'): atk_piece.reset_movement_stacks()
 
-            # ✨ เช็คโปรโมท Levies
             if res == True and atk_piece and atk_piece.__class__.__name__.lower() == 'levies':
                 if (atk_piece.color == 'white' and r == 0) or (atk_piece.color == 'black' and r == 7):
                     res = "promote"
@@ -469,6 +537,7 @@ class GameplayScreen(Screen):
 
             if res == "promote":
                 self.hide_piece_status(); promoted_pawn = self.game.board[r][c] 
+                ptribe = getattr(promoted_pawn, 'tribe', self.get_tribe_name(promoted_pawn.color))
                 
                 is_prince = any(getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False) for row in self.game.board for p in row if p and p.color == promoted_pawn.color)
                 is_levies = promoted_pawn.__class__.__name__.lower() == 'levies'
@@ -480,7 +549,7 @@ class GameplayScreen(Screen):
                     self.game.promote_pawn(r, c, cls)
                     pop.dismiss(); self.init_board_ui(); self.trigger_end_turn_logic(old_color)
                 
-                pop = PromotionPopup(promoted_pawn.color, getattr(promoted_pawn, 'tribe', self.get_tribe_name(promoted_pawn.color)), do_p, is_prince=is_prince)
+                pop = PromotionPopup(promoted_pawn.color, ptribe, do_p, is_prince=is_prince)
                 pop.open()
             elif res in [True, "died"]: 
                 self.selected = None; self.hide_piece_status(); self.init_board_ui(); self.trigger_end_turn_logic(old_color)
@@ -493,7 +562,6 @@ class GameplayScreen(Screen):
 
         atk_piece = self.game.board[start_pos[0]][start_pos[1]]
         if atk_piece:
-            # เอาเหรียญบัฟของ Menatarm ออก
             if hasattr(atk_piece, 'temp_bonus_coins') and atk_piece.temp_bonus_coins > 0:
                 atk_piece.coins -= atk_piece.temp_bonus_coins
                 atk_piece.temp_bonus_coins = 0
@@ -512,14 +580,12 @@ class GameplayScreen(Screen):
         res = self.game.move_piece(start_pos[0], start_pos[1], end_pos[0], end_pos[1], resolve_crash=True, crash_won=crash_status)
         end_piece = self.game.board[end_pos[0]][end_pos[1]]
         
-        # ✨ เพิ่ม Stack ให้ Praetorian / Royalguard
         if crash_status == "won" and end_piece:
             if end_piece.__class__.__name__.lower() == 'praetorian': end_piece.on_attack_win()
             if end_piece.__class__.__name__.lower() == 'royalguard': end_piece.on_crash_win()
         elif crash_status == "died" and end_piece:
             if end_piece.__class__.__name__.lower() == 'royalguard': end_piece.on_crash_win()
 
-        # ✨ เช็คการเข้าเส้นชัยของ Levies เพื่อกระตุ้นโปรโมท
         if res in [True, "survived", "defender_survived"] and end_piece and end_piece.__class__.__name__.lower() == 'levies':
             if (end_piece.color == 'white' and end_pos[0] == 0) or (end_piece.color == 'black' and end_pos[0] == 7):
                 res = "promote"
@@ -540,7 +606,8 @@ class GameplayScreen(Screen):
 
             if getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer'] and pcolor == 'black':
                 from logic.pieces import Queen, Princess
-                self.game.promote_pawn(end_pos[0], end_pos[1], Princess if is_prince else Queen)
+                # บอทจะโปรโมทเป็น Queen เสมอ ถ้าไม่ใช่เผ่าผู้เล่นแบบ 100%
+                self.game.promote_pawn(end_pos[0], end_pos[1], Queen)
                 self.init_board_ui(); self.trigger_end_turn_logic(old_color)
             else:
                 def do_p(cls): 
@@ -580,7 +647,6 @@ class GameplayScreen(Screen):
         self.update_inventory_ui() 
 
     def trigger_end_turn_logic(self, finished_color):
-        """ อัปเดตสแตคของหมากทุกตัวและลบไอเทมที่ผิดเงื่อนไขในตอนจบเทิร์น """
         for row in self.game.board:
             for p in row:
                 if p and p.color == finished_color:
@@ -739,7 +805,6 @@ class GameplayScreen(Screen):
         atk_tribe = getattr(attacker, 'tribe', self.get_tribe_name(attacker.color))
         def_tribe = getattr(defender, 'tribe', self.get_tribe_name(defender.color))
         
-        # ✨ ส่ง game_mode เข้าไปด้วย
         self.crash_popup = CrashOverlay(
             attacker, defender, start, end, atk_tribe, def_tribe, 
             self.get_piece_image_path, self.execute_board_move, self.cancel_crash, 

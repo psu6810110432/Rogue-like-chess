@@ -27,7 +27,7 @@ def get_active_addons_list(addons_dict):
 class MapNode(Button):
     def __init__(self, node_type, faction, node_id, is_main_base=False, app=None, **kwargs):
         super().__init__(**kwargs)
-        self.background_normal = '' # ✨ แก้บั๊ก texture กดแล้วหาย
+        self.background_normal = '' 
         self.background_down = ''
         self.background_color = (0, 0, 0, 0)
         self.node_type = node_type 
@@ -36,7 +36,7 @@ class MapNode(Button):
         self.is_main_base = is_main_base 
         self.neighbors = []             
         self.size_hint = (None, None)
-        self.size = (dp(70), dp(70)) # ✨ ขยายขนาดโหนดหลัก
+        self.size = (dp(70), dp(70)) 
         self.is_selected_node = False 
         
         self.loyalty = 100 
@@ -55,7 +55,7 @@ class MapNode(Button):
             angles = [30, 150, 270] 
             for i in range(num_subs):
                 angle = math.radians(angles[i] + random.uniform(-15, 15))
-                dist = dp(random.uniform(110, 140)) # ✨ เพิ่มระยะห่างให้ยาวขึ้น
+                dist = dp(random.uniform(110, 140)) 
                 self.sub_villages.append({
                     'id': f"V{i+1}",
                     'rel_pos': (math.cos(angle) * dist, math.sin(angle) * dist),
@@ -78,20 +78,20 @@ class MapNode(Button):
 
         self.update_graphics()
         self.bind(pos=self.update_canvas, size=self.update_canvas)
-        self.refresh_recruits() # สุ่มทหารครั้งแรก
+        self.refresh_recruits()
 
     def refresh_recruits(self):
-        # ✨ ฟังก์ชันสุ่มรายชื่อทหารให้ Tavern ใหม่ทุกเทิร์น
         self.shop_recruits = self._generate_shop(self.node_type, self.addons)
         for sv in self.sub_villages:
             sv['shop_recruits'] = self._generate_shop('village', sv['addons'])
 
     def _generate_shop(self, n_type, addons):
+        # สร้างร้านค้าพื้นฐาน โดยไม่ต้องดักโจร เพราะโจรเข้าร้านค้าไม่ได้
         tav_lvl = addons.get('tavern', 1)
         t1_opts = [('pawn', 2), ('levies', 2), ('knight', 4), ('bishop', 4), ('rook', 4)]
         t2_opts = [('hastati', 3), ('menatarm', 5)]
         t3_opts = [('praetorian', 7), ('royalguard', 7)]
-        
+            
         shop = {'T1': [], 'T2': [], 'T3': []}
         
         if tav_lvl >= 1:
@@ -195,7 +195,6 @@ class MapNode(Button):
                 Color(*fac_color)
                 self.border_line = Line(width=2)
                 
-        # ✨ สำคัญ: บังคับให้ Kivy อัปเดตตำแหน่ง Canvas ทันที เพื่อไม่ให้ Texture ไปอยู่มุมล่างซ้าย
         self.update_canvas() 
 
     def update_canvas(self, *args):
