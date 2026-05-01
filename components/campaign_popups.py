@@ -120,11 +120,13 @@ class RecruitPopup(ModalView):
         self.status_lbl.text = f"Tax: [color=00ff00]{tax}[/color] | Tavern Lvl: {tav_lvl}"
         
         shop = self.panel.active_sub_village['shop_recruits'] if self.panel.active_sub_village else getattr(self.node, 'shop_recruits', {})
-        unlock_costs = {'praetorian': 14, 'royalguard': 14, 'hastati': 6}
         
-        def build_row(row_key, title):
+        def build_row(row_key):
             if row_key not in shop: return
             row_data = shop[row_key]
+            
+            # ดึง Title มาจาก Dictionary โดยตรง จะได้ชื่อไม่หลอกตา
+            title = row_data.get('title', f"Row: {row_key}")
             req_lvl = row_data['req_lvl']
             items = row_data['data']
             
@@ -145,11 +147,9 @@ class RecruitPopup(ModalView):
                     p_name = p_data['name']
                     base_cost = p_data['cost']
                     final_cost = self.panel.get_discounted_price(base_cost, addons)
-                    is_locked = p_name not in self.app.unlocked_units.get(self.node.faction, set())
-                    ucost = unlock_costs.get(p_name, 0)
                     
-                    cb = lambda n, c, l, u, r=row_key, i=idx: self.on_buy_piece(n, c, l, u, r, i)
-                    card = RecruitCard(p_name, final_cost, self.node.faction, self.app, cb, is_locked=is_locked, unlock_cost=ucost)
+                    cb = lambda n, c, r=row_key, i=idx: self.on_buy_piece(n, c, r, i)
+                    card = RecruitCard(p_name, final_cost, self.node.faction, self.app, cb)
                     
                 row_grid.add_widget(card)
                 
@@ -157,15 +157,15 @@ class RecruitPopup(ModalView):
             row_scroll.add_widget(row_grid)
             self.content_grid.add_widget(row_scroll)
             
-        build_row('row1', "Row 1: Militia")
-        build_row('row2', "Row 2: Militia / Regular")
-        build_row('row3', "Row 3: Regular")
-        build_row('row4', "Row 4: Veterans")
-        build_row('row5', "Row 5: Elite Guards")
+        build_row('row1')
+        build_row('row2')
+        build_row('row3')
+        build_row('row4')
+        build_row('row5')
         
-    def on_buy_piece(self, piece_name, cost, is_locked, unlock_cost, row_key, idx):
-        status = self.panel.buy_piece(piece_name, cost, is_locked, unlock_cost, row_key, idx)
-        if status in ["unlocked", "bought"]:
+    def on_buy_piece(self, piece_name, cost, row_key, idx):
+        success = self.panel.buy_piece(piece_name, cost, row_key, idx)
+        if success:
             self.refresh_ui()
 
 # ----------------- Build Popup -----------------
@@ -233,12 +233,12 @@ class BuildPopup(ModalView):
         
         farm_lvl = addons.get('farm', 1)
         farm_cost = farm_lvl * 5
-        if farm_lvl < 5: # ฟาร์มตันที่ 5
+        if farm_lvl < 3:
             img = get_addon_img('farm', farm_lvl)
             self.content_grid.add_widget(BuildCard("Farm", f"Lvl {farm_lvl} -> {farm_lvl+1}\n(+2 Tax)", farm_cost, img, lambda: self.on_upgrade_addon('farm', farm_cost)))
             
         tav_lvl = addons.get('tavern', 1)
-        tav_max = 5 if (self.node.node_type == 'castle' and self.panel.active_sub_village is None) else 3
+        tav_max = 3
         tav_cost = tav_lvl * 6
         if tav_lvl < tav_max:
             img = get_addon_img('tavern', tav_lvl)
@@ -247,7 +247,7 @@ class BuildPopup(ModalView):
         spec = addons.get('special')
         spec_lvl = addons.get('special_lvl', 0)
         if spec and spec not in ['mine']: 
-            max_slvl = 3 # สิ่งปลูกสร้าง Special ทุกชนิดตันที่เวล 3
+            max_slvl = 3
             spec_cost = spec_lvl * 8
             if spec_lvl < max_slvl:
                 img = get_addon_img(spec, spec_lvl)
@@ -257,7 +257,7 @@ class BuildPopup(ModalView):
         self.panel.upgrade_addon(key, cost)
         self.refresh_ui()
 
-# ----------------- Army Status -----------------
+# ----------------- Army Status (เหมือนเดิม) -----------------
 class ArmyStatusPopup(ModalView):
     def __init__(self, army_pieces, **kwargs):
         super().__init__(size_hint=(0.9, 0.9), background_color=(0, 0, 0, 0.8), auto_dismiss=True, **kwargs)
@@ -349,7 +349,7 @@ class ArmyStatusPopup(ModalView):
         self.bg.pos, self.bg.size = instance.pos, instance.size
         self.border_line.rounded_rectangle = (instance.x, instance.y, instance.width, instance.height, dp(15))
 
-# ----------------- Upgrade Tree UI -----------------
+# ----------------- Upgrade Tree UI (เหมือนเดิม) -----------------
 class TechCard(ButtonBehavior, BoxLayout):
     def __init__(self, title, desc, atk, def_pt, coins, img_path, is_unlocked, is_available, on_click_cb, **kwargs):
         super().__init__(orientation='vertical', padding=dp(10), spacing=dp(5), size_hint=(None, None), size=(dp(160), dp(200)), **kwargs)
