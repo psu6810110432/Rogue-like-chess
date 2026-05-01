@@ -12,8 +12,252 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.modalview import ModalView
+from components.campaign_cards import RecruitCard
 
-# ----------------- หน้าต่าง Army Status -----------------
+def get_addon_img(addon, lvl):
+    folder = "base1" if lvl <= 1 else ("up1" if lvl == 2 else "up2")
+    return f"assets/structure/addon/{folder}/{addon}.png"
+
+class BuildCard(ButtonBehavior, FloatLayout):
+    def __init__(self, title, desc, cost, img_path, on_click_cb, **kwargs):
+        super().__init__(size_hint=(None, None), size=(dp(160), dp(110)), **kwargs)
+        self.bind(on_release=lambda x: on_click_cb())
+        
+        with self.canvas.before:
+            Color(0.15, 0.25, 0.15, 1)
+            self.bg = RoundedRectangle(radius=[dp(8)])
+        self.bind(pos=self._update_bg, size=self._update_bg)
+        
+        self.add_widget(Image(source=img_path, size_hint=(0.35, 0.8), pos_hint={'x': 0.05, 'center_y': 0.5}, allow_stretch=True, keep_ratio=True))
+        
+        lbl_box = BoxLayout(orientation='vertical', size_hint=(0.55, 0.9), pos_hint={'right': 0.95, 'center_y': 0.5})
+        lbl_box.add_widget(Label(text=f"[b]{title}[/b]", markup=True, font_size='14sp', halign='center'))
+        lbl_box.add_widget(Label(text=f"[size=11sp]{desc}[/size]", markup=True, halign='center'))
+        lbl_box.add_widget(Label(text=f"[color=ffff00]Cost: {cost} Tax[/color]", markup=True, font_size='12sp', halign='center'))
+        self.add_widget(lbl_box)
+
+    def _update_bg(self, instance, value):
+        self.bg.pos, self.bg.size = instance.pos, instance.size
+
+# --- Helper สำหรับสร้าง Nav ข้างบน Popup ---
+def create_subvillage_nav(panel, popup_instance):
+    nav_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(40), spacing=dp(5))
+    if panel.current_node.node_type != 'castle': 
+        return nav_box
+        
+    btn_main = Button(text="Main Castle", font_size='13sp', background_color=(0.5, 0.5, 0.2, 1) if panel.active_sub_village is None else (0.2, 0.2, 0.2, 1))
+    btn_main.bind(on_release=lambda x: popup_instance.change_sv(None))
+    nav_box.add_widget(btn_main)
+    
+    for sv in panel.current_node.sub_villages:
+        btn_v = Button(text=f"Village {sv['id']}", font_size='13sp', background_color=(0.5, 0.5, 0.2, 1) if panel.active_sub_village == sv else (0.2, 0.2, 0.2, 1))
+        btn_v.bind(on_release=lambda x, v=sv: popup_instance.change_sv(v))
+        nav_box.add_widget(btn_v)
+        
+    return nav_box
+
+# ----------------- Recruit Popup -----------------
+class RecruitPopup(ModalView):
+    def __init__(self, panel, **kwargs):
+        super().__init__(size_hint=(0.85, 0.85), background_color=(0,0,0,0.8), auto_dismiss=True, **kwargs)
+        self.panel = panel
+        self.app = panel.app
+        self.node = panel.current_node
+        self.active_sv = panel.active_sub_village
+        
+        self.root_box = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(10))
+        with self.root_box.canvas.before:
+            Color(0.1, 0.1, 0.15, 0.95)
+            self.bg = RoundedRectangle(radius=[dp(12)])
+            Color(0.3, 0.8, 0.3, 1)
+            self.border_line = Line(rounded_rectangle=[self.root_box.x, self.root_box.y, self.root_box.width, self.root_box.height, dp(12)], width=2)
+        self.root_box.bind(pos=self._update_bg, size=self._update_bg)
+        
+        self.header = BoxLayout(size_hint_y=None, height=dp(40))
+        self.title = Label(text="[b]RECRUITMENT CAMP[/b]", markup=True, font_size='22sp', halign='left', color=(0.3, 0.8, 0.3, 1))
+        self.title.bind(size=self.title.setter('text_size'))
+        self.status_lbl = Label(text="", markup=True, font_size='16sp', halign='right')
+        self.status_lbl.bind(size=self.status_lbl.setter('text_size'))
+        
+        close_btn = Button(text="CLOSE", size_hint_x=0.2, background_color=(0.8, 0.2, 0.2, 1))
+        close_btn.bind(on_release=self.dismiss)
+        
+        self.header.add_widget(self.title)
+        self.header.add_widget(self.status_lbl)
+        self.header.add_widget(close_btn)
+        self.root_box.add_widget(self.header)
+        
+        self.nav_container = BoxLayout(size_hint_y=None, height=dp(40))
+        self.root_box.add_widget(self.nav_container)
+        
+        self.scroll = ScrollView(size_hint=(1, 1), do_scroll_y=True, do_scroll_x=False)
+        self.content_grid = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(15), padding=dp(10))
+        self.content_grid.bind(minimum_height=self.content_grid.setter('height'))
+        self.scroll.add_widget(self.content_grid)
+        
+        self.root_box.add_widget(self.scroll)
+        self.add_widget(self.root_box)
+        
+        self.refresh_ui()
+        
+    def _update_bg(self, instance, value):
+        self.bg.pos, self.bg.size = instance.pos, instance.size
+        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(12)]
+        
+    def change_sv(self, sv):
+        self.app.play_click_sound()
+        self.panel.active_sub_village = sv
+        self.refresh_ui()
+
+    def refresh_ui(self):
+        self.nav_container.clear_widgets()
+        self.nav_container.add_widget(create_subvillage_nav(self.panel, self))
+        
+        self.content_grid.clear_widgets()
+        tax = self.app.tax_points.get(self.node.faction, 0)
+        addons = self.panel.get_active_addons()
+        tav_lvl = addons.get('tavern', 1)
+        self.status_lbl.text = f"Tax: [color=00ff00]{tax}[/color] | Tavern Lvl: {tav_lvl}"
+        
+        shop = self.panel.active_sub_village['shop_recruits'] if self.panel.active_sub_village else getattr(self.node, 'shop_recruits', {})
+        unlock_costs = {'praetorian': 14, 'royalguard': 14, 'hastati': 6}
+        
+        def build_row(row_key, title):
+            if row_key not in shop: return
+            row_data = shop[row_key]
+            req_lvl = row_data['req_lvl']
+            items = row_data['data']
+            
+            self.content_grid.add_widget(Label(text=f"[b]{title}[/b]", markup=True, size_hint_y=None, height=dp(30), halign='left', color=(0.9,0.8,0.2,1)))
+            
+            if tav_lvl < req_lvl:
+                locked_btn = Button(text=f"[b]Unlock: Tavern Lvl {req_lvl}[/b]", markup=True, background_color=(0.3, 0.1, 0.1, 1), size_hint_y=None, height=dp(140))
+                self.content_grid.add_widget(locked_btn)
+                return
+
+            row_grid = GridLayout(rows=1, spacing=dp(12), size_hint_y=None, height=dp(140), size_hint_x=None)
+            row_grid.bind(minimum_width=row_grid.setter('width'))
+            
+            for idx, p_data in enumerate(items):
+                if p_data is None:
+                    card = RecruitCard(None, 0, self.node.faction, self.app, None)
+                else:
+                    p_name = p_data['name']
+                    base_cost = p_data['cost']
+                    final_cost = self.panel.get_discounted_price(base_cost, addons)
+                    is_locked = p_name not in self.app.unlocked_units.get(self.node.faction, set())
+                    ucost = unlock_costs.get(p_name, 0)
+                    
+                    cb = lambda n, c, l, u, r=row_key, i=idx: self.on_buy_piece(n, c, l, u, r, i)
+                    card = RecruitCard(p_name, final_cost, self.node.faction, self.app, cb, is_locked=is_locked, unlock_cost=ucost)
+                    
+                row_grid.add_widget(card)
+                
+            row_scroll = ScrollView(size_hint_y=None, height=dp(150), do_scroll_x=True, do_scroll_y=False)
+            row_scroll.add_widget(row_grid)
+            self.content_grid.add_widget(row_scroll)
+            
+        build_row('row1', "Row 1: Militia")
+        build_row('row2', "Row 2: Militia / Regular")
+        build_row('row3', "Row 3: Regular")
+        build_row('row4', "Row 4: Veterans")
+        build_row('row5', "Row 5: Elite Guards")
+        
+    def on_buy_piece(self, piece_name, cost, is_locked, unlock_cost, row_key, idx):
+        success = self.panel.buy_piece(piece_name, cost, is_locked, unlock_cost, row_key, idx)
+        if success:
+            self.refresh_ui()
+
+# ----------------- Build Popup -----------------
+class BuildPopup(ModalView):
+    def __init__(self, panel, **kwargs):
+        super().__init__(size_hint=(0.85, 0.85), background_color=(0,0,0,0.8), auto_dismiss=True, **kwargs)
+        self.panel = panel
+        self.app = panel.app
+        self.node = panel.current_node
+        self.active_sv = panel.active_sub_village
+        
+        self.root_box = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(10))
+        with self.root_box.canvas.before:
+            Color(0.15, 0.1, 0.1, 0.95)
+            self.bg = RoundedRectangle(radius=[dp(12)])
+            Color(0.8, 0.5, 0.2, 1)
+            self.border_line = Line(rounded_rectangle=[self.root_box.x, self.root_box.y, self.root_box.width, self.root_box.height, dp(12)], width=2)
+        self.root_box.bind(pos=self._update_bg, size=self._update_bg)
+        
+        self.header = BoxLayout(size_hint_y=None, height=dp(40))
+        self.title = Label(text="[b]CONSTRUCTION[/b]", markup=True, font_size='22sp', halign='left', color=(0.8, 0.5, 0.2, 1))
+        self.title.bind(size=self.title.setter('text_size'))
+        self.status_lbl = Label(text="", markup=True, font_size='16sp', halign='right')
+        self.status_lbl.bind(size=self.status_lbl.setter('text_size'))
+        
+        close_btn = Button(text="CLOSE", size_hint_x=0.2, background_color=(0.8, 0.2, 0.2, 1))
+        close_btn.bind(on_release=self.dismiss)
+        
+        self.header.add_widget(self.title)
+        self.header.add_widget(self.status_lbl)
+        self.header.add_widget(close_btn)
+        self.root_box.add_widget(self.header)
+        
+        self.nav_container = BoxLayout(size_hint_y=None, height=dp(40))
+        self.root_box.add_widget(self.nav_container)
+        
+        self.scroll = ScrollView(size_hint=(1, 1), do_scroll_y=True, do_scroll_x=False)
+        self.content_grid = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(10), padding=dp(10))
+        self.content_grid.bind(minimum_height=self.content_grid.setter('height'))
+        self.scroll.add_widget(self.content_grid)
+        
+        self.root_box.add_widget(self.scroll)
+        self.add_widget(self.root_box)
+        
+        self.refresh_ui()
+        
+    def _update_bg(self, instance, value):
+        self.bg.pos, self.bg.size = instance.pos, instance.size
+        self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(12)]
+        
+    def change_sv(self, sv):
+        self.app.play_click_sound()
+        self.panel.active_sub_village = sv
+        self.refresh_ui()
+
+    def refresh_ui(self):
+        self.nav_container.clear_widgets()
+        self.nav_container.add_widget(create_subvillage_nav(self.panel, self))
+        
+        self.content_grid.clear_widgets()
+        tax = self.app.tax_points.get(self.node.faction, 0)
+        addons = self.panel.get_active_addons()
+        
+        self.status_lbl.text = f"Tax: [color=00ff00]{tax}[/color]"
+        
+        farm_lvl = addons.get('farm', 1)
+        farm_cost = farm_lvl * 5
+        if farm_lvl < 3:
+            img = get_addon_img('farm', farm_lvl)
+            self.content_grid.add_widget(BuildCard("Farm", f"Lvl {farm_lvl} -> {farm_lvl+1}\n(+2 Tax)", farm_cost, img, lambda: self.on_upgrade_addon('farm', farm_cost)))
+            
+        tav_lvl = addons.get('tavern', 1)
+        tav_max = 5 if (self.node.node_type == 'castle' and self.panel.active_sub_village is None) else 3
+        tav_cost = tav_lvl * 6
+        if tav_lvl < tav_max:
+            img = get_addon_img('tavern', tav_lvl)
+            self.content_grid.add_widget(BuildCard("Tavern", f"Lvl {tav_lvl} -> {tav_lvl+1}\n(Unlocks Units)", tav_cost, img, lambda: self.on_upgrade_addon('tavern', tav_cost)))
+            
+        spec = addons.get('special')
+        spec_lvl = addons.get('special_lvl', 0)
+        if spec and spec not in ['mine']: 
+            max_slvl = 3 if spec in ['guard', 'statue'] else 2
+            spec_cost = spec_lvl * 8
+            if spec_lvl < max_slvl:
+                img = get_addon_img(spec, spec_lvl)
+                self.content_grid.add_widget(BuildCard(spec.capitalize(), f"Lvl {spec_lvl} -> {spec_lvl+1}", spec_cost, img, lambda: self.on_upgrade_addon('special_lvl', spec_cost)))
+                
+    def on_upgrade_addon(self, key, cost):
+        self.panel.upgrade_addon(key, cost)
+        self.refresh_ui()
+
+# ----------------- Army Status -----------------
 class ArmyStatusPopup(ModalView):
     def __init__(self, army_pieces, **kwargs):
         super().__init__(size_hint=(0.9, 0.9), background_color=(0, 0, 0, 0.8), auto_dismiss=True, **kwargs)
@@ -24,7 +268,7 @@ class ArmyStatusPopup(ModalView):
             Color(0.2, 0.8, 1, 1)
             self.border_line = Line(rounded_rectangle=(self.root_layout.x, self.root_layout.y, self.root_layout.width, self.root_layout.height, dp(15)), width=2)
         self.root_layout.bind(pos=self._update_bg, size=self._update_bg)
-
+        
         header = BoxLayout(orientation='horizontal', size_hint=(1, 0.1), pos_hint={'top': 1}, padding=[dp(15), dp(5)])
         header.add_widget(Label(text="[b]ARMY STATUS[/b]", markup=True, font_size='20sp', halign='left', color=(0.2, 0.8, 1, 1)))
         
@@ -32,24 +276,21 @@ class ArmyStatusPopup(ModalView):
         close_btn.bind(on_release=self.dismiss)
         header.add_widget(close_btn)
         self.root_layout.add_widget(header)
-
+        
         scroll = ScrollView(size_hint=(1, 0.9), pos_hint={'y': 0})
-        # ✨ จัด Layout เป็น 3 คอลัมน์
-        grid = GridLayout(cols=3, spacing=dp(10), padding=dp(10), size_hint_y=None)
+        grid = GridLayout(cols=3, spacing=dp(15), padding=dp(15), size_hint_y=None)
         grid.bind(minimum_height=grid.setter('height'))
-
+        
         for p in army_pieces:
-            box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(200), padding=dp(5), spacing=dp(2))
+            box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(250), padding=dp(10), spacing=dp(5))
             with box.canvas.before:
                 Color(0.15, 0.15, 0.18, 1)
                 box_bg = RoundedRectangle(radius=[dp(8)])
-            
             def update_box_bg(instance, value, bg=box_bg):
                 bg.pos = instance.pos
                 bg.size = instance.size
             box.bind(pos=update_box_bg, size=update_box_bg)
             
-            # ✨ 1. ดึงและแสดงรูปภาพของหมากตัวนั้นๆ
             p_cls_name = p.__class__.__name__.lower()
             tribe = getattr(p, 'tribe', 'the knight company')
             color = p.color
@@ -72,40 +313,34 @@ class ArmyStatusPopup(ModalView):
             
             img_path = f"assets/pieces/{tribe}/{color}/{stage_folder}/{filename}"
             
-            img = Image(source=img_path, size_hint_y=0.35, allow_stretch=True, keep_ratio=True)
+            img = Image(source=img_path, size_hint_y=0.55, allow_stretch=True, keep_ratio=True)
             box.add_widget(img)
             
-            # ✨ 2. ชื่อหมากแบบเต็ม
             p_name = getattr(p, 'name', p.__class__.__name__.capitalize())
-            if "(Commander)" in p_name: 
-                p_name = p_name.replace(" (Commander)", "") + " [color=ffff00](Commander)[/color]"
-            
             lvl_str = f" [color=ffff00]+{lvl}[/color]" if lvl > 0 else ""
-            title_lbl = Label(text=f"[b]{p_name}{lvl_str}[/b]", markup=True, font_size='14sp', size_hint_y=0.15)
+            title_lbl = Label(text=f"[b]{p_name}{lvl_str}[/b]", markup=True, font_size='14sp', size_hint_y=0.15, halign='center', valign='middle')
+            title_lbl.bind(size=title_lbl.setter('text_size'))
             
-            # ✨ 3, 4, 5. แสดงสเตตัส Coin, ATK, DEF
             stats_lbl = Label(text=f"[color=ffffaa]Coin:[/color] {p.coins}  [color=ff5555]ATK:[/color] {p.base_atk}  [color=5555ff]DEF:[/color] {p.base_def}", markup=True, font_size='12sp', size_hint_y=0.15)
             
-            # ✨ แสดง Passive 1
             hp1 = getattr(p, 'hidden_passive', None)
             desc1 = hp1.description if hp1 and getattr(hp1, 'passive_type', None) else "None"
             passives_text = f"[color=00ffcc]P1:[/color] {desc1}"
             
-            # ✨ 6. แสดง Second Passive (ถ้ามี)
             hp2 = getattr(p, 'second_hidden_passive', None)
             if hp2 and getattr(hp2, 'passive_type', None):
                 desc2 = hp2.description
                 passives_text += f"\n[color=ff00cc]P2:[/color] {desc2}"
-            
-            pass_lbl = Label(text=passives_text, markup=True, font_size='11sp', size_hint_y=0.35, halign='center', valign='middle')
-            pass_lbl.bind(size=pass_lbl.setter('text_size')) # ช่วยให้ข้อความขึ้นบรรทัดใหม่ได้เมื่อเกินกรอบ
+                
+            pass_lbl = Label(text=passives_text, markup=True, font_size='11sp', size_hint_y=0.25, halign='center', valign='middle')
+            pass_lbl.bind(size=pass_lbl.setter('text_size'))
             
             box.add_widget(title_lbl)
             box.add_widget(stats_lbl)
             box.add_widget(pass_lbl)
             
             grid.add_widget(box)
-
+            
         scroll.add_widget(grid)
         self.root_layout.add_widget(scroll)
         self.add_widget(self.root_layout)
@@ -114,11 +349,10 @@ class ArmyStatusPopup(ModalView):
         self.bg.pos, self.bg.size = instance.pos, instance.size
         self.border_line.rounded_rectangle = (instance.x, instance.y, instance.width, instance.height, dp(15))
 
-
-# ----------------- ระบบ Upgrade Tree UI -----------------
+# ----------------- Upgrade Tree UI -----------------
 class TechCard(ButtonBehavior, BoxLayout):
     def __init__(self, title, desc, atk, def_pt, coins, img_path, is_unlocked, is_available, on_click_cb, **kwargs):
-        super().__init__(orientation='vertical', padding=dp(5), spacing=dp(2), size_hint=(None, None), size=(dp(120), dp(160)), **kwargs)
+        super().__init__(orientation='vertical', padding=dp(10), spacing=dp(5), size_hint=(None, None), size=(dp(160), dp(200)), **kwargs)
         self.is_unlocked = is_unlocked
         self.is_available = is_available
         self.on_click_cb = on_click_cb
@@ -129,27 +363,26 @@ class TechCard(ButtonBehavior, BoxLayout):
             
             if is_unlocked:
                 Color(0.9, 0.8, 0.2, 1) 
-                width = 2
+                width = 2.5
             elif is_available:
                 Color(0.4, 0.8, 0.4, 1) 
-                width = 1.5
+                width = 2
             else:
                 Color(0.3, 0.3, 0.35, 1) 
-                width = 1
+                width = 1.5
                 
             self.border_line = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(8)), width=width)
             
         self.bind(pos=self._update_bg, size=self._update_bg)
-
-        self.add_widget(Label(text=f"[b]{title}[/b]", markup=True, font_size='13sp', size_hint_y=0.15))
+        self.add_widget(Label(text=f"[b]{title}[/b]", markup=True, font_size='15sp', size_hint_y=0.15))
         
-        img = Image(source=img_path, allow_stretch=True, keep_ratio=True, size_hint_y=0.4)
+        img = Image(source=img_path, allow_stretch=True, keep_ratio=True, size_hint_y=0.55)
         if not is_unlocked and not is_available: img.opacity = 0.4
         self.add_widget(img)
         
         stats_color = "aaaaaa" if not is_unlocked and not is_available else "ffffff"
-        self.add_widget(Label(text=f"[color={stats_color}]ATK: {atk} | DEF: {def_pt}\nCoins: {coins}[/color]", markup=True, font_size='11sp', size_hint_y=0.25, halign='center'))
-        self.add_widget(Label(text=f"[color=00ffcc]{desc}[/color]", markup=True, font_size='10sp', size_hint_y=0.2, halign='center'))
+        self.add_widget(Label(text=f"[color={stats_color}]ATK: {atk} | DEF: {def_pt}\nCoins: {coins}[/color]", markup=True, font_size='12sp', size_hint_y=0.15, halign='center'))
+        self.add_widget(Label(text=f"[color=00ffcc]{desc}[/color]", markup=True, font_size='11sp', size_hint_y=0.15, halign='center'))
 
     def _update_bg(self, instance, value):
         self.bg.pos, self.bg.size = instance.pos, instance.size
@@ -175,7 +408,7 @@ class UpgradeTreePopup(ModalView):
             Color(0.83, 0.68, 0.21, 1)
             self.border_line = Line(rounded_rectangle=(self.root_layout.x, self.root_layout.y, self.root_layout.width, self.root_layout.height, dp(15)), width=2)
         self.root_layout.bind(pos=self._update_bg, size=self._update_bg)
-
+        
         header = BoxLayout(orientation='horizontal', size_hint=(1, 0.1), pos_hint={'top': 1}, padding=[dp(15), dp(5)])
         p_name_display = getattr(self.piece, 'name', self.piece.__class__.__name__.capitalize())
         header.add_widget(Label(text=f"[b]UPGRADE PATH: {p_name_display} (Cost: {self.upgrade_cost} Tax)[/b]", markup=True, font_size='20sp', halign='left', color=(1, 0.8, 0.2, 1)))
@@ -184,7 +417,7 @@ class UpgradeTreePopup(ModalView):
         close_btn.bind(on_release=self.dismiss)
         header.add_widget(close_btn)
         self.root_layout.add_widget(header)
-
+        
         self.tree_layout = FloatLayout(size_hint=(1, 0.9), pos_hint={'y': 0})
         self.root_layout.add_widget(self.tree_layout)
         
@@ -222,25 +455,26 @@ class UpgradeTreePopup(ModalView):
 
         def draw_line(p1, p2, is_active):
             with self.tree_layout.canvas.before:
-                if is_active:
-                    Color(0.9, 0.8, 0.2, 1)
-                else:
-                    Color(0.7, 0.7, 0.7, 1) 
-                Line(points=[p1[0], p1[1], p2[0], p2[1]], width=2.5 if is_active else 1.5)
+                if is_active: Color(0.9, 0.8, 0.2, 1)
+                else: Color(0.7, 0.7, 0.7, 1)
+                Line(points=[p1[0], p1[1], p2[0], p2[1]], width=3 if is_active else 1.5)
 
         cx = self.width / 2 if self.width > 1 else dp(400)
         cy = self.height / 2 if self.height > 1 else dp(300)
-        card_w, card_h = dp(120), dp(160)
+        card_w, card_h = dp(160), dp(200)
+        
+        x_left = cx - dp(240)
+        x_mid = cx
+        x_right = cx + dp(240)
         
         y_top = cy + dp(120)
-        y_mid = cy - dp(40)
-        y_bot = cy - dp(200)
+        y_bot = cy - dp(120)
 
         b_atk = getattr(p, 'base_atk', p.base_points) if lvl == 0 else p.base_points
         b_def = getattr(p, 'base_def', p.base_points) if lvl == 0 else p.base_points
         
         node_base = TechCard("Base Form", "Default Stats", b_atk, b_def, p.coins, base_img, (lvl == 0), False, None)
-        node_base.pos = (cx - card_w/2, y_top - card_h/2)
+        node_base.pos = (x_left - card_w/2, cy - card_h/2)
         self.tree_layout.add_widget(node_base)
 
         if not has_special:
@@ -248,37 +482,34 @@ class UpgradeTreePopup(ModalView):
             n1_avail = (lvl == 0)
             n1_atk = b_atk + 2
             node_u1 = TechCard("Rank I", "+2 Base ATK", n1_atk, b_def, p.coins, atk1_img, n1_unlocked, n1_avail, lambda: self.do_upgrade("standard"))
-            node_u1.pos = (cx - card_w/2, y_mid - card_h/2)
+            node_u1.pos = (x_mid - card_w/2, cy - card_h/2)
             self.tree_layout.add_widget(node_u1)
             
             n2_unlocked = (lvl == 2)
             n2_avail = (lvl == 1)
             n2_def = b_def + 2
             node_u2 = TechCard("Rank II", "+2 Base DEF", n1_atk, n2_def, p.coins, def2_img, n2_unlocked, n2_avail, lambda: self.do_upgrade("standard"))
-            node_u2.pos = (cx - card_w/2, y_bot - card_h/2)
+            node_u2.pos = (x_right - card_w/2, cy - card_h/2)
             self.tree_layout.add_widget(node_u2)
             
-            Clock.schedule_once(lambda dt: draw_line((node_base.center_x, node_base.y), (node_u1.center_x, node_u1.top), n1_unlocked), 0.1)
-            Clock.schedule_once(lambda dt: draw_line((node_u1.center_x, node_u1.y), (node_u2.center_x, node_u2.top), n2_unlocked), 0.1)
+            Clock.schedule_once(lambda dt: draw_line((node_base.right, node_base.center_y), (node_u1.x, node_u1.center_y), n1_unlocked), 0.1)
+            Clock.schedule_once(lambda dt: draw_line((node_u1.right, node_u1.center_y), (node_u2.x, node_u2.center_y), n2_unlocked), 0.1)
             
         else:
-            lx = cx - dp(100)
-            rx = cx + dp(100)
-            
             n1_std_unlocked = (lvl >= 1 and path == "standard")
             n1_std_avail = (lvl == 0)
             node_u1_std = TechCard("Rank I (Combat)", "+2 Base ATK", b_atk+2, b_def, p.coins, atk1_img, n1_std_unlocked, n1_std_avail, lambda: self.do_upgrade("standard"))
-            node_u1_std.pos = (lx - card_w/2, y_mid - card_h/2)
+            node_u1_std.pos = (x_mid - card_w/2, y_top - card_h/2)
             self.tree_layout.add_widget(node_u1_std)
             
             n2_std_unlocked = (lvl == 2 and path == "standard")
             n2_std_avail = (lvl == 1 and path == "standard")
             node_u2_std = TechCard("Rank II (Combat)", "+2 Base DEF", b_atk+2, b_def+2, p.coins, def2_img, n2_std_unlocked, n2_std_avail, lambda: self.do_upgrade("standard"))
-            node_u2_std.pos = (lx - card_w/2, y_bot - card_h/2)
+            node_u2_std.pos = (x_right - card_w/2, y_top - card_h/2)
             self.tree_layout.add_widget(node_u2_std)
             
-            Clock.schedule_once(lambda dt: draw_line((node_base.center_x, node_base.y), (node_u1_std.center_x, node_u1_std.top), n1_std_unlocked), 0.1)
-            Clock.schedule_once(lambda dt: draw_line((node_u1_std.center_x, node_u1_std.y), (node_u2_std.center_x, node_u2_std.top), n2_std_unlocked), 0.1)
+            Clock.schedule_once(lambda dt: draw_line((node_base.right, node_base.center_y), (node_u1_std.x, node_u1_std.center_y), n1_std_unlocked), 0.1)
+            Clock.schedule_once(lambda dt: draw_line((node_u1_std.right, node_u1_std.center_y), (node_u2_std.x, node_u2_std.center_y), n2_std_unlocked), 0.1)
 
             n1_spc_unlocked = (lvl >= 1 and path == "special")
             n1_spc_avail = (lvl == 0)
@@ -287,7 +518,7 @@ class UpgradeTreePopup(ModalView):
             n1_spc_def = b_def if not n1_spc_unlocked else p.base_def
             
             node_u1_spc = TechCard("Rank I (Utility)", desc1, n1_spc_atk, n1_spc_def, p.coins, spec1_img, n1_spc_unlocked, n1_spc_avail, lambda: self.do_upgrade("special"))
-            node_u1_spc.pos = (rx - card_w/2, y_mid - card_h/2)
+            node_u1_spc.pos = (x_mid - card_w/2, y_bot - card_h/2)
             self.tree_layout.add_widget(node_u1_spc)
             
             n2_spc_unlocked = (lvl == 2 and path == "special")
@@ -295,11 +526,11 @@ class UpgradeTreePopup(ModalView):
             desc2 = "Gain 2nd Hidden Passive" if not n2_spc_unlocked else getattr(p.second_hidden_passive, 'description', '2nd Passive Active')
             
             node_u2_spc = TechCard("Rank II (Utility)", desc2, p.base_atk, p.base_def, p.coins, spec2_img, n2_spc_unlocked, n2_spc_avail, lambda: self.do_upgrade("special"))
-            node_u2_spc.pos = (rx - card_w/2, y_bot - card_h/2)
+            node_u2_spc.pos = (x_right - card_w/2, y_bot - card_h/2)
             self.tree_layout.add_widget(node_u2_spc)
             
-            Clock.schedule_once(lambda dt: draw_line((node_base.center_x, node_base.y), (node_u1_spc.center_x, node_u1_spc.top), n1_spc_unlocked), 0.1)
-            Clock.schedule_once(lambda dt: draw_line((node_u1_spc.center_x, node_u1_spc.y), (node_u2_spc.center_x, node_u2_spc.top), n2_spc_unlocked), 0.1)
+            Clock.schedule_once(lambda dt: draw_line((node_base.right, node_base.center_y), (node_u1_spc.x, node_u1_spc.center_y), n1_spc_unlocked), 0.1)
+            Clock.schedule_once(lambda dt: draw_line((node_u1_spc.right, node_u1_spc.center_y), (node_u2_spc.x, node_u2_spc.center_y), n2_spc_unlocked), 0.1)
 
     def do_upgrade(self, path):
         app = App.get_running_app()

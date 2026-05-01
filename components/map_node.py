@@ -5,7 +5,6 @@ from kivy.uix.button import Button
 from kivy.graphics import Color, Rectangle, Line, Ellipse
 from kivy.metrics import dp
 from kivy.app import App
-
 from logic.campaign_helpers import generate_piece
 
 def roll_special_addon():
@@ -35,20 +34,20 @@ class MapNode(Button):
         self.node_id = node_id
         self.is_main_base = is_main_base 
         self.neighbors = []             
+        
         self.size_hint = (None, None)
         self.size = (dp(70), dp(70)) 
-        self.is_selected_node = False 
-        
+        self.is_selected_node = False          
         self.loyalty = 100 
         self.army_pieces = []
-
+        
         self.addons = {
             'farm': 1,
             'tavern': 1,
             'special': roll_special_addon(),
             'special_lvl': 1
         }
-
+        
         self.sub_villages = []
         if self.node_type == 'castle':
             num_subs = random.randint(1, 3)
@@ -75,42 +74,48 @@ class MapNode(Button):
                 else:
                     pieces_to_gen = ['king', 'rook', 'bishop', 'knight'] + ['pawn']*8
                 for pt in pieces_to_gen: self.army_pieces.append(generate_piece(pt, faction, app))
-
+                
         self.update_graphics()
         self.bind(pos=self.update_canvas, size=self.update_canvas)
         self.refresh_recruits()
 
     def refresh_recruits(self):
-        self.shop_recruits = self._generate_shop(self.node_type, self.addons)
+        self.shop_recruits = self._generate_shop(self.node_type)
         for sv in self.sub_villages:
-            sv['shop_recruits'] = self._generate_shop('village', sv['addons'])
+            sv['shop_recruits'] = self._generate_shop('village')
 
-    def _generate_shop(self, n_type, addons):
-        # สร้างร้านค้าพื้นฐาน โดยไม่ต้องดักโจร เพราะโจรเข้าร้านค้าไม่ได้
-        tav_lvl = addons.get('tavern', 1)
-        t1_opts = [('pawn', 2), ('levies', 2), ('knight', 4), ('bishop', 4), ('rook', 4)]
-        t2_opts = [('hastati', 3), ('menatarm', 5)]
-        t3_opts = [('praetorian', 7), ('royalguard', 7)]
-            
-        shop = {'T1': [], 'T2': [], 'T3': []}
+    def _generate_shop(self, n_type):
+        militia_opts = [('pawn', 2), ('levies', 2), ('knight', 4), ('bishop', 4), ('rook', 4)]
+        regular_opts = [('hastati', 6), ('menatarm', 6)]
+        elite_opts = [('praetorian', 10), ('royalguard', 10)]
         
-        if tav_lvl >= 1:
-            shop['T1'] = random.sample(t1_opts, min(len(t1_opts), random.randint(3, 5)))
-            
+        # สุ่ม 1 แถว (มี 5 ช่อง) โดยมีโอกาสที่ช่องนั้นจะว่าง (x) และแปลง cost เป็น int ป้องกันบัค
+        def gen_row(options, empty_chance=0.3):
+            row = []
+            for _ in range(5):
+                if random.random() < empty_chance:
+                    row.append(None)
+                else:
+                    choice = random.choice(options)
+                    row.append({'name': choice[0], 'cost': int(choice[1])})
+            return row
+
+        shop = {}
         if n_type == 'village':
-            if tav_lvl >= 3:
-                shop['T2'] = random.sample(t2_opts, min(len(t2_opts), random.randint(1, 2)))
+            shop['row1'] = {'req_lvl': 1, 'data': gen_row(militia_opts, 0.2)}
+            shop['row2'] = {'req_lvl': 2, 'data': gen_row(militia_opts, 0.3)}
+            shop['row3'] = {'req_lvl': 3, 'data': gen_row(regular_opts, 0.4)}
         elif n_type == 'castle':
-            if tav_lvl >= 2:
-                shop['T2'] = random.sample(t2_opts, min(len(t2_opts), random.randint(1, 2)))
-            if tav_lvl >= 4:
-                shop['T3'] = random.sample(t3_opts, min(len(t3_opts), random.randint(1, 2)))
+            shop['row1'] = {'req_lvl': 1, 'data': gen_row(militia_opts, 0.2)}
+            shop['row2'] = {'req_lvl': 1, 'data': gen_row(regular_opts, 0.3)}
+            shop['row3'] = {'req_lvl': 2, 'data': gen_row(regular_opts, 0.3)}
+            shop['row4'] = {'req_lvl': 3, 'data': gen_row(elite_opts, 0.5)}
+            shop['row5'] = {'req_lvl': 3, 'data': gen_row(elite_opts, 0.5)}
                 
         return shop
 
     def update_graphics(self):
         self.canvas.before.clear()
-        
         self.addon_data = []
         main_addons = get_active_addons_list(self.addons)
         a_step = 360 / max(1, len(main_addons))
@@ -144,12 +149,10 @@ class MapNode(Button):
                 self.aura = None
 
             Color(0.4, 0.3, 0.2, 1)
-            
             self.sv_lines = []
             for sv in self.sub_villages:
                 l = Line(width=1.5)
                 self.sv_lines.append((l, sv['rel_pos']))
-                
                 sv['a_lines'] = []
                 for ad in sv['addon_data']:
                     al = Line(width=1)
@@ -160,8 +163,7 @@ class MapNode(Button):
                 al = Line(width=1.5)
                 self.main_a_lines.append((al, ad['rel_pos']))
                 
-            Color(1, 1, 1, 1) 
-            
+            Color(1, 1, 1, 1)
             self.sv_rects = []
             for sv in self.sub_villages:
                 sv['a_rects'] = []
@@ -194,8 +196,8 @@ class MapNode(Button):
                 else: fac_color = (0.8, 0.2, 0.2, 1) 
                 Color(*fac_color)
                 self.border_line = Line(width=2)
-                
-        self.update_canvas() 
+            
+        self.update_canvas()
 
     def update_canvas(self, *args):
         cx, cy = self.center_x, self.center_y
@@ -203,7 +205,7 @@ class MapNode(Button):
         if self.aura:
             self.aura.pos = (self.x - dp(15), self.y - dp(15))
             self.aura.size = (self.width + dp(30), self.height + dp(30))
-        
+
         for l, rpos in self.sv_lines:
             l.points = [cx, cy, cx + rpos[0], cy + rpos[1]]
             
@@ -218,7 +220,7 @@ class MapNode(Button):
         for sv in self.sub_villages:
             for rect, svrpos, arpos in sv.get('a_rects', []):
                 rect.pos = (cx + svrpos[0] + arpos[0] - dp(12.5), cy + svrpos[1] + arpos[1] - dp(12.5))
-        
+
         for rect, rpos in self.sv_rects:
             rect.pos = (cx + rpos[0] - dp(22.5), cy + rpos[1] - dp(22.5))
             
@@ -262,8 +264,8 @@ class MapNode(Button):
                     map_screen.initiate_combat(map_screen.marching_from_node, self)
             else: 
                 map_screen.status_lbl.text = "[color=ff0000]TOO FAR! SELECT ADJACENT BASE.[/color]"
-                map_screen.marching_from_node.army_pieces.extend(app.combat_marching_army) 
-            
+                map_screen.marching_from_node.army_pieces.extend(app.combat_marching_army)
+                
             map_screen.marching_from_node = None 
             return
 

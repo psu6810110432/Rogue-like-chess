@@ -209,6 +209,7 @@ class CampaignMapScreen(Screen):
         gameplay_screen.setup_game(mode='Divide_Conquer')
         self.manager.current = 'gameplay'
 
+    # แก้ไขเฉพาะฟังก์ชัน end_turn ใน screens/campaign_map_screen.py
     def end_turn(self, instance):
         app = App.get_running_app()
         app.play_click_sound()
@@ -222,8 +223,10 @@ class CampaignMapScreen(Screen):
         rebellions = []
         
         for node in self.nodes_list:
-            if hasattr(node, 'refresh_recruits'): node.refresh_recruits()
             if node.faction == app.current_map_turn:
+                # รีเฟรชทหารรับจ้างใหม่ทั้งหมด เมื่อวนกลับมาถึงเทิร์นของเรา (ตาม M&B 2)
+                if hasattr(node, 'refresh_recruits'): node.refresh_recruits()
+                
                 farm_bonus = getattr(node, 'addons', {}).get('farm', 0) * 2
                 mine_bonus = 3 if getattr(node, 'addons', {}).get('special') == 'mine' else 0
                 tax_collected += farm_bonus + mine_bonus
