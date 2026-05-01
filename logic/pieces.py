@@ -4,26 +4,33 @@ from components.passive.passive_manager import PassiveManager
 from components.hidden_passive import HiddenPassive
 
 class Piece:
+    # Flag กำหนดว่าคลาสนี้สามารถอัปเกรดแบบ Special ได้หรือไม่
+    has_special_upgrade = False 
+
     def __init__(self, color, name):
         self.color, self.name, self.item, self.has_moved = color, name, None, False
         self.hidden_passive = HiddenPassive()
         self.second_hidden_passive = None
-        self.passive_desc = "" 
-        self.tribe = "the knight company" 
+        self.passive_desc = ""
+        self.tribe = "the knight company"
         
         self.base_atk = 0
         self.base_def = 0
         self.upgrade_level = 0
         self.upgrade_path = "standard"
-        
         self.cannot_get_items = False
         self.has_moved_this_turn = False
+        
+        # [FIX]: สร้างแอตทริบิวต์เฉพาะทางทั้งหมดไว้ใน Base Class 
+        # เพื่อให้ deepcopy() ของระบบ Undo จำสถานะเหล่านี้ได้ครบถ้วน
+        self.temp_bonus_coins = 0
+        self.charge_stacks = 0
+        self.active_buffs = []
+        self.def_stacks = 0
+        self.rg_upgrades = 0
 
-    def tick_turn(self):
-        pass # Override in subclasses for turn-based mechanics
-
-    def mark_moved(self):
-        self.has_moved_this_turn = True
+    def tick_turn(self): pass
+    def mark_moved(self): self.has_moved_this_turn = True
 
     def is_path_clear(self, start, end, board):
         sr, sc, er, ec = start[0], start[1], end[0], end[1]
@@ -32,7 +39,7 @@ class Piece:
         
         cr, cc = sr + step_r, sc + step_c
         while (cr, cc) != (er, ec):
-            if board[cr][cc] is not None: 
+            if board[cr][cc] is not None:
                 return False
             cr, cc = cr + step_r, cc + step_c
         return True
@@ -40,7 +47,6 @@ class Piece:
     def setup_stats(self, piece_type, tribe):
         if not tribe: tribe = 'the knight company'
         self.tribe = tribe 
-        
         lookup_type = 'king' if piece_type == 'prince' else piece_type
         
         passive = PassiveManager.get_passive_handler(lookup_type, tribe)
@@ -49,10 +55,8 @@ class Piece:
             self.base_points, self.coins = self.hidden_passive.apply_passive(stats['dice'], stats['coins'])
             self.max_stats = stats['max']
             self.passive_desc = stats['desc']
-            
             dnc_atk = stats.get('base_atk', 0)
             dnc_def = stats.get('base_def', 0)
-            
             self.base_atk = dnc_atk if dnc_atk > 0 else self.base_points
             self.base_def = dnc_def if dnc_def > 0 else self.base_points
         else:
@@ -63,7 +67,6 @@ class Piece:
     def upgrade_piece(self, path="standard"):
         if self.upgrade_level >= 2: return False
         self.upgrade_path = path
-        p_name = self.__class__.__name__.lower()
         
         if path == "standard":
             if self.upgrade_level == 0:
@@ -72,15 +75,15 @@ class Piece:
             elif self.upgrade_level == 1:
                 self.base_def += 2
                 self.upgrade_level = 2
-                
-        elif path == "special" and p_name in ['praetorian', 'menatarm']:
+        # [FIX]: ลบ Hardcode ชื่อคลาสออก ใช้ property แทน
+        elif path == "special" and self.has_special_upgrade:
             if self.upgrade_level == 0:
-                self.hidden_passive = HiddenPassive() 
-                base, coins = self.hidden_passive.apply_passive(5, 3) 
+                self.hidden_passive = HiddenPassive()
+                base, coins = self.hidden_passive.apply_passive(5, 3)
                 self.base_points, self.base_atk, self.base_def, self.coins = base, base, base, coins
                 self.upgrade_level = 1
             elif self.upgrade_level == 1:
-                self.second_hidden_passive = HiddenPassive() 
+                self.second_hidden_passive = HiddenPassive()
                 base, coins = self.second_hidden_passive.apply_passive(self.base_points, self.coins)
                 self.base_points, self.base_atk, self.base_def, self.coins = base, base, base, coins
                 self.upgrade_level = 2
@@ -94,7 +97,6 @@ class Rook(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'R' if color == 'white' else 'r')
         self.setup_stats('rook', tribe)
-
     def is_valid_move(self, s, e, b):
         if s == e: return False
         if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
@@ -104,7 +106,6 @@ class Knight(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'N' if color == 'white' else 'n')
         self.setup_stats('knight', tribe)
-
     def is_valid_move(self, s, e, b):
         if s == e: return False
         target = b[e[0]][e[1]]
@@ -115,7 +116,6 @@ class Bishop(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'B' if color == 'white' else 'b')
         self.setup_stats('bishop', tribe)
-
     def is_valid_move(self, s, e, b):
         if s == e: return False
         if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
@@ -125,7 +125,6 @@ class Queen(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'Q' if color == 'white' else 'q')
         self.setup_stats('queen', tribe)
-
     def is_valid_move(self, s, e, b):
         if s == e: return False
         if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
@@ -137,7 +136,6 @@ class King(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'K' if color == 'white' else 'k')
         self.setup_stats('king', tribe)
-
     def is_valid_move(self, s, e, b):
         if s == e: return False
         if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
@@ -147,7 +145,6 @@ class Prince(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'PRC' if color == 'white' else 'prc')
         self.setup_stats('prince', tribe)
-
     def is_valid_move(self, s, e, b):
         if s == e: return False
         if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
@@ -159,14 +156,11 @@ class Pawn(Piece):
         super().__init__(color, 'P' if color == 'white' else 'p')
         self.setup_stats('pawn', tribe)
         self.variant = random.randint(1, 4)
-
     def is_valid_move(self, s, e, b, ep_target=None):
         if s == e: return False
         if getattr(self, 'item', None) and self.item.id == 9 and self.check_knight_move(s, e): return True
-            
         sr, sc, er, ec, dr = s[0], s[1], e[0], e[1], (-1 if self.color == 'white' else 1)
         target = b[er][ec]
-        
         if sc == ec and er == sr + dr and not target: return True
         if sc == ec and sr == (6 if self.color == 'white' else 1) and er == sr + 2*dr and not target and not b[sr+dr][sc]: return True
         if abs(sc - ec) == 1 and er == sr + dr:
@@ -180,7 +174,6 @@ class Princess(Piece):
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'PRS' if color == 'white' else 'prs')
         self.setup_stats('princess', tribe)
-
     def is_valid_move(self, s, e, b):
         if s == e: return False
         rd, cd = abs(s[0]-e[0]), abs(s[1]-e[1])
@@ -190,29 +183,30 @@ class Princess(Piece):
         return (is_straight or is_diagonal) and self.is_path_clear(s, e, b)
 
 class Menatarm(Piece):
+    has_special_upgrade = True # เปิดใช้งาน Special Upgrade
+
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'M' if color == 'white' else 'm')
         self.setup_stats('menatarm', tribe)
         self.cannot_get_items = True
-        self.charge_stacks = 0
 
     def tick_turn(self):
         if not self.has_moved_this_turn:
             if self.charge_stacks < 3:
                 self.charge_stacks += 1
         self.has_moved_this_turn = False
-
+        
     def reset_movement_stacks(self):
         self.charge_stacks = 0
         self.has_moved_this_turn = True
-
+        
     def consume_charge_for_attack(self):
         bonus = 0
         if self.charge_stacks >= 3:
             bonus = self.coins // 2
         self.reset_movement_stacks()
         return bonus
-
+        
     def is_valid_move(self, s, e, b):
         if s == e: return False
         fwd = -1 if self.color == 'white' else 1
@@ -223,11 +217,12 @@ class Menatarm(Piece):
         return False
 
 class Praetorian(Piece):
+    has_special_upgrade = True # เปิดใช้งาน Special Upgrade
+
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'PT' if color == 'white' else 'pt')
         self.setup_stats('praetorian', tribe)
         self.cannot_get_items = True
-        self.active_buffs = [] 
 
     def tick_turn(self):
         expired = 0
@@ -240,13 +235,13 @@ class Praetorian(Piece):
         self.active_buffs = new_buffs
         self.base_atk -= expired
         self.base_def -= expired
-
+        
     def on_attack_win(self):
         if len(self.active_buffs) < 5:
-            self.active_buffs.append(6) # อยู่ 6 เทิร์น
+            self.active_buffs.append(6)
             self.base_atk += 1
             self.base_def += 1
-
+            
     def is_valid_move(self, s, e, b):
         if s == e: return False
         rd, cd = abs(s[0]-e[0]), abs(s[1]-e[1])
@@ -260,8 +255,7 @@ class Royalguard(Piece):
         super().__init__(color, 'RG' if color == 'white' else 'rg')
         self.setup_stats('royalguard', tribe)
         self.cannot_get_items = True
-        self.rg_upgrades = 0
-
+        
     def on_crash_win(self):
         if self.rg_upgrades < 8:
             if random.choice([True, False]):
@@ -269,7 +263,7 @@ class Royalguard(Piece):
             else:
                 self.base_def += 1
             self.rg_upgrades += 1
-
+            
     def is_valid_move(self, s, e, b):
         if s == e: return False
         rd, cd = abs(s[0]-e[0]), abs(s[1]-e[1])
@@ -283,20 +277,19 @@ class Hastati(Piece):
         self.setup_stats('hastati', tribe)
         self.variant = random.randint(1, 4)
         self.cannot_get_items = True
-        self.def_stacks = 0
-
+        
     def tick_turn(self):
         if not self.has_moved_this_turn:
             if self.def_stacks < 5:
                 self.def_stacks += 1
                 self.base_def += 1
         self.has_moved_this_turn = False
-
+        
     def reset_movement_stacks(self):
         self.base_def -= self.def_stacks
         self.def_stacks = 0
         self.has_moved_this_turn = True
-
+        
     def is_valid_move(self, s, e, b):
         if s == e: return False
         fwd = -1 if self.color == 'white' else 1
@@ -312,7 +305,6 @@ class Levies(Piece):
         self.setup_stats('levies', tribe)
         self.variant = random.randint(1, 4)
         self.cannot_get_items = True
-
     def is_valid_move(self, s, e, b):
         if s == e: return False
         fwd = -1 if self.color == 'white' else 1
@@ -322,7 +314,6 @@ class Levies(Piece):
 class Obstacle(Piece):
     def __init__(self, n, l):
         self.color, self.name, self.item, self.lifespan, self.base_points, self.coins, self.has_moved = 'neutral', n, None, l, 0, 0, False
-        self.tribe = "neutral" 
-
+        self.tribe = "neutral"
     def is_valid_move(self, s, e, b):
         return False
