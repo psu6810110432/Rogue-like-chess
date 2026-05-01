@@ -4,7 +4,6 @@ from components.passive.passive_manager import PassiveManager
 from components.hidden_passive import HiddenPassive
 
 class Piece:
-    # Flag สำหรับบอกว่าตัวนี้มีการอัปเกรดแบบ Special หรือไม่
     has_special_upgrade = False 
 
     def __init__(self, color, name):
@@ -21,8 +20,6 @@ class Piece:
         self.cannot_get_items = False
         self.has_moved_this_turn = False
         
-        # เก็บ Stack มาไว้ที่ Base Class
-        # เพื่อป้องกันบัค deepcopy() ตอน Undo 
         self.temp_bonus_coins = 0
         self.charge_stacks = 0
         self.active_buffs = []
@@ -54,30 +51,33 @@ class Piece:
         if passive:
             stats = passive['get_piece_stats']("classic")
             
-            # [แก้ไข] เช็คว่าตัวละครนี้มีเฉพาะในโหมด DNC หรือไม่ (ถ้าใช่ เหรียญใน classic จะเป็น 0)
+            # [แก้ไข] เช็คว่าตัวละครนี้มีเฉพาะในโหมด DNC หรือไม่
             is_dnc_exclusive = (stats['coins'] == 0)
-            
             if is_dnc_exclusive:
                 stats = passive['get_piece_stats']("dnc")
             
             dice_val = stats['dice']
             if dice_val == 0:
-                # ถ้าไม่ได้กำหนด starting_points ให้ดึงค่าจาก ATK/DEF ที่สูงที่สุดแทน เพื่อไม่ให้ได้ 0 แต้ม
                 dice_val = max(stats.get('base_atk', 0), stats.get('base_def', 0))
 
-            self.base_points, self.coins = self.hidden_passive.apply_passive(dice_val, stats['coins'])
+            # [แก้ไข] คำนวณพาสซีฟที่บวกเพิ่ม
+            new_base, new_coins = self.hidden_passive.apply_passive(dice_val, stats['coins'])
+            point_diff = new_base - dice_val
+
+            self.base_points = new_base
+            self.coins = new_coins
             self.max_stats = stats['max']
             self.passive_desc = stats['desc']
             
+            # [แก้ไข] อัปเดต ATK/DEF โดยบวกค่าโบนัสจากพาสซีฟเข้าไปด้วย
             if is_dnc_exclusive:
-                # ถ้าเป็นยูนิตที่มีเฉพาะในโหมด DNC ให้เชื่อค่า ATK/DEF ตามพาสซีฟเป๊ะๆ (แม้ว่าจะเป็น 0 ก็ตาม)
-                self.base_atk = stats.get('base_atk', 0)
-                self.base_def = stats.get('base_def', 0)
+                self.base_atk = stats.get('base_atk', 0) + point_diff
+                self.base_def = stats.get('base_def', 0) + point_diff
             else:
                 dnc_atk = stats.get('base_atk', 0)
                 dnc_def = stats.get('base_def', 0)
-                self.base_atk = dnc_atk if dnc_atk > 0 else self.base_points
-                self.base_def = dnc_def if dnc_def > 0 else self.base_points
+                self.base_atk = (dnc_atk if dnc_atk > 0 else dice_val) + point_diff
+                self.base_def = (dnc_def if dnc_def > 0 else dice_val) + point_diff
         else:
             self.base_points, self.coins, self.max_stats, self.passive_desc = 5, 3, 999, ""
             self.base_atk = self.base_points

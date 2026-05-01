@@ -193,22 +193,16 @@ class CampaignArmyPanel(FloatLayout):
         addons[key] += 1
         self.current_node.update_graphics()
 
-    def buy_piece(self, piece_name, cost, is_locked, unlock_cost, row_key, idx):
+    # [แก้บัค] ลบพารามิเตอร์เก่าๆ ทิ้งให้หมดเหลือแค่ 4 ตัว
+    def buy_piece(self, piece_name, cost, row_key, idx):
         self.app.play_click_sound()
         faction = self.current_node.faction
-        
-        if is_locked:
-            if self.app.tax_points.get(faction, 0) >= unlock_cost:
-                self.app.tax_points[faction] -= unlock_cost
-                self.app.unlocked_units[faction].add(piece_name)
-                return "unlocked" # แจ้งให้ Popup รีเฟรชหน้าต่างตัวเอง แต่ยังไม่ออกไปหน้าทหาร
-            return "failed"
             
-        if self.app.tax_points.get(faction, 0) < cost: return "failed"
+        if self.app.tax_points.get(faction, 0) < cost: return False
         
         headers = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False))
         max_cap = 16 if headers > 0 else 8
-        if len(self.current_node.army_pieces) >= max_cap: return "failed"
+        if len(self.current_node.army_pieces) >= max_cap: return False
         
         self.app.tax_points[faction] -= cost
         
@@ -240,7 +234,7 @@ class CampaignArmyPanel(FloatLayout):
             
         self.current_node.army_pieces.append(new_p)
         self.switch_tab('army')
-        return "bought" 
+        return True 
 
     def execute_action(self, instance):
         if self.current_tab != 'army': return

@@ -48,7 +48,7 @@ class UnitCard(ButtonBehavior, BoxLayout):
                 color_hex = "44FF44" if hp_type in ['buff1', 'buff2'] else "FF4444"
                 hidden_passive_text = f"\n[color={color_hex}]Hidden Passive: {hp_desc} ({hp_mod})[/color]"
 
-        # [แก้ไข] ตรวจสอบคลาสให้ตรงก่อนแสดงผล เพื่อไม่ให้มั่วไปโผล่ในยูนิตอื่น
+        # [แก้ไขบัค] ตรวจสอบคลาสให้ตรงก่อนแสดงผล เพื่อไม่ให้มั่วไปโผล่ในยูนิตอื่น
         dynamic_stats = ""
         p_class = piece.__class__.__name__.lower()
         
@@ -56,9 +56,9 @@ class UnitCard(ButtonBehavior, BoxLayout):
             dynamic_stats += f"\n[color=00ffff]Charge Stacks: {piece.charge_stacks}/3[/color]"
         elif p_class == 'hastati' and hasattr(piece, 'def_stacks'):
             dynamic_stats += f"\n[color=00ff00]Defense Stacks: {piece.def_stacks}/5[/color]"
-        elif p_class == 'praetorian' and hasattr(piece, 'active_buffs'):
+        elif p_class == 'praetorian' and hasattr(piece, 'active_buffs') and len(piece.active_buffs) > 0:
             dynamic_stats += f"\n[color=ff9900]Win Streaks: {len(piece.active_buffs)}/5[/color]"
-        elif p_class == 'royalguard' and hasattr(piece, 'rg_upgrades'):
+        elif p_class == 'royalguard' and hasattr(piece, 'rg_upgrades') and piece.rg_upgrades > 0:
             dynamic_stats += f"\n[color=ffbbff]Royalguard Upgrades: {piece.rg_upgrades}/8[/color]"
             
         full_desc = f"[i]{desc}[/i]{hidden_passive_text}{dynamic_stats}"

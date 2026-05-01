@@ -156,10 +156,8 @@ class GameplayScreen(Screen):
         self.deployment_layer = FloatLayout()
         self.root_layout.add_widget(self.deployment_layer)
         
-        # ซ่อนปุ่ม Retreat ของ Sidebar ในระหว่างจัดทัพ 
-        if hasattr(self.sidebar, 'action_btn_layout'):
-            self.sidebar.action_btn_layout.opacity = 0
-            self.sidebar.action_btn_layout.disabled = True
+        if hasattr(self.sidebar, 'hide_buttons'):
+            self.sidebar.hide_buttons()
 
         self.black_mask = Widget()
         with self.black_mask.canvas.before:
@@ -219,10 +217,8 @@ class GameplayScreen(Screen):
         self.battle_phase = 'deployment_reveal'
         self.selected = None
         
-        # เปิดปุ่ม Retreat ของ Sidebar ให้กลับมาใช้งานได้ตอนเปิดเผยศัตรู
-        if hasattr(self.sidebar, 'action_btn_layout'):
-            self.sidebar.action_btn_layout.opacity = 1
-            self.sidebar.action_btn_layout.disabled = False
+        if hasattr(self.sidebar, 'show_buttons'):
+            self.sidebar.show_buttons()
 
         if self.black_mask in self.deployment_layer.children:
             self.deployment_layer.remove_widget(self.black_mask)
@@ -471,8 +467,6 @@ class GameplayScreen(Screen):
         
         if self.selected_item:
             if piece and piece.color == self.game.current_turn:
-                if getattr(piece, 'cannot_get_items', False):
-                    self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); return
                 if getattr(piece, 'item', None) is not None:
                     self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); return
                 if self.selected_item.id == 9 and piece.__class__.__name__.lower() == 'knight':
@@ -511,7 +505,7 @@ class GameplayScreen(Screen):
             if atk_piece and hasattr(atk_piece, 'temp_bonus_coins') and atk_piece.temp_bonus_coins > 0:
                 atk_piece.coins -= atk_piece.temp_bonus_coins
                 atk_piece.temp_bonus_coins = 0
-                
+
             if atk_piece:
                 atk_piece.mark_moved()
                 if hasattr(atk_piece, 'reset_movement_stacks'): atk_piece.reset_movement_stacks()
@@ -645,29 +639,39 @@ class GameplayScreen(Screen):
                     
         self.check_ai_turn()
 
+    # [แก้ไข] อัปเดตตรรกะเช็คผู้เล่นบอทให้ถูกต้อง ไม่แย่งผู้เล่นในโหมด PvP แคมเปญ
     def check_ai_turn(self):
         app = App.get_running_app()
         is_bot_turn = False
         
-        if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black': is_bot_turn = True
+        if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black': 
+            is_bot_turn = True
         elif getattr(self, 'game_mode', 'PVP') == 'Divide_Conquer':
-            if self.game.current_turn == 'black': is_bot_turn = True
+            attacker_faction = getattr(app.combat_source, 'faction', 'red') if hasattr(app, 'combat_source') else 'white'
+            defender_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
             
+            if self.game.current_turn == 'white' and attacker_faction == 'red':
+                is_bot_turn = True
+            elif self.game.current_turn == 'black' and defender_faction == 'red':
+                is_bot_turn = True
+                
         if is_bot_turn and not self.game.game_result: 
             self.is_input_locked = True 
             self.ai_event = Clock.schedule_once(self.trigger_ai_move, 0.8)
         else:
             self.is_input_locked = False 
 
+    # [แก้ไข] ให้ระบบบอทดึงสีของตัวเอง (ai_color) แทนการ hardcode 'black'
     def trigger_ai_move(self, dt):
         if self.game.game_result: return
         
         difficulty = getattr(App.get_running_app(), 'ai_difficulty', 'normal')
+        ai_color = self.game.current_turn
         
         if getattr(self, 'game_mode', 'PVP') == 'Divide_Conquer':
             from logic.dac_ai import DACBot
             
-            target_piece, item_to_use = DACBot.decide_item_usage(self.game, 'black', difficulty)
+            target_piece, item_to_use = DACBot.decide_item_usage(self.game, ai_color, difficulty)
             if target_piece and item_to_use:
                 target_piece.item = item_to_use
                 if item_to_use.id == 6: 
@@ -677,22 +681,22 @@ class GameplayScreen(Screen):
                     target_piece.base_points = 5
                     target_piece.coins = 3
                     
-                self.game.inventory_black.remove(item_to_use)
+                getattr(self.game, f'inventory_{ai_color}').remove(item_to_use)
                 App.get_running_app().play_click_sound()
                 self.init_board_ui()
                 self.update_inventory_ui()
-            move = DACBot.get_best_move(self.game, 'black')
+            move = DACBot.get_best_move(self.game, ai_color)
             
         else:
             from logic.ai_logic import ChessAI
             
-            inv = getattr(self.game, 'inventory_black', [])
+            inv = getattr(self.game, f'inventory_{ai_color}', [])
             if inv:
                 import random
                 use_chance = 0.6 if difficulty == 'hard' else 0.4 if difficulty == 'normal' else 0.25
                 if len(inv) >= 5 or random.random() < use_chance:
                     item_to_use = random.choice(inv)
-                    valid_pieces = [p for row in self.game.board for p in row if p and p.color == 'black' and getattr(p, 'item', None) is None]
+                    valid_pieces = [p for row in self.game.board for p in row if p and p.color == ai_color and getattr(p, 'item', None) is None]
                     if valid_pieces:
                         chosen_piece = random.choice(valid_pieces)
                         chosen_piece.item = item_to_use
@@ -705,7 +709,7 @@ class GameplayScreen(Screen):
                         App.get_running_app().play_click_sound()
                         self.init_board_ui()
                         self.update_inventory_ui()
-            move = ChessAI.get_best_move(self.game, ai_color='black')
+            move = ChessAI.get_best_move(self.game, ai_color=ai_color)
             
         if move:
             (sr, sc), (er, ec) = move

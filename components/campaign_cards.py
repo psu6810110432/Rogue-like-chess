@@ -80,7 +80,6 @@ class PieceCard(ButtonBehavior, FloatLayout):
             def on_upgraded():
                 self.map_screen_ref.army_panel.switch_tab('army')
             
-            # Local Import แก้ปัญหา Circular Import
             from components.campaign_popups import UpgradeTreePopup
             pop = UpgradeTreePopup(self.piece_obj, on_upgraded)
             pop.bind(on_open=lambda instance: setattr(pop, 'width', self.map_screen_ref.width * 0.9))
@@ -92,19 +91,15 @@ class PieceCard(ButtonBehavior, FloatLayout):
 
 
 class RecruitCard(ButtonBehavior, FloatLayout):
-    def __init__(self, piece_name, cost, faction, app, click_cb, is_locked=False, unlock_cost=0, **kwargs):
+    def __init__(self, piece_name, cost, faction, app, click_cb, **kwargs):
         super().__init__(size_hint=(None, 1), width=dp(120), **kwargs)
         self.click_cb = click_cb
         self.piece_name = piece_name
         self.cost = cost
-        self.is_locked = is_locked
-        self.unlock_cost = unlock_cost
         
         with self.canvas.before:
             if piece_name is None:
                 Color(0.1, 0.1, 0.1, 0.95) 
-            elif is_locked:
-                Color(0.25, 0.1, 0.1, 0.95)
             else:
                 Color(0.12, 0.2, 0.12, 0.95)
             self.bg = RoundedRectangle(radius=[dp(8)])
@@ -131,15 +126,10 @@ class RecruitCard(ButtonBehavior, FloatLayout):
             
         img_path = f"assets/pieces/{tribe}/{faction}/1base/{filename}"
         img = Image(source=img_path, size_hint=(0.85, 0.65), pos_hint={'center_x': 0.5, 'top': 0.98})
-        if is_locked: img.opacity = 0.3
         self.add_widget(img)
         
         self.add_widget(Label(text=f"[b]{piece_name.capitalize()}[/b]", markup=True, font_size='13sp', pos_hint={'center_x': 0.5, 'y': 0.18}, size_hint=(1, 0.2)))
-        
-        if is_locked:
-            self.add_widget(Label(text=f"[size=12sp][color=ff5555]Unlock: {unlock_cost}[/color][/size]", markup=True, pos_hint={'center_x': 0.5, 'y': 0.05}, size_hint=(1, 0.15)))
-        else:
-            self.add_widget(Label(text=f"[size=12sp][color=ffff00]Cost: {cost}[/color][/size]", markup=True, pos_hint={'center_x': 0.5, 'y': 0.05}, size_hint=(1, 0.15)))
+        self.add_widget(Label(text=f"[size=12sp][color=ffff00]Cost: {cost}[/color][/size]", markup=True, pos_hint={'center_x': 0.5, 'y': 0.05}, size_hint=(1, 0.15)))
 
     def _update_bg(self, instance, value):
         self.bg.pos, self.bg.size = instance.pos, instance.size
@@ -147,4 +137,4 @@ class RecruitCard(ButtonBehavior, FloatLayout):
 
     def on_release(self):
         if self.piece_name is not None and self.click_cb:
-            self.click_cb(self.piece_name, self.cost, self.is_locked, self.unlock_cost)
+            self.click_cb(self.piece_name, self.cost)
