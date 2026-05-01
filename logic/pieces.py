@@ -4,7 +4,7 @@ from components.passive.passive_manager import PassiveManager
 from components.hidden_passive import HiddenPassive
 
 class Piece:
-    # Flag กำหนดว่าคลาสนี้สามารถอัปเกรดแบบ Special ได้หรือไม่
+    # Flag สำหรับบอกว่าตัวนี้มีการอัปเกรดแบบ Special หรือไม่
     has_special_upgrade = False 
 
     def __init__(self, color, name):
@@ -21,8 +21,8 @@ class Piece:
         self.cannot_get_items = False
         self.has_moved_this_turn = False
         
-        # [FIX]: สร้างแอตทริบิวต์เฉพาะทางทั้งหมดไว้ใน Base Class 
-        # เพื่อให้ deepcopy() ของระบบ Undo จำสถานะเหล่านี้ได้ครบถ้วน
+        # เก็บ Stack มาไว้ที่ Base Class
+        # เพื่อป้องกันบัค deepcopy() ตอน Undo 
         self.temp_bonus_coins = 0
         self.charge_stacks = 0
         self.active_buffs = []
@@ -46,19 +46,38 @@ class Piece:
 
     def setup_stats(self, piece_type, tribe):
         if not tribe: tribe = 'the knight company'
-        self.tribe = tribe 
+        self.tribe = tribe
+
         lookup_type = 'king' if piece_type == 'prince' else piece_type
         
         passive = PassiveManager.get_passive_handler(lookup_type, tribe)
         if passive:
             stats = passive['get_piece_stats']("classic")
-            self.base_points, self.coins = self.hidden_passive.apply_passive(stats['dice'], stats['coins'])
+            
+            # [แก้ไข] เช็คว่าตัวละครนี้มีเฉพาะในโหมด DNC หรือไม่ (ถ้าใช่ เหรียญใน classic จะเป็น 0)
+            is_dnc_exclusive = (stats['coins'] == 0)
+            
+            if is_dnc_exclusive:
+                stats = passive['get_piece_stats']("dnc")
+            
+            dice_val = stats['dice']
+            if dice_val == 0:
+                # ถ้าไม่ได้กำหนด starting_points ให้ดึงค่าจาก ATK/DEF ที่สูงที่สุดแทน เพื่อไม่ให้ได้ 0 แต้ม
+                dice_val = max(stats.get('base_atk', 0), stats.get('base_def', 0))
+
+            self.base_points, self.coins = self.hidden_passive.apply_passive(dice_val, stats['coins'])
             self.max_stats = stats['max']
             self.passive_desc = stats['desc']
-            dnc_atk = stats.get('base_atk', 0)
-            dnc_def = stats.get('base_def', 0)
-            self.base_atk = dnc_atk if dnc_atk > 0 else self.base_points
-            self.base_def = dnc_def if dnc_def > 0 else self.base_points
+            
+            if is_dnc_exclusive:
+                # ถ้าเป็นยูนิตที่มีเฉพาะในโหมด DNC ให้เชื่อค่า ATK/DEF ตามพาสซีฟเป๊ะๆ (แม้ว่าจะเป็น 0 ก็ตาม)
+                self.base_atk = stats.get('base_atk', 0)
+                self.base_def = stats.get('base_def', 0)
+            else:
+                dnc_atk = stats.get('base_atk', 0)
+                dnc_def = stats.get('base_def', 0)
+                self.base_atk = dnc_atk if dnc_atk > 0 else self.base_points
+                self.base_def = dnc_def if dnc_def > 0 else self.base_points
         else:
             self.base_points, self.coins, self.max_stats, self.passive_desc = 5, 3, 999, ""
             self.base_atk = self.base_points
@@ -75,7 +94,6 @@ class Piece:
             elif self.upgrade_level == 1:
                 self.base_def += 2
                 self.upgrade_level = 2
-        # [FIX]: ลบ Hardcode ชื่อคลาสออก ใช้ property แทน
         elif path == "special" and self.has_special_upgrade:
             if self.upgrade_level == 0:
                 self.hidden_passive = HiddenPassive()
@@ -183,8 +201,7 @@ class Princess(Piece):
         return (is_straight or is_diagonal) and self.is_path_clear(s, e, b)
 
 class Menatarm(Piece):
-    has_special_upgrade = True # เปิดใช้งาน Special Upgrade
-
+    has_special_upgrade = True 
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'M' if color == 'white' else 'm')
         self.setup_stats('menatarm', tribe)
@@ -217,8 +234,7 @@ class Menatarm(Piece):
         return False
 
 class Praetorian(Piece):
-    has_special_upgrade = True # เปิดใช้งาน Special Upgrade
-
+    has_special_upgrade = True 
     def __init__(self, color, tribe='the knight company'):
         super().__init__(color, 'PT' if color == 'white' else 'pt')
         self.setup_stats('praetorian', tribe)
@@ -305,6 +321,7 @@ class Levies(Piece):
         self.setup_stats('levies', tribe)
         self.variant = random.randint(1, 4)
         self.cannot_get_items = True
+
     def is_valid_move(self, s, e, b):
         if s == e: return False
         fwd = -1 if self.color == 'white' else 1
@@ -315,5 +332,6 @@ class Obstacle(Piece):
     def __init__(self, n, l):
         self.color, self.name, self.item, self.lifespan, self.base_points, self.coins, self.has_moved = 'neutral', n, None, l, 0, 0, False
         self.tribe = "neutral"
+
     def is_valid_move(self, s, e, b):
         return False

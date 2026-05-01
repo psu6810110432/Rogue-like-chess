@@ -508,6 +508,10 @@ class GameplayScreen(Screen):
             if isinstance(res, tuple) and res[0] == "crash": 
                 self.show_crash_overlay(res[1], res[2], (sr, sc), (r, c)); return
                 
+            if atk_piece and hasattr(atk_piece, 'temp_bonus_coins') and atk_piece.temp_bonus_coins > 0:
+                atk_piece.coins -= atk_piece.temp_bonus_coins
+                atk_piece.temp_bonus_coins = 0
+                
             if atk_piece:
                 atk_piece.mark_moved()
                 if hasattr(atk_piece, 'reset_movement_stacks'): atk_piece.reset_movement_stacks()

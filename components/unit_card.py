@@ -48,15 +48,17 @@ class UnitCard(ButtonBehavior, BoxLayout):
                 color_hex = "44FF44" if hp_type in ['buff1', 'buff2'] else "FF4444"
                 hidden_passive_text = f"\n[color={color_hex}]Hidden Passive: {hp_desc} ({hp_mod})[/color]"
 
-        # [อัปเดตใหม่] ดึงข้อมูล Stack ของตัวละครพิเศษมาแสดงผล
+        # [แก้ไข] ตรวจสอบคลาสให้ตรงก่อนแสดงผล เพื่อไม่ให้มั่วไปโผล่ในยูนิตอื่น
         dynamic_stats = ""
-        if hasattr(piece, 'charge_stacks'):
+        p_class = piece.__class__.__name__.lower()
+        
+        if p_class == 'menatarm' and hasattr(piece, 'charge_stacks'):
             dynamic_stats += f"\n[color=00ffff]Charge Stacks: {piece.charge_stacks}/3[/color]"
-        if hasattr(piece, 'def_stacks'):
+        elif p_class == 'hastati' and hasattr(piece, 'def_stacks'):
             dynamic_stats += f"\n[color=00ff00]Defense Stacks: {piece.def_stacks}/5[/color]"
-        if hasattr(piece, 'active_buffs') and len(piece.active_buffs) > 0:
+        elif p_class == 'praetorian' and hasattr(piece, 'active_buffs'):
             dynamic_stats += f"\n[color=ff9900]Win Streaks: {len(piece.active_buffs)}/5[/color]"
-        if hasattr(piece, 'rg_upgrades'):
+        elif p_class == 'royalguard' and hasattr(piece, 'rg_upgrades'):
             dynamic_stats += f"\n[color=ffbbff]Royalguard Upgrades: {piece.rg_upgrades}/8[/color]"
             
         full_desc = f"[i]{desc}[/i]{hidden_passive_text}{dynamic_stats}"
