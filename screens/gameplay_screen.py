@@ -13,7 +13,6 @@ from kivy.clock import Clock
 from kivy.uix.floatlayout import FloatLayout
 from kivy.metrics import dp
 
-# โหลด Core Components
 from logic.board import ChessBoard
 from logic.ai_logic import ChessAI
 from components.chess_square import ChessSquare
@@ -22,12 +21,9 @@ from components.unit_card import UnitCard
 from components.item_tooltip import ItemTooltip
 from components.crash_overlay import CrashOverlay
 from logic.crash_logic import simulate_ai_crash_result
-
-# นำเข้า UI Components ที่ถูกแยกไฟล์ออกไปเพื่อลดความซับซ้อนของโค้ด
 from components.inventory_ui import InventorySlot
 from components.gameplay_popups import PromotionPopup, RetreatPopup
 
-# ระบบโหลดแผนที่แบบเผื่อข้อผิดพลาด (Fallback)
 try:
     from logic.maps.forest_map import ForestMap
 except ImportError:
@@ -155,20 +151,23 @@ class GameplayScreen(Screen):
         if hasattr(self, 'deployment_layer') and self.deployment_layer:
             self.root_layout.remove_widget(self.deployment_layer)
             
-        self.battle_phase = 'deployment_arrange' # เฟส 1: จัดทัพ
+        self.battle_phase = 'deployment_arrange'
         
         self.deployment_layer = FloatLayout()
         self.root_layout.add_widget(self.deployment_layer)
         
-        # 1. แถบดำบังตาศัตรู 5 แถวบน (ทึบแสง 100%)
+        # ซ่อนปุ่ม Retreat ของ Sidebar ในระหว่างจัดทัพ 
+        if hasattr(self.sidebar, 'action_btn_layout'):
+            self.sidebar.action_btn_layout.opacity = 0
+            self.sidebar.action_btn_layout.disabled = True
+
         self.black_mask = Widget()
         with self.black_mask.canvas.before:
-            Color(0, 0, 0, 1) # ดำสนิท 100% ตามที่ต้องการ
+            Color(0, 0, 0, 1) 
             self.mask_rect = Rectangle()
             
         def update_mask(*args):
             if hasattr(self, 'grid') and self.grid:
-                # 8 แถว - 3 แถวที่เราจัดทัพได้ = 5 แถวที่ต้องบัง
                 self.mask_rect.pos = (self.grid.x, self.grid.y + self.grid.height * 3 / 8)
                 self.mask_rect.size = (self.grid.width, self.grid.height * 5 / 8)
                 
@@ -178,7 +177,6 @@ class GameplayScreen(Screen):
             
         self.deployment_layer.add_widget(self.black_mask)
         
-        # 2. ป้ายข้อความ
         self.deploy_lbl = Label(
             text="[b]PHASE 1: DEPLOYMENT[/b]\nArrange your units (Bottom 3 rows)", 
             markup=True, halign='center', pos_hint={'center_x': 0.5, 'center_y': 0.7}, 
@@ -186,7 +184,6 @@ class GameplayScreen(Screen):
         )
         self.deployment_layer.add_widget(self.deploy_lbl)
         
-        # 3. กล่องปุ่มกด
         self.deployment_btn_box = BoxLayout(
             orientation='horizontal', size_hint=(None, None), 
             size=(dp(400), dp(60)), pos_hint={'center_x': 0.5, 'y': 0.1}, spacing=dp(20)
@@ -196,19 +193,18 @@ class GameplayScreen(Screen):
         btn_retreat.bind(on_release=self.deployment_retreat) 
         
         btn_confirm = Button(text="[b]CONFIRM SETUP[/b]", markup=True, background_color=(0.2, 0.6, 0.8, 1), font_size='18sp')
-        btn_confirm.bind(on_release=self.show_reveal_phase) # ไปสู่ เฟส 2
+        btn_confirm.bind(on_release=self.show_reveal_phase)
         
         self.deployment_btn_box.add_widget(btn_retreat)
         self.deployment_btn_box.add_widget(btn_confirm)
         self.deployment_layer.add_widget(self.deployment_btn_box)
         
-        self.refresh_ui() # อัปเดต UI เพื่อซ่อนหมากศัตรูทันที
+        self.refresh_ui()
 
     def deployment_retreat(self, instance):
         app = App.get_running_app()
         if hasattr(app, 'play_click_sound'): app.play_click_sound()
         
-        # [แก้บัคคูณสอง]: เอาการคืนทหารออก (extend) เพราะระบบใน campaign_map_screen.py จัดการคืนให้อยู่แล้ว
         app.battle_finished = True
         app.battle_winner = 'draw'
         app.survivors_atk = app.combat_marching_army
@@ -220,17 +216,20 @@ class GameplayScreen(Screen):
         app = App.get_running_app()
         if hasattr(app, 'play_click_sound'): app.play_click_sound()
         
-        self.battle_phase = 'deployment_reveal' # เฟส 2: เห็นราชาศัตรู
+        self.battle_phase = 'deployment_reveal'
         self.selected = None
         
-        # ถอดแถบสีดำออก เพื่อให้เห็นศัตรู
+        # เปิดปุ่ม Retreat ของ Sidebar ให้กลับมาใช้งานได้ตอนเปิดเผยศัตรู
+        if hasattr(self.sidebar, 'action_btn_layout'):
+            self.sidebar.action_btn_layout.opacity = 1
+            self.sidebar.action_btn_layout.disabled = False
+
         if self.black_mask in self.deployment_layer.children:
             self.deployment_layer.remove_widget(self.black_mask)
             
         self.deploy_lbl.text = "[b]PHASE 2: ENEMY REVEALED[/b]\nObserve the enemy Commander's position!"
         self.deploy_lbl.color = (1, 0.4, 0.4, 1)
         
-        # เปลี่ยนปุ่มเป็น "Ready" ปุ่มเดียว
         self.deployment_btn_box.clear_widgets()
         btn_ready = Button(text="[b]READY TO BATTLE[/b]", markup=True, background_color=(0.2, 0.8, 0.2, 1), font_size='18sp')
         btn_ready.bind(on_release=self.start_battle_phase)
@@ -329,7 +328,6 @@ class GameplayScreen(Screen):
         
         phase = getattr(self, 'battle_phase', 'playing')
         
-        # --------- จัดการ UI ของเฟส 1 (จัดทัพ) ---------
         if phase == 'deployment_arrange':
             self.info_label.text = "[color=00ffff]PHASE 1: Arrange your units (Bottom 3 rows)[/color]"
             for (r, c), sq in self.squares.items():
@@ -338,18 +336,15 @@ class GameplayScreen(Screen):
                 sq.update_square_style(highlight=(self.selected == (r, c)), is_legal=('move' if is_legal_deploy else False), is_check=False, is_last=False)
                 
                 p = self.game.board[r][c]
-                # ซ่อนไอคอนศัตรูเพื่อไม่ให้สปอยล์
                 if not is_deploy_zone:
                     sq.set_piece_icon(None, piece=None)
                 else:
                     sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
             return
             
-        # --------- จัดการ UI ของเฟส 2 (เปิดเผยตำแหน่ง) ---------
         elif phase == 'deployment_reveal':
             self.info_label.text = "[color=ffaa00]PHASE 2: Enemy Revealed! Observe their position.[/color]"
             
-            # หาตำแหน่งแม่ทัพของศัตรู (King, Prince, หรือตัวที่มี is_header)
             enemy_header_pos = None
             for r in range(8):
                 for c in range(8):
@@ -364,11 +359,9 @@ class GameplayScreen(Screen):
                 is_king = ((r, c) == enemy_header_pos)
                 sq.update_square_style(highlight=False, is_legal=False, is_check=is_king, is_last=False)
                 p = self.game.board[r][c]
-                # เปิดเผยตำแหน่งศัตรูทั้งหมดให้ผู้เล่นวางแผน
                 sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
             return
 
-        # --------- โค้ดส่วน Playing ปกติ ---------
         if self.game.game_result:
             self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
             if not getattr(self, '_end_played', False):
@@ -449,7 +442,7 @@ class GameplayScreen(Screen):
         phase = getattr(self, 'battle_phase', 'playing')
         
         if phase == 'deployment_arrange':
-            if r < 5: return # ห้ามยุ่งกับ 5 แถวบน
+            if r < 5: return 
             
             if self.selected is None:
                 piece = self.game.board[r][c]
@@ -467,7 +460,7 @@ class GameplayScreen(Screen):
             return
             
         elif phase == 'deployment_reveal':
-            return # เฟส 2 ดูตำแหน่งและประเมินได้อย่างเดียว สลับหมากไม่ได้แล้ว
+            return 
             
         if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return

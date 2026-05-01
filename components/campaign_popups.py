@@ -164,8 +164,8 @@ class RecruitPopup(ModalView):
         build_row('row5', "Row 5: Elite Guards")
         
     def on_buy_piece(self, piece_name, cost, is_locked, unlock_cost, row_key, idx):
-        success = self.panel.buy_piece(piece_name, cost, is_locked, unlock_cost, row_key, idx)
-        if success:
+        status = self.panel.buy_piece(piece_name, cost, is_locked, unlock_cost, row_key, idx)
+        if status in ["unlocked", "bought"]:
             self.refresh_ui()
 
 # ----------------- Build Popup -----------------
@@ -233,7 +233,7 @@ class BuildPopup(ModalView):
         
         farm_lvl = addons.get('farm', 1)
         farm_cost = farm_lvl * 5
-        if farm_lvl < 3:
+        if farm_lvl < 5: # ฟาร์มตันที่ 5
             img = get_addon_img('farm', farm_lvl)
             self.content_grid.add_widget(BuildCard("Farm", f"Lvl {farm_lvl} -> {farm_lvl+1}\n(+2 Tax)", farm_cost, img, lambda: self.on_upgrade_addon('farm', farm_cost)))
             
@@ -247,7 +247,7 @@ class BuildPopup(ModalView):
         spec = addons.get('special')
         spec_lvl = addons.get('special_lvl', 0)
         if spec and spec not in ['mine']: 
-            max_slvl = 3 if spec in ['guard', 'statue'] else 2
+            max_slvl = 3 # สิ่งปลูกสร้าง Special ทุกชนิดตันที่เวล 3
             spec_cost = spec_lvl * 8
             if spec_lvl < max_slvl:
                 img = get_addon_img(spec, spec_lvl)

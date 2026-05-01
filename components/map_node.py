@@ -89,7 +89,6 @@ class MapNode(Button):
         regular_opts = [('hastati', 6), ('menatarm', 6)]
         elite_opts = [('praetorian', 10), ('royalguard', 10)]
         
-        # สุ่ม 1 แถว (มี 5 ช่อง) โดยมีโอกาสที่ช่องนั้นจะว่าง (x) และแปลง cost เป็น int ป้องกันบัค
         def gen_row(options, empty_chance=0.3):
             row = []
             for _ in range(5):
@@ -97,7 +96,8 @@ class MapNode(Button):
                     row.append(None)
                 else:
                     choice = random.choice(options)
-                    row.append({'name': choice[0], 'cost': int(choice[1])})
+                    row_data = {'name': choice[0], 'cost': int(choice[1])}
+                    row.append(row_data)
             return row
 
         shop = {}
@@ -107,8 +107,8 @@ class MapNode(Button):
             shop['row3'] = {'req_lvl': 3, 'data': gen_row(regular_opts, 0.4)}
         elif n_type == 'castle':
             shop['row1'] = {'req_lvl': 1, 'data': gen_row(militia_opts, 0.2)}
-            shop['row2'] = {'req_lvl': 1, 'data': gen_row(regular_opts, 0.3)}
-            shop['row3'] = {'req_lvl': 2, 'data': gen_row(regular_opts, 0.3)}
+            shop['row2'] = {'req_lvl': 2, 'data': gen_row(regular_opts, 0.3)} # เปลี่ยนเป็น Level 2
+            shop['row3'] = {'req_lvl': 2, 'data': gen_row(regular_opts, 0.3)} # เปลี่ยนเป็น Level 2
             shop['row4'] = {'req_lvl': 3, 'data': gen_row(elite_opts, 0.5)}
             shop['row5'] = {'req_lvl': 3, 'data': gen_row(elite_opts, 0.5)}
                 
