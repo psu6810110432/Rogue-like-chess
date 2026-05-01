@@ -54,6 +54,8 @@ class GameplayScreen(Screen):
         self.add_widget(self.root_layout)
         self.status_popup = self.crash_popup = self.item_tooltip = self.selected_item = None
         self._game_over_scheduled = False
+        self.countdown_event = None
+        self.countdown_time = 0
 
     def _update_main_bg(self, *args):
         self.main_bg_image.pos, self.main_bg_image.size = self.pos, self.size
@@ -74,11 +76,17 @@ class GameplayScreen(Screen):
         self.main_layout.clear_widgets()
         if hasattr(self, 'deployment_layer') and self.deployment_layer in self.root_layout.children:
             self.root_layout.remove_widget(self.deployment_layer)
+        self.hide_item_tooltip()
         self.status_popup = self.crash_popup = self.item_tooltip = self.selected_item = None
         self.game_mode, self._game_over_scheduled, self.selected = mode, False, None
         self.is_input_locked = False 
         self.ai_event = None
         self.battle_phase = 'playing' 
+        
+        if hasattr(self, 'countdown_event') and self.countdown_event:
+            self.countdown_event.cancel()
+            self.countdown_event = None
+        self.countdown_time = 0
 
         app = App.get_running_app()
         chosen_map = getattr(app, 'selected_board', 'Classic Board')
@@ -118,10 +126,20 @@ class GameplayScreen(Screen):
         self.divider.bind(pos=self._update_div_bg, size=self._update_div_bg)
         
         def on_quit_action():
+            if getattr(self, 'is_input_locked', False): return
+            
+            if getattr(self.game, 'game_result', None):
+                if hasattr(self, 'countdown_event') and self.countdown_event:
+                    self.countdown_event.cancel()
+                    self.countdown_event = None
+                self.auto_quit_to_setup(0)
+                return
+
             if getattr(self, 'game_mode', '') == 'Divide_Conquer':
                 App.get_running_app().play_click_sound()
                 if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel()
                 if getattr(self, 'ai_event', None): self.ai_event.cancel()
+                self.hide_item_tooltip()
                 
                 retreating_color = self.game.current_turn
                 dead_count = 0
@@ -292,7 +310,26 @@ class GameplayScreen(Screen):
     def init_board_ui(self):
         self.board_anchor.clear_widgets()
         gm = getattr(self, 'game_mode', 'PVP')
-        vp = 'white' if gm in ['TUTORIAL', 'PVE', 'Divide_Conquer'] else self.game.current_turn
+        
+        is_bot = False
+        app = App.get_running_app()
+        if gm == 'PVE' and self.game.current_turn == 'black': 
+            is_bot = True
+        elif gm == 'Divide_Conquer':
+            attacker_faction = getattr(app.combat_source, 'faction', 'red') if hasattr(app, 'combat_source') else 'white'
+            defender_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
+            
+            if self.game.current_turn == 'white' and attacker_faction == 'red':
+                is_bot = True
+            elif self.game.current_turn == 'black' and defender_faction == 'red':
+                is_bot = True
+                
+        phase = getattr(self, 'battle_phase', 'playing')
+        if phase == 'playing' and not is_bot:
+            vp = self.game.current_turn
+        else:
+            vp = 'white'
+            
         if hasattr(self, 'current_vp') and self.current_vp == vp and hasattr(self, 'grid') and self.grid in self.board_anchor.children:
             self.refresh_ui(); return
             
@@ -316,6 +353,16 @@ class GameplayScreen(Screen):
     def _keep_grid_square(self, instance, value):
         side = (int(min(instance.width, instance.height)) // 8) * 8
         if hasattr(self, 'grid'): self.grid.size = (side, side); Clock.schedule_once(self._update_bg, 0)
+
+    def update_countdown(self, dt):
+        self.countdown_time -= 1
+        if self.countdown_time <= 0:
+            if self.countdown_event:
+                self.countdown_event.cancel()
+                self.countdown_event = None
+            self.auto_quit_to_setup(0)
+        else:
+            self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]\n[color=ffff00][size=16sp]Returning to map in {self.countdown_time}s...[/size][/color]"
 
     def refresh_ui(self, legal_moves=None):
         if legal_moves is None:
@@ -359,16 +406,27 @@ class GameplayScreen(Screen):
             return
 
         if self.game.game_result:
-            self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
             if not getattr(self, '_end_played', False):
                 if "WHITE WINS" in self.game.game_result.upper() and getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer']:
                     App.get_running_app().play_victory_sound()
                 elif "BLACK WINS" in self.game.game_result.upper() and getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer']:
                     App.get_running_app().play_lose_sound()
                 self._end_played = True
-            if not self._game_over_scheduled: 
+                
+            if not getattr(self, '_game_over_scheduled', False): 
                 self._game_over_scheduled = True
-                Clock.schedule_once(self.auto_quit_to_setup, 2.5)
+                self.countdown_time = 10
+                self.countdown_event = Clock.schedule_interval(self.update_countdown, 1.0)
+                if hasattr(self.sidebar, 'action_btn_layout'):
+                    for child in self.sidebar.action_btn_layout.children:
+                        if isinstance(child, Button) and ("Quit" in child.text or "Retreat" in child.text):
+                            child.text = "Skip Countdown"
+                            child.background_color = (0.2, 0.6, 0.2, 1)
+                            
+            if getattr(self, 'countdown_time', 0) > 0:
+                self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]\n[color=ffff00][size=16sp]Returning to map in {self.countdown_time}s...[/size][/color]"
+            else:
+                self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
         else: 
             self.info_label.text = f"{self.game.current_turn.upper()}'S TURN"
             self._end_played = False 
@@ -460,10 +518,14 @@ class GameplayScreen(Screen):
             
         if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return
-        if getattr(self.game, 'game_result', None): return
-        if getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer'] and getattr(self.game, 'current_turn', 'white') == 'black': return
         
         piece = self.game.board[r][c]
+        
+        if getattr(self.game, 'game_result', None): 
+            if not self.selected_item: return
+            
+        if getattr(self.game, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer'] and getattr(self.game, 'current_turn', 'white') == 'black' and not getattr(self.game, 'game_result', None): 
+            return
         
         if self.selected_item:
             if piece and piece.color == self.game.current_turn:
@@ -483,6 +545,8 @@ class GameplayScreen(Screen):
                 self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); self.show_piece_status(piece)
             else: self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui()
             return
+            
+        if getattr(self.game, 'game_result', None): return
             
         if self.selected is None:
             if piece and piece.color == self.game.current_turn:
@@ -604,7 +668,7 @@ class GameplayScreen(Screen):
         info_box = BoxLayout(orientation='vertical', size_hint_x=None, width=dp(120))
         info_box.add_widget(Label(text="INVENTORY", bold=True, font_size='14sp', color=(0.8, 0.8, 0.8, 1)))
         
-        display_color = 'white' if getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer'] else self.game.current_turn
+        display_color = self.game.current_turn
         
         info_box.add_widget(Label(text=f"[{display_color.upper()}]", bold=True, font_size='16sp', color=(0.83, 0.68, 0.21, 1)))
         self.inventory_layout.add_widget(info_box)
@@ -639,7 +703,6 @@ class GameplayScreen(Screen):
                     
         self.check_ai_turn()
 
-    # [แก้ไข] อัปเดตตรรกะเช็คผู้เล่นบอทให้ถูกต้อง ไม่แย่งผู้เล่นในโหมด PvP แคมเปญ
     def check_ai_turn(self):
         app = App.get_running_app()
         is_bot_turn = False
@@ -661,7 +724,6 @@ class GameplayScreen(Screen):
         else:
             self.is_input_locked = False 
 
-    # [แก้ไข] ให้ระบบบอทดึงสีของตัวเอง (ai_color) แทนการ hardcode 'black'
     def trigger_ai_move(self, dt):
         if self.game.game_result: return
         
@@ -741,6 +803,11 @@ class GameplayScreen(Screen):
 
     def on_quit(self):
         App.get_running_app().play_click_sound()
+        self.hide_item_tooltip()
+        self.selected_item = None
+        if hasattr(self, 'countdown_event') and self.countdown_event:
+            self.countdown_event.cancel()
+            self.countdown_event = None
         if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel(); self.crash_popup = None
         if getattr(self, 'ai_event', None): self.ai_event.cancel()
         self.status_popup = self.item_tooltip = self.selected_item = None
@@ -751,6 +818,12 @@ class GameplayScreen(Screen):
             self.manager.current = 'setup'
             
     def auto_quit_to_setup(self, dt):
+        self.hide_item_tooltip()
+        self.selected_item = None
+        if hasattr(self, 'countdown_event') and self.countdown_event:
+            self.countdown_event.cancel()
+            self.countdown_event = None
+            
         if getattr(self, 'game_mode', '') == 'Divide_Conquer':
             app = App.get_running_app()
             app.battle_finished = True

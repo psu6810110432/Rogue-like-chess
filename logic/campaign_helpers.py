@@ -36,7 +36,7 @@ def generate_piece(piece_name, faction, app):
     }
     
     p = classes[piece_name](color, tribe)
-    if piece_name == 'prince': p.name = "Prince" 
+    if piece_name == 'prince': p.name = "Prince"
     
     if not hasattr(p, 'hidden_passive') or p.hidden_passive is None:
         p.hidden_passive = HiddenPassive()
@@ -50,7 +50,7 @@ def generate_piece(piece_name, faction, app):
 def clone_piece(p, faction, app):
     p_name = p.__class__.__name__.lower()
     if getattr(p, 'name', '') == 'Prince': p_name = 'prince'
-    elif getattr(p, 'name', '') == 'Garrison Commander': p_name = 'king' 
+    elif getattr(p, 'name', '') == 'Garrison Commander': p_name = 'king'
     
     new_p = generate_piece(p_name, faction, app)
     new_p.base_points = p.base_points
@@ -84,28 +84,25 @@ def clear_temp_headers(army_list):
             if "(Commander)" in getattr(p, 'name', ''):
                 p.name = p.__class__.__name__.capitalize()
 
-# เพิ่มต่อท้ายไฟล์ logic/campaign_helpers.py
-
 def resolve_map_battle(app, map_screen):
-    """จัดการผลสรุปหลังจบการต่อสู้ในโหมดแคมเปญ"""
     src = app.combat_source
     tgt = app.combat_target
     winner = app.battle_winner
+    marching_fatigue = getattr(app, 'combat_marching_fatigue', 0)
     
     clean_atk = [clone_piece(p, src.faction, app) for p in app.survivors_atk]
     clean_def = [clone_piece(p, tgt.faction, app) for p in app.survivors_def]
     clear_temp_headers(clean_atk)
     clear_temp_headers(clean_def)
     
-    def had_real_king(army): 
+    def had_real_king(army):
         return any(p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' for p in army) and not any(getattr(p, 'is_header', False) for p in army)
-    
+        
     atk_had_king = had_real_king(app.combat_marching_army)
     atk_has_king = had_real_king(app.survivors_atk)
     def_had_king = had_real_king(app.combat_target_army)
     def_has_king = had_real_king(app.survivors_def)
     
-    # 1. เงื่อนไขการตายของแม่ทัพ
     if atk_had_king and not atk_has_king and src.faction in ['white', 'black']:
         map_screen.show_game_over(winner_faction=tgt.faction, reason="ATTACKING KING KILLED")
         return True
@@ -113,7 +110,6 @@ def resolve_map_battle(app, map_screen):
         map_screen.show_game_over(winner_faction=src.faction, reason="DEFENDING KING KILLED")
         return True
         
-    # 2. คำนวณพื้นที่
     if winner == 'attacker':
         orig_tgt_faction = tgt.faction
         if tgt.is_main_base and tgt.faction in ['white', 'black']:
@@ -123,17 +119,19 @@ def resolve_map_battle(app, map_screen):
         tgt.faction = src.faction
         tgt.army_pieces = clean_atk
         tgt.loyalty = 100 
+        tgt.fatigue = marching_fatigue
         tgt.update_graphics()
         
         if tgt.node_type == 'castle' and orig_tgt_faction == 'red':
             app.prince_rewards[src.faction] += 1
-        
+            
         map_screen.status_lbl.text = f"[color=00ff00]VICTORY! YOU CAPTURED {tgt.node_id}.[/color]"
         
         if orig_tgt_faction in ['white', 'black'] and clean_def:
             retreat_node = map_screen.get_nearest_friendly_base(tgt)
             if retreat_node:
                 retreat_node.army_pieces.extend(clean_def)
+                retreat_node.fatigue = max(getattr(retreat_node, 'fatigue', 0), tgt.fatigue)
                 map_screen.status_lbl.text += f" ENEMY RETREATED TO {retreat_node.node_id}."
                 
     elif winner == 'defender':
@@ -141,13 +139,15 @@ def resolve_map_battle(app, map_screen):
         if src.faction in ['white', 'black']:
             if clean_atk:
                 src.army_pieces.extend(clean_atk)
+                src.fatigue = max(getattr(src, 'fatigue', 0), marching_fatigue)
                 map_screen.status_lbl.text = f"[color=ff0000]DEFEAT! YOUR ARMY RETREATED TO {src.node_id}.[/color]"
             else:
                 map_screen.status_lbl.text = f"[color=ff0000]CRUSHING DEFEAT! ARMY DESTROYED.[/color]"
-    else: # เสมอ
+    else: 
         tgt.army_pieces = clean_def
-        if src.faction in ['white', 'black']: 
+        if src.faction in ['white', 'black']:
             src.army_pieces.extend(clean_atk)
+            src.fatigue = max(getattr(src, 'fatigue', 0), marching_fatigue)
             
     app.battle_finished = False
     return False

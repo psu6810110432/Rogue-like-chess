@@ -40,6 +40,7 @@ class MapNode(Button):
         self.is_selected_node = False          
         self.loyalty = 100 
         self.army_pieces = []
+        self.fatigue = 0 # เพิ่มเก็บค่า fatigue ตามฐาน
         
         self.addons = {
             'farm': 1,
@@ -102,15 +103,15 @@ class MapNode(Button):
 
         shop = {}
         if n_type == 'village':
-            shop['row1'] = {'req_lvl': 1, 'data': gen_row(militia_opts, 0.2)}
-            shop['row2'] = {'req_lvl': 2, 'data': gen_row(militia_opts, 0.3)}
-            shop['row3'] = {'req_lvl': 3, 'data': gen_row(regular_opts, 0.4)}
+            shop['row1'] = {'title': 'Row 1: Militia', 'req_lvl': 1, 'data': gen_row(militia_opts, 0.2)}
+            shop['row2'] = {'title': 'Row 2: Militia', 'req_lvl': 2, 'data': gen_row(militia_opts, 0.3)}
+            shop['row3'] = {'title': 'Row 3: Regular', 'req_lvl': 3, 'data': gen_row(regular_opts, 0.4)}
         elif n_type == 'castle':
-            shop['row1'] = {'req_lvl': 1, 'data': gen_row(militia_opts, 0.2)}
-            shop['row2'] = {'req_lvl': 2, 'data': gen_row(regular_opts, 0.3)} # เปลี่ยนเป็น Level 2
-            shop['row3'] = {'req_lvl': 2, 'data': gen_row(regular_opts, 0.3)} # เปลี่ยนเป็น Level 2
-            shop['row4'] = {'req_lvl': 3, 'data': gen_row(elite_opts, 0.5)}
-            shop['row5'] = {'req_lvl': 3, 'data': gen_row(elite_opts, 0.5)}
+            shop['row1'] = {'title': 'Row 1: Militia', 'req_lvl': 1, 'data': gen_row(militia_opts, 0.2)}
+            shop['row2'] = {'title': 'Row 2: Regular', 'req_lvl': 2, 'data': gen_row(regular_opts, 0.3)}
+            shop['row3'] = {'title': 'Row 3: Regular', 'req_lvl': 2, 'data': gen_row(regular_opts, 0.3)}
+            shop['row4'] = {'title': 'Row 4: Veterans & Elites', 'req_lvl': 3, 'data': gen_row(elite_opts, 0.5)}
+            shop['row5'] = {'title': 'Row 5: Veterans & Elites', 'req_lvl': 3, 'data': gen_row(elite_opts, 0.5)}
                 
         return shop
 
@@ -241,6 +242,7 @@ class MapNode(Button):
         
         if map_screen.marching_from_node:
             if self in map_screen.marching_from_node.neighbors:
+                marching_fatigue = getattr(app, 'combat_marching_fatigue', 0)
                 if self.faction == map_screen.marching_from_node.faction:
                     headers = sum(1 for p in self.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False))
                     m_headers = sum(1 for p in app.combat_marching_army if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False))
@@ -250,17 +252,13 @@ class MapNode(Button):
                         self.army_pieces.extend(app.combat_marching_army)
                         app.combat_marching_army = []
                         map_screen.status_lbl.text = "[color=00ff00]ARMY MERGED SUCCESSFUL![/color]"
-                        
-                        current_fatigue = app.army_fatigue.get(map_screen.marching_from_node.faction, 0)
-                        app.army_fatigue[map_screen.marching_from_node.faction] = min(6, current_fatigue + 1)
+                        self.fatigue = max(self.fatigue, marching_fatigue + 1)
                     else:
                         map_screen.status_lbl.text = "[color=ff0000]MERGE FAILED: CAPACITY LIMIT EXCEEDED![/color]"
                         map_screen.marching_from_node.army_pieces.extend(app.combat_marching_army)
                 else:
                     fatigue_cost = 2 if self.node_type == 'castle' else 1
-                    current_fatigue = app.army_fatigue.get(map_screen.marching_from_node.faction, 0)
-                    app.army_fatigue[map_screen.marching_from_node.faction] = min(6, current_fatigue + fatigue_cost)
-                    
+                    app.combat_marching_fatigue = min(6, marching_fatigue + fatigue_cost)
                     map_screen.initiate_combat(map_screen.marching_from_node, self)
             else: 
                 map_screen.status_lbl.text = "[color=ff0000]TOO FAR! SELECT ADJACENT BASE.[/color]"

@@ -12,7 +12,6 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.modalview import ModalView
 
-# Import Components & Helpers 
 from logic.campaign_helpers import get_distance, generate_piece, ensure_header, resolve_map_battle
 from logic.campaign_map_generator import MapGenerator
 from components.campaign_panel import CampaignArmyPanel
@@ -60,7 +59,7 @@ class CampaignMapScreen(Screen):
     def jump_to_base(self, instance):
         app = App.get_running_app()
         if hasattr(app, 'play_click_sound'): app.play_click_sound()
-            
+                
         target_node = next((n for n in self.nodes_list if n.faction == app.current_map_turn and n.is_main_base), None)
         if target_node:
             self.scroll_view.scroll_x = target_node.x / self.map_content.width
@@ -68,7 +67,7 @@ class CampaignMapScreen(Screen):
 
     def show_game_over(self, winner_faction, reason="MAIN BASE CAPTURED"):
         if hasattr(self, 'army_panel'): self.army_panel.close_panel()
-            
+                
         pop = ModalView(size_hint=(0.6, 0.4), auto_dismiss=False, background_color=(0,0,0,0.8))
         box = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(15))
         
@@ -108,8 +107,8 @@ class CampaignMapScreen(Screen):
             app.current_map_turn = 'white'
             app.turn_number = 1
             app.tax_points = {'white': 0, 'black': 0}
-            app.prince_rewards = {'white': 0, 'black': 0} 
-            app.army_fatigue = {'white': 0, 'black': 0} 
+            app.prince_rewards = {'white': 0, 'black': 0}
+            
             app.unlocked_units = {
                 'white': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'},
                 'black': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'}
@@ -120,7 +119,6 @@ class CampaignMapScreen(Screen):
         else:
             self.marching_from_node = None
             if getattr(app, 'battle_finished', False):
-                # ใช้ Logic Helper สรุปผลสงครามแทนโค้ดรกๆ
                 resolve_map_battle(app, self)
 
     def go_back(self, instance):
@@ -139,13 +137,17 @@ class CampaignMapScreen(Screen):
         
         target_army = target_node.army_pieces.copy()
         
-        # Guard Generation Logic
         def spawn_guards(addons_dict):
             if addons_dict.get('special') == 'guard':
                 lvl = addons_dict.get('special_lvl', 1)
-                g_list = ['levies', 'levies', 'pawn']
-                if lvl >= 2: g_list.extend(['bishop', 'knight', 'rook'])
-                if lvl >= 3: g_list.extend(['menatarm', 'rook', 'rook', 'bishop'])
+                if target_node.faction == 'red':
+                    g_list = ['pawn', 'pawn', 'pawn']
+                    if lvl >= 2: g_list.extend(['bishop', 'knight', 'rook'])
+                    if lvl >= 3: g_list.extend(['knight', 'rook', 'rook', 'bishop'])
+                else:
+                    g_list = ['levies', 'levies', 'pawn']
+                    if lvl >= 2: g_list.extend(['bishop', 'knight', 'rook'])
+                    if lvl >= 3: g_list.extend(['menatarm', 'rook', 'rook', 'bishop'])
                 for p_name in g_list:
                     target_army.append(generate_piece(p_name, target_node.faction, app))
                     
@@ -171,7 +173,7 @@ class CampaignMapScreen(Screen):
     def switch_turn(self):
         app = App.get_running_app()
         if hasattr(self, 'army_panel'): self.army_panel.close_panel()
-            
+                
         if app.current_map_turn == 'white':
             app.current_map_turn = 'black'
             self.status_lbl.text = f"DARK ABYSS (BLACK) - TURN {app.turn_number}"
@@ -182,8 +184,10 @@ class CampaignMapScreen(Screen):
             self.status_lbl.text = f"DIVINE ORDER (WHITE) - TURN {app.turn_number}"
             self.status_lbl.color = (1, 0.8, 0.2, 1)
             
-        current_fatigue = app.army_fatigue.get(app.current_map_turn, 0)
-        app.army_fatigue[app.current_map_turn] = max(0, current_fatigue - 3)
+        for node in self.nodes_list:
+            if node.faction == app.current_map_turn:
+                node.fatigue = max(0, getattr(node, 'fatigue', 0) - 3)
+                
         self.jump_to_base(None)
 
     def trigger_rebellion(self, node):
@@ -209,12 +213,11 @@ class CampaignMapScreen(Screen):
         gameplay_screen.setup_game(mode='Divide_Conquer')
         self.manager.current = 'gameplay'
 
-    # แก้ไขเฉพาะฟังก์ชัน end_turn ใน screens/campaign_map_screen.py
     def end_turn(self, instance):
         app = App.get_running_app()
         app.play_click_sound()
         if hasattr(self, 'army_panel'): self.army_panel.close_panel()
-            
+                
         if self.marching_from_node:
             self.marching_from_node.army_pieces.extend(app.combat_marching_army)
             self.marching_from_node = None
@@ -224,7 +227,6 @@ class CampaignMapScreen(Screen):
         
         for node in self.nodes_list:
             if node.faction == app.current_map_turn:
-                # รีเฟรชทหารรับจ้างใหม่ทั้งหมด เมื่อวนกลับมาถึงเทิร์นของเรา (ตาม M&B 2)
                 if hasattr(node, 'refresh_recruits'): node.refresh_recruits()
                 
                 farm_bonus = getattr(node, 'addons', {}).get('farm', 0) * 2
@@ -261,14 +263,12 @@ class CampaignMapScreen(Screen):
         size_val = getattr(app, 'selected_board', 'Size_S')
         map_w, map_h = 9600, 5400
         
-        # รับ Data ผ่าน Logic Generator
         map_data = MapGenerator.generate_data(size_val, map_w, map_h)
         
         with self.map_content.canvas.before:
             Color(0.12, 0.18, 0.12, 1)
             Rectangle(pos=(0, 0), size=(map_w, map_h))
             
-            # วาดน้ำ
             Color(0.1, 0.4, 0.6, 0.6)
             for i, rect in enumerate(map_data['water_rects']):
                 if i >= 150: break
@@ -279,7 +279,6 @@ class CampaignMapScreen(Screen):
                 if i < 150: continue
                 Rectangle(pos=(rect[0], rect[1]), size=(rect[2], rect[3]))
                 
-        # สร้าง Nodes
         nodes_data = map_data['w_nodes'] + map_data['b_nodes']
         nodes_dict = {}
         for data in nodes_data:
@@ -289,7 +288,6 @@ class CampaignMapScreen(Screen):
             self.nodes_list.append(node)
             nodes_dict[data['id']] = node
 
-        # วาดเส้นเชื่อม
         with self.map_content.canvas.before:
             Color(0.85, 0.75, 0.3, 0.8)
             for u, v in map_data['white_edges'] + map_data['black_edges']:

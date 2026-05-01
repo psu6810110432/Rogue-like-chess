@@ -32,13 +32,8 @@ class ChessBoard:
         }
         self.bg_image = map_assets.get(map_name, 'assets/boards/classic.png')
 
-    def handle_item_drop(self, winner, is_defender=False):
-        if is_defender: 
-            return 
-            
-        if getattr(winner, 'cannot_get_items', False): 
-            return
-            
+    def trigger_winner_item_drop(self, winner):
+        if getattr(winner, 'cannot_get_items', False): return
         piece_type = winner.__class__.__name__.lower()
         if piece_type in ['rook', 'bishop', 'knight']:
             target_inv = self.inventory_white if winner.color == 'white' else self.inventory_black
@@ -47,6 +42,9 @@ class ChessBoard:
                 template_item = ITEM_DATABASE[random_item_id]
                 item = Item(template_item.id, template_item.name, template_item.description, template_item.image_path)
                 target_inv.append(item)
+
+    def handle_item_drop(self, winner, is_defender=False):
+        pass
 
     def create_initial_board(self):
         b = [[None for _ in range(8)] for _ in range(8)]
@@ -141,7 +139,6 @@ class ChessBoard:
         if crash_won == "died":
             effect_result = apply_post_crash_effects(self, p, captured_piece, True, sr, sc, er, ec)
             p.has_moved = True
-            self.handle_item_drop(captured_piece, is_defender=True)
             
             if effect_result != "survived":
                 self.board[sr][sc] = None
@@ -150,7 +147,7 @@ class ChessBoard:
             
         else:
             effect_result = apply_post_crash_effects(self, p, captured_piece, False, sr, sc, er, ec)
-            self.handle_item_drop(p, is_defender=False)
+            self.trigger_winner_item_drop(p)
             
             if effect_result == "defender_survived":
                 p.has_moved = True
@@ -194,7 +191,6 @@ class ChessBoard:
         self.inventory_black = state.get('inventory_black', [])
         return True
 
-    # [แก้ไข] ค้นหาคิง โดยรองรับทั้งคิงธรรมดา และ Commander (เช่น Prince) ในโหมดแคมเปญ
     def find_king(self, color):
         for r in range(8):
             for c in range(8):
@@ -240,12 +236,13 @@ class ChessBoard:
             if is_frozen_locked and not is_check:
                 self.complete_turn()
                 return
-            elif is_check:
-                winner = 'black' if self.current_turn == 'white' else 'white'
+            
+            winner = 'black' if self.current_turn == 'white' else 'white'
+            if is_check:
                 self.game_result = f"CHECKMATE! {winner.upper()} WINS"
                 self.history.add_suffix_to_last_move("#")
-            else: self.game_result = "DRAW - STALEMATE"
-        # [แก้ไข] เอากฎ Insufficient Material (เสมอเมื่อหมากน้อย) ออก เพื่อให้เล่นจนกว่าจะมีฝ่ายไหนโดน Crash ตาย
+            else: 
+                self.game_result = f"STALEMATE! {winner.upper()} WINS"
         elif is_check: self.history.add_suffix_to_last_move("+")
 
     def update_map_events(self):

@@ -170,7 +170,7 @@ class CampaignArmyPanel(FloatLayout):
         self.btn_tab_recruit.background_color = (0.2, 0.2, 0.2, 1)
         self.btn_tab_build.background_color = (0.2, 0.2, 0.2, 1)
         
-        fatigue = self.app.army_fatigue.get(self.current_node.faction, 0)
+        fatigue = getattr(self.current_node, 'fatigue', 0)
         self.status_lbl.text = f"Capacity: [b]{total}/{max_cap}[/b] | Fatigue: [color=00ff00]{fatigue}/6[/color]"
         
         self.btn_action.text = "[b]MARCH / ATTACK[/b]"
@@ -193,7 +193,6 @@ class CampaignArmyPanel(FloatLayout):
         addons[key] += 1
         self.current_node.update_graphics()
 
-    # [แก้บัค] ลบพารามิเตอร์เก่าๆ ทิ้งให้หมดเหลือแค่ 4 ตัว
     def buy_piece(self, piece_name, cost, row_key, idx):
         self.app.play_click_sound()
         faction = self.current_node.faction
@@ -239,7 +238,7 @@ class CampaignArmyPanel(FloatLayout):
     def execute_action(self, instance):
         if self.current_tab != 'army': return
         self.app.play_click_sound()
-        fatigue = self.app.army_fatigue.get(self.current_node.faction, 0)
+        fatigue = getattr(self.current_node, 'fatigue', 0)
         if fatigue >= 6:
             self.map_screen.status_lbl.text = "[color=ff0000]ARMY IS EXHAUSTED (FATIGUE = 6)! MUST REST.[/color]"
             return
@@ -251,5 +250,6 @@ class CampaignArmyPanel(FloatLayout):
         for p in selected_pieces: self.current_node.army_pieces.remove(p)
             
         self.app.combat_marching_army = selected_pieces
+        self.app.combat_marching_fatigue = fatigue
         self.close_panel()
         self.map_screen.start_marching(self.current_node)
