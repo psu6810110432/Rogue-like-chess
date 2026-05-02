@@ -126,12 +126,8 @@ class GameplayScreen(Screen):
         self.divider.bind(pos=self._update_div_bg, size=self._update_div_bg)
         
         def on_quit_action():
+            app = App.get_running_app() # [แก้ไข] ประกาศตัวแปร app ให้ฟังก์ชันมองเห็น เพื่อแก้บัคเด้ง
             if getattr(self, 'is_input_locked', False): return
-            
-            if getattr(self, 'game_mode', '') == 'Divide_Conquer' and getattr(self, 'battle_phase', '') != 'playing':
-                target_faction = getattr(app.combat_target, 'faction', 'black') if hasattr(app, 'combat_target') else 'black'
-                if self.battle_phase == 'deployment_arrange_def' or (self.game.current_turn == 'black' and target_faction in ['white', 'black']):
-                    return 
             
             if getattr(self.game, 'game_result', None):
                 if hasattr(self, 'countdown_event') and self.countdown_event:
@@ -141,9 +137,20 @@ class GameplayScreen(Screen):
                 return
 
             if getattr(self, 'game_mode', '') == 'Divide_Conquer':
-                app = App.get_running_app()
-                target_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
+                target_node = getattr(app, 'combat_target', None)
+                target_faction = getattr(target_node, 'faction', 'black') if target_node else 'black'
                 
+                # [เพิ่มระบบใหม่] เช็คว่าฝ่ายป้องกันกดยอมแพ้ในฐานหลักหรือไม่
+                is_defender_turn = (self.game.current_turn == target_faction)
+                if is_defender_turn and target_node and getattr(target_node, 'is_main_base', False):
+                    # ถ้ายอมแพ้ไม่ได้ ให้ขึ้นเตือนแล้วออกคำสั่งทันที
+                    self.info_label.text = "[color=ff0000]CANNOT RETREAT FROM MAIN BASE![/color]"
+                    return
+                
+                if getattr(self, 'battle_phase', '') != 'playing':
+                    if self.battle_phase == 'deployment_arrange_def' or (is_defender_turn and target_faction in ['white', 'black']):
+                        return 
+                        
                 if target_faction == 'red' and self.game.current_turn == 'black':
                     return
 
@@ -799,7 +806,6 @@ class GameplayScreen(Screen):
         else:
             self.is_input_locked = False 
 
-    # [แก้ไข] ลบ DACBot ทิ้ง เปลี่ยนมาใช้ ChessAI ตลอดทุกโหมด เพื่อความเป็นระเบียบและให้ฉลาดเหมือนกัน
     def trigger_ai_move(self, dt):
         if self.game.game_result: return
         
@@ -860,20 +866,53 @@ class GameplayScreen(Screen):
         self.check_ai_turn()
 
     def on_quit(self):
-        App.get_running_app().play_click_sound()
-        self.hide_item_tooltip()
-        self.selected_item = None
-        if hasattr(self, 'countdown_event') and self.countdown_event:
-            self.countdown_event.cancel()
-            self.countdown_event = None
-        if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel(); self.crash_popup = None
-        if getattr(self, 'ai_event', None): self.ai_event.cancel()
-        self.status_popup = self.item_tooltip = self.selected_item = None
-        self.is_input_locked = False
+        app = App.get_running_app()
+        if getattr(self, 'is_input_locked', False): return
+        
+        if getattr(self.game, 'game_result', None):
+            if hasattr(self, 'countdown_event') and self.countdown_event:
+                self.countdown_event.cancel()
+                self.countdown_event = None
+            self.auto_quit_to_setup(0)
+            return
+
         if getattr(self, 'game_mode', '') == 'Divide_Conquer':
-            self.manager.current = 'campaign_map'
+            target_node = getattr(app, 'combat_target', None)
+            target_faction = getattr(target_node, 'faction', 'black') if target_node else 'black'
+            
+            is_defender_turn = (self.game.current_turn == target_faction)
+            if is_defender_turn and target_node and getattr(target_node, 'is_main_base', False):
+                if not (target_faction == 'red' and self.game.current_turn == 'black'):
+                    self.info_label.text = "[color=ff0000]CANNOT RETREAT FROM MAIN BASE![/color]"
+                return
+            
+            if target_faction == 'red' and self.game.current_turn == 'black':
+                return
+
+            if getattr(self, 'battle_phase', '') == 'deployment_arrange_def' or (getattr(self, 'battle_phase', '') != 'playing' and is_defender_turn):
+                return
+
+            app.play_click_sound()
+            if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel()
+            if getattr(self, 'ai_event', None): self.ai_event.cancel()
+            self.hide_item_tooltip()
+            
+            retreating_color = self.game.current_turn
+            dead_count = 0
+            for r in range(8):
+                for c in range(8):
+                    p = self.game.board[r][c]
+                    if p and p.color == retreating_color and p.__class__.__name__.lower() == 'pawn':
+                        if random.random() < 0.5: 
+                            self.game.board[r][c] = None
+                            dead_count += 1
+                            
+            self.game.game_result = "BLACK WINS" if retreating_color == 'white' else "WHITE WINS"
+            
+            def proceed_to_map(): self.auto_quit_to_setup(0)
+            RetreatPopup(dead_count, proceed_to_map).open()
         else:
-            self.manager.current = 'setup'
+            self.on_quit()
             
     def auto_quit_to_setup(self, dt):
         self.hide_item_tooltip()
