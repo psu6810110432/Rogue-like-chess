@@ -136,7 +136,14 @@ class GameplayScreen(Screen):
                 return
 
             if getattr(self, 'game_mode', '') == 'Divide_Conquer':
-                App.get_running_app().play_click_sound()
+                app = App.get_running_app()
+                target_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
+                
+                # ถ้าเล่นโหมด PVE ผู้เล่นสีขาวเท่านั้นที่กดยอมแพ้ได้
+                if target_faction == 'red' and self.game.current_turn == 'black':
+                    return
+
+                app.play_click_sound()
                 if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel()
                 if getattr(self, 'ai_event', None): self.ai_event.cancel()
                 self.hide_item_tooltip()
@@ -169,7 +176,7 @@ class GameplayScreen(Screen):
         if hasattr(self, 'deployment_layer') and self.deployment_layer:
             self.root_layout.remove_widget(self.deployment_layer)
             
-        self.battle_phase = 'deployment_arrange'
+        self.battle_phase = 'deployment_arrange_atk'
         
         self.deployment_layer = FloatLayout()
         self.root_layout.add_widget(self.deployment_layer)
@@ -194,7 +201,7 @@ class GameplayScreen(Screen):
         self.deployment_layer.add_widget(self.black_mask)
         
         self.deploy_lbl = Label(
-            text="[b]PHASE 1: DEPLOYMENT[/b]\nArrange your units (Bottom 3 rows)", 
+            text="[b]PHASE 1: ATTACKER DEPLOYMENT[/b]\nArrange your units (Bottom 3 rows)", 
             markup=True, halign='center', pos_hint={'center_x': 0.5, 'center_y': 0.7}, 
             font_size='24sp', color=(1, 0.8, 0, 1)
         )
@@ -209,13 +216,39 @@ class GameplayScreen(Screen):
         btn_retreat.bind(on_release=self.deployment_retreat) 
         
         btn_confirm = Button(text="[b]CONFIRM SETUP[/b]", markup=True, background_color=(0.2, 0.6, 0.8, 1), font_size='18sp')
-        btn_confirm.bind(on_release=self.show_reveal_phase)
+        btn_confirm.bind(on_release=self.check_next_deployment_phase)
         
         self.deployment_btn_box.add_widget(btn_retreat)
         self.deployment_btn_box.add_widget(btn_confirm)
         self.deployment_layer.add_widget(self.deployment_btn_box)
         
         self.refresh_ui()
+
+    def check_next_deployment_phase(self, instance):
+        app = App.get_running_app()
+        if hasattr(app, 'play_click_sound'): app.play_click_sound()
+
+        target_faction = getattr(app.combat_target, 'faction', 'black') if hasattr(app, 'combat_target') else 'black'
+
+        if target_faction in ['white', 'black'] and getattr(self, 'game_mode', '') == 'Divide_Conquer':
+            self.battle_phase = 'deployment_arrange_def'
+            self.selected = None
+
+            if self.black_mask in self.deployment_layer.children:
+                self.deployment_layer.remove_widget(self.black_mask)
+
+            self.deploy_lbl.text = "[b]PHASE 2: DEFENDER DEPLOYMENT[/b]\nArrange your units (Top 3 rows)\nEnemy is revealed!"
+            self.deploy_lbl.color = (1, 0.4, 0.4, 1)
+
+            self.deployment_btn_box.clear_widgets()
+            btn_confirm = Button(text="[b]CONFIRM DEFENSE[/b]", markup=True, background_color=(0.2, 0.6, 0.8, 1), font_size='18sp')
+            btn_confirm.bind(on_release=self.start_battle_phase)
+            self.deployment_btn_box.add_widget(btn_confirm)
+
+            self.init_board_ui() 
+            self.refresh_ui()
+        else:
+            self.show_reveal_phase(instance)
 
     def deployment_retreat(self, instance):
         app = App.get_running_app()
@@ -262,6 +295,10 @@ class GameplayScreen(Screen):
             self.root_layout.remove_widget(self.deployment_layer)
             self.deployment_layer = None
             
+        if hasattr(self.sidebar, 'show_buttons'):
+            self.sidebar.show_buttons()
+            
+        self.init_board_ui()
         self.refresh_ui()
         self.check_ai_turn()
 
@@ -325,8 +362,11 @@ class GameplayScreen(Screen):
                 is_bot = True
                 
         phase = getattr(self, 'battle_phase', 'playing')
+        
         if phase == 'playing' and not is_bot:
             vp = self.game.current_turn
+        elif phase == 'deployment_arrange_def':
+            vp = 'black'
         else:
             vp = 'white'
             
@@ -371,7 +411,7 @@ class GameplayScreen(Screen):
         
         phase = getattr(self, 'battle_phase', 'playing')
         
-        if phase == 'deployment_arrange':
+        if phase == 'deployment_arrange_atk':
             self.info_label.text = "[color=00ffff]PHASE 1: Arrange your units (Bottom 3 rows)[/color]"
             for (r, c), sq in self.squares.items():
                 is_deploy_zone = (r >= 5)
@@ -383,6 +423,16 @@ class GameplayScreen(Screen):
                     sq.set_piece_icon(None, piece=None)
                 else:
                     sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+            return
+            
+        elif phase == 'deployment_arrange_def':
+            self.info_label.text = "[color=ffaa00]PHASE 2: Defender Arrange (Top 3 rows)[/color]"
+            for (r, c), sq in self.squares.items():
+                is_deploy_zone = (r <= 2)
+                is_legal_deploy = (is_deploy_zone and self.selected is not None and (r, c) != self.selected)
+                sq.update_square_style(highlight=(self.selected == (r, c)), is_legal=('move' if is_legal_deploy else False), is_check=False, is_last=False)
+                p = self.game.board[r][c]
+                sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
             return
             
         elif phase == 'deployment_reveal':
@@ -495,7 +545,7 @@ class GameplayScreen(Screen):
         
         phase = getattr(self, 'battle_phase', 'playing')
         
-        if phase == 'deployment_arrange':
+        if phase == 'deployment_arrange_atk':
             if r < 5: return 
             
             if self.selected is None:
@@ -508,6 +558,24 @@ class GameplayScreen(Screen):
                 
                 target_piece = self.game.board[r][c]
                 if not target_piece or target_piece.color == self.game.current_turn:
+                    self.game.board[r][c] = self.game.board[sr][sc]
+                    self.game.board[sr][sc] = target_piece
+                    self.selected = None; self.init_board_ui()
+            return
+            
+        elif phase == 'deployment_arrange_def':
+            if r > 2: return 
+            
+            if self.selected is None:
+                piece = self.game.board[r][c]
+                if piece and piece.color == 'black': 
+                    self.selected = (r, c); self.refresh_ui()
+            else:
+                sr, sc = self.selected
+                if (r, c) == (sr, sc): self.selected = None; self.refresh_ui(); return
+                
+                target_piece = self.game.board[r][c]
+                if not target_piece or target_piece.color == 'black':
                     self.game.board[r][c] = self.game.board[sr][sc]
                     self.game.board[sr][sc] = target_piece
                     self.selected = None; self.init_board_ui()

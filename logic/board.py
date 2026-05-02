@@ -44,7 +44,7 @@ class ChessBoard:
                 target_inv.append(item)
 
     def handle_item_drop(self, winner, is_defender=False):
-        pass
+        pass # ลบโค้ดเก่าทิ้ง เพื่อไปใช้ trigger_winner_item_drop แทน
 
     def create_initial_board(self):
         b = [[None for _ in range(8)] for _ in range(8)]
@@ -237,12 +237,10 @@ class ChessBoard:
                 self.complete_turn()
                 return
             
+            # ไม่มีการเสมอ (Stalemate) อีกต่อไป ถ้าเดินไม่ได้ = แพ้ทันที
             winner = 'black' if self.current_turn == 'white' else 'white'
-            if is_check:
-                self.game_result = f"CHECKMATE! {winner.upper()} WINS"
-                self.history.add_suffix_to_last_move("#")
-            else: 
-                self.game_result = f"STALEMATE! {winner.upper()} WINS"
+            self.game_result = f"CHECKMATE! {winner.upper()} WINS"
+            self.history.add_suffix_to_last_move("#")
         elif is_check: self.history.add_suffix_to_last_move("+")
 
     def update_map_events(self):

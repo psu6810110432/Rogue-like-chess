@@ -84,6 +84,22 @@ def clear_temp_headers(army_list):
             if "(Commander)" in getattr(p, 'name', ''):
                 p.name = p.__class__.__name__.capitalize()
 
+def get_nearest_connected_friendly_base(start_node, faction):
+    from collections import deque
+    queue = deque([(start_node, 0)])
+    visited = set([start_node])
+
+    while queue:
+        current, dist = queue.popleft()
+        if current != start_node and current.faction == faction:
+            return current
+
+        for neighbor in current.neighbors:
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append((neighbor, dist + 1))
+    return None
+
 def resolve_map_battle(app, map_screen):
     src = app.combat_source
     tgt = app.combat_target
@@ -128,19 +144,25 @@ def resolve_map_battle(app, map_screen):
         map_screen.status_lbl.text = f"[color=00ff00]VICTORY! YOU CAPTURED {tgt.node_id}.[/color]"
         
         if orig_tgt_faction in ['white', 'black'] and clean_def:
-            retreat_node = map_screen.get_nearest_friendly_base(tgt)
+            retreat_node = get_nearest_connected_friendly_base(tgt, orig_tgt_faction)
             if retreat_node:
                 retreat_node.army_pieces.extend(clean_def)
                 retreat_node.fatigue = max(getattr(retreat_node, 'fatigue', 0), tgt.fatigue)
                 map_screen.status_lbl.text += f" ENEMY RETREATED TO {retreat_node.node_id}."
+            else:
+                map_screen.status_lbl.text += f" ENEMY ARMY DESTROYED (NO ESCAPE ROUTE)."
                 
     elif winner == 'defender':
         tgt.army_pieces = clean_def
         if src.faction in ['white', 'black']:
             if clean_atk:
-                src.army_pieces.extend(clean_atk)
-                src.fatigue = max(getattr(src, 'fatigue', 0), marching_fatigue)
-                map_screen.status_lbl.text = f"[color=ff0000]DEFEAT! YOUR ARMY RETREATED TO {src.node_id}.[/color]"
+                retreat_node = get_nearest_connected_friendly_base(tgt, src.faction)
+                if retreat_node:
+                    retreat_node.army_pieces.extend(clean_atk)
+                    retreat_node.fatigue = max(getattr(retreat_node, 'fatigue', 0), marching_fatigue)
+                    map_screen.status_lbl.text = f"[color=ff0000]DEFEAT! YOUR ARMY RETREATED TO {retreat_node.node_id}.[/color]"
+                else:
+                    map_screen.status_lbl.text = f"[color=ff0000]CRUSHING DEFEAT! NO ESCAPE ROUTE, ARMY DESTROYED.[/color]"
             else:
                 map_screen.status_lbl.text = f"[color=ff0000]CRUSHING DEFEAT! ARMY DESTROYED.[/color]"
     else: 
