@@ -30,13 +30,21 @@ class CrashOverlay(BoxLayout):
         self.bind(pos=self._update_bg, size=self._update_bg)
         self._setup_ui()
         
-        # [แก้ไข] เปลี่ยนเงื่อนไขการโจมตีอัตโนมัติ ให้เช็คว่าฝ่ายบุกคือ AI (สีดำใน PVE หรือสีแดงในแคมเปญ)
+        # [แก้ไข] เปลี่ยนมาเช็คสีจากตัวหมากเทียบกับผู้เล่นบอท (รองรับทุกเผ่า)
         is_bot_attacker = False
         if self.game_mode == 'PVE' and getattr(self.attacker, 'color', '') == 'black':
             is_bot_attacker = True
-        elif self.game_mode == 'Divide_Conquer' and self.a_faction == 'red':
-            is_bot_attacker = True
+        elif self.game_mode == 'Divide_Conquer':
+            app = App.get_running_app()
+            attacker_faction = getattr(app.combat_source, 'faction', 'red') if hasattr(app, 'combat_source') else 'white'
+            defender_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
             
+            atk_color = getattr(self.attacker, 'color', '')
+            if atk_color == 'white' and attacker_faction == 'red':
+                is_bot_attacker = True
+            elif atk_color == 'black' and defender_faction == 'red':
+                is_bot_attacker = True
+
         if is_bot_attacker:
             self.crash_btn.disabled = True
             self.crash_btn.text = "AI ATTACKING..."

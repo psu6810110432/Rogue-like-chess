@@ -128,6 +128,11 @@ class GameplayScreen(Screen):
         def on_quit_action():
             if getattr(self, 'is_input_locked', False): return
             
+            if getattr(self, 'game_mode', '') == 'Divide_Conquer' and getattr(self, 'battle_phase', '') != 'playing':
+                target_faction = getattr(app.combat_target, 'faction', 'black') if hasattr(app, 'combat_target') else 'black'
+                if self.battle_phase == 'deployment_arrange_def' or (self.game.current_turn == 'black' and target_faction in ['white', 'black']):
+                    return 
+            
             if getattr(self.game, 'game_result', None):
                 if hasattr(self, 'countdown_event') and self.countdown_event:
                     self.countdown_event.cancel()
@@ -139,7 +144,6 @@ class GameplayScreen(Screen):
                 app = App.get_running_app()
                 target_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
                 
-                # ถ้าเล่นโหมด PVE ผู้เล่นสีขาวเท่านั้นที่กดยอมแพ้ได้
                 if target_faction == 'red' and self.game.current_turn == 'black':
                     return
 
@@ -363,8 +367,11 @@ class GameplayScreen(Screen):
                 
         phase = getattr(self, 'battle_phase', 'playing')
         
-        if phase == 'playing' and not is_bot:
-            vp = self.game.current_turn
+        if phase == 'playing':
+            if is_bot:
+                vp = 'white' 
+            else:
+                vp = self.game.current_turn 
         elif phase == 'deployment_arrange_def':
             vp = 'black'
         else:
@@ -792,55 +799,38 @@ class GameplayScreen(Screen):
         else:
             self.is_input_locked = False 
 
+    # [แก้ไข] ลบ DACBot ทิ้ง เปลี่ยนมาใช้ ChessAI ตลอดทุกโหมด เพื่อความเป็นระเบียบและให้ฉลาดเหมือนกัน
     def trigger_ai_move(self, dt):
         if self.game.game_result: return
         
         difficulty = getattr(App.get_running_app(), 'ai_difficulty', 'normal')
         ai_color = self.game.current_turn
         
-        if getattr(self, 'game_mode', 'PVP') == 'Divide_Conquer':
-            from logic.dac_ai import DACBot
-            
-            target_piece, item_to_use = DACBot.decide_item_usage(self.game, ai_color, difficulty)
-            if target_piece and item_to_use:
-                target_piece.item = item_to_use
-                if item_to_use.id == 6: 
-                    target_piece.coins += 1
-                    target_piece.base_points = max(0, target_piece.base_points - 1)
-                elif item_to_use.id == 10 and target_piece.__class__.__name__.lower() == 'pawn': 
-                    target_piece.base_points = 5
-                    target_piece.coins = 3
+        from logic.ai_logic import ChessAI
+        
+        inv = getattr(self.game, f'inventory_{ai_color}', [])
+        if inv:
+            import random
+            use_chance = 0.6 if difficulty == 'hard' else 0.4 if difficulty == 'normal' else 0.25
+            if len(inv) >= 5 or random.random() < use_chance:
+                item_to_use = random.choice(inv)
+                valid_pieces = [p for row in self.game.board for p in row if p and p.color == ai_color and getattr(p, 'item', None) is None]
+                if valid_pieces:
+                    chosen_piece = random.choice(valid_pieces)
+                    chosen_piece.item = item_to_use
+                    if item_to_use.id == 6: 
+                        chosen_piece.coins += 1; chosen_piece.base_points = max(0, chosen_piece.base_points - 1)
+                    elif item_to_use.id == 10 and chosen_piece.__class__.__name__.lower() == 'pawn': 
+                        chosen_piece.base_points = 5
+                        chosen_piece.coins = 3
+                        
+                    inv.remove(item_to_use)
+                    App.get_running_app().play_click_sound()
+                    self.init_board_ui()
+                    self.update_inventory_ui()
                     
-                getattr(self.game, f'inventory_{ai_color}').remove(item_to_use)
-                App.get_running_app().play_click_sound()
-                self.init_board_ui()
-                self.update_inventory_ui()
-            move = DACBot.get_best_move(self.game, ai_color)
-            
-        else:
-            from logic.ai_logic import ChessAI
-            
-            inv = getattr(self.game, f'inventory_{ai_color}', [])
-            if inv:
-                import random
-                use_chance = 0.6 if difficulty == 'hard' else 0.4 if difficulty == 'normal' else 0.25
-                if len(inv) >= 5 or random.random() < use_chance:
-                    item_to_use = random.choice(inv)
-                    valid_pieces = [p for row in self.game.board for p in row if p and p.color == ai_color and getattr(p, 'item', None) is None]
-                    if valid_pieces:
-                        chosen_piece = random.choice(valid_pieces)
-                        chosen_piece.item = item_to_use
-                        if item_to_use.id == 6: 
-                            chosen_piece.coins += 1; chosen_piece.base_points = max(0, chosen_piece.base_points - 1)
-                        elif item_to_use.id == 10 and chosen_piece.__class__.__name__.lower() == 'pawn': 
-                            chosen_piece.base_points, chosen_piece.coins = 5, 3
-                            
-                        inv.remove(item_to_use)
-                        App.get_running_app().play_click_sound()
-                        self.init_board_ui()
-                        self.update_inventory_ui()
-            move = ChessAI.get_best_move(self.game, ai_color=ai_color)
-            
+        move = ChessAI.get_best_move(self.game, ai_color=ai_color)
+        
         if move:
             (sr, sc), (er, ec) = move
             res = self.game.move_piece(sr, sc, er, ec)
@@ -911,6 +901,11 @@ class GameplayScreen(Screen):
                         
             app.survivors_atk = surv_atk
             app.survivors_def = surv_def
+            
+            if hasattr(self, 'deployment_layer') and self.deployment_layer:
+                self.root_layout.remove_widget(self.deployment_layer)
+                self.deployment_layer = None
+                
             self.manager.current = 'campaign_map'
         else:
             self.manager.current = 'setup'
