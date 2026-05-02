@@ -34,7 +34,8 @@ class CampaignArmyPanel(FloatLayout):
 
         self.header_box = BoxLayout(orientation='horizontal', size_hint=(1, 0.2), pos_hint={'top': 1, 'x': 0}, padding=[dp(10), dp(5)])
         
-        self.header_lbl = Label(text="ARMY HQ", bold=True, font_size='18sp', size_hint_x=0.3, halign='left')
+        # [แก้ไข] เพิ่ม markup=True เพื่อให้ Label บนหัวสามารถใส่สีได้
+        self.header_lbl = Label(text="ARMY HQ", bold=True, font_size='18sp', size_hint_x=0.3, halign='left', markup=True)
         self.status_lbl = Label(text="", markup=True, size_hint_x=0.2, font_size='14sp')
         
         self.btn_tab_army = Button(text="[b]ARMY[/b]", markup=True, size_hint_x=0.12, background_color=(0.3, 0.5, 0.8, 1))
@@ -89,7 +90,12 @@ class CampaignArmyPanel(FloatLayout):
         from kivy.animation import Animation
         self.current_node = node
         self.active_sub_village = None 
-        self.header_lbl.text = f"{node.faction.upper()} {node.node_type.upper()}"
+        
+        # [แก้ไข] เพิ่มการแสดงผล Loyalty บนส่วนหัวของแผงควบคุม
+        loyalty = getattr(node, 'loyalty', 100)
+        loyal_color = "00ff00" if loyalty >= 80 else ("ffff00" if loyalty >= 50 else "ff0000")
+        self.header_lbl.text = f"{node.faction.upper()} {node.node_type.upper()} [color={loyal_color}](Loyalty: {loyalty}%)[/color]"
+        
         self.is_upgrade_mode = False
         
         for n in self.map_screen.nodes_list:

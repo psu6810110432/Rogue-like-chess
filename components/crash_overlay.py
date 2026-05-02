@@ -11,7 +11,6 @@ from kivy.app import App
 from kivy.core.audio import SoundLoader
 
 class CrashOverlay(BoxLayout):
-    # ✨ เพิ่มพารามิเตอร์ game_mode และกำหนดค่าเริ่มต้นเป็น 'PVP'
     def __init__(self, attacker, defender, start_pos, end_pos, a_faction, d_faction, get_img_path_func, on_finish, on_cancel, game_mode="PVP", **kwargs):
         kwargs.setdefault('size_hint', (1, 1))
         super().__init__(orientation='vertical', padding=5, spacing=5, **kwargs)
@@ -22,7 +21,7 @@ class CrashOverlay(BoxLayout):
         self.get_img_path_func = get_img_path_func
         self.on_finish = on_finish
         self.on_cancel = on_cancel
-        self.game_mode = game_mode # ✨ เก็บค่าโหมดเกมไว้ใช้ต่อ
+        self.game_mode = game_mode
         self.crash_stagger_count = 0
         
         with self.canvas.before:
@@ -30,8 +29,15 @@ class CrashOverlay(BoxLayout):
             self.bg_rect = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._update_bg, size=self._update_bg)
         self._setup_ui()
-
+        
+        # [แก้ไข] เปลี่ยนเงื่อนไขการโจมตีอัตโนมัติ ให้เช็คว่าฝ่ายบุกคือ AI (สีดำใน PVE หรือสีแดงในแคมเปญ)
+        is_bot_attacker = False
         if self.game_mode == 'PVE' and getattr(self.attacker, 'color', '') == 'black':
+            is_bot_attacker = True
+        elif self.game_mode == 'Divide_Conquer' and self.a_faction == 'red':
+            is_bot_attacker = True
+            
+        if is_bot_attacker:
             self.crash_btn.disabled = True
             self.crash_btn.text = "AI ATTACKING..."
             Clock.schedule_once(self.start_crash_animation, 1.2)
@@ -43,7 +49,6 @@ class CrashOverlay(BoxLayout):
         self.add_widget(Label(text="CRASH!", bold=True, font_size='28sp', color=(1, 0.2, 0.2, 1), size_hint_y=0.12))
         vs_box = BoxLayout(orientation='horizontal', size_hint_y=0.58)
         
-        # ✨ กำหนดค่าเริ่มต้นและข้อความตามโหมดเกม
         if self.game_mode == "Divide_Conquer":
             a_base = getattr(self.attacker, 'base_atk', getattr(self.attacker, 'base_points', 5))
             d_base = getattr(self.defender, 'base_def', getattr(self.defender, 'base_points', 5))
@@ -62,7 +67,6 @@ class CrashOverlay(BoxLayout):
         atk.add_widget(Label(text=atk_name, bold=True, font_size='13sp', color=(1, 0.85, 0.4, 1), size_hint_y=0.08))
         self.a_coins_layout = GridLayout(cols=3, spacing=2, size_hint_y=0.22)
         atk.add_widget(self.a_coins_layout)
-        # ✨ ใช้ข้อความที่กำหนดไว้ด้านบน
         self.a_val_lbl = Label(text=a_text, bold=True, size_hint_y=0.25)
         atk.add_widget(self.a_val_lbl)
         vs_box.add_widget(atk)
@@ -76,7 +80,6 @@ class CrashOverlay(BoxLayout):
         dfn.add_widget(Label(text=def_name, bold=True, font_size='13sp', color=(1, 0.85, 0.4, 1), size_hint_y=0.08))
         self.d_coins_layout = GridLayout(cols=3, spacing=2, size_hint_y=0.22)
         dfn.add_widget(self.d_coins_layout)
-        # ✨ ใช้ข้อความที่กำหนดไว้ด้านบน
         self.d_val_lbl = Label(text=d_text, bold=True, size_hint_y=0.25)
         dfn.add_widget(self.d_val_lbl)
         vs_box.add_widget(dfn)
@@ -91,9 +94,8 @@ class CrashOverlay(BoxLayout):
         self.crash_btn.disabled = True
         if getattr(self.defender, 'item', None) and self.defender.item.id == 4:
             self.on_finish(self.start_pos, self.end_pos, "blocked")
-            return 
-
-        # ✨ ดึงค่าตามโหมดเกม สำหรับการคำนวณคะแนน
+            return
+            
         if self.game_mode == "Divide_Conquer":
             a_base = getattr(self.attacker, 'base_atk', getattr(self.attacker, 'base_points', 5))
             d_base = getattr(self.defender, 'base_def', getattr(self.defender, 'base_points', 5))
@@ -186,7 +188,7 @@ class CrashOverlay(BoxLayout):
                 if time.time() - self.last_coin_sound_time > 0.08:
                     App.get_running_app().play_coin_sound()
                     self.last_coin_sound_time = time.time()
-                
+                    
                 s[key] += pts[s['coin_idx']]
                 
                 heads_key = 'a_heads' if side == 'atk' else 'd_heads'
@@ -199,7 +201,6 @@ class CrashOverlay(BoxLayout):
                             s[key] += 3
                         elif s[heads_key] == 6: 
                             s[key] += 3
-                
                 elif "Tails" in res[s['coin_idx']] and fac == "the deep anomaly":
                     s[demon_key] += 1
                     if s[demon_key] == 2:
