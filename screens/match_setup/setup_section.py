@@ -106,8 +106,14 @@ class ClickableInfoIcon(ButtonBehavior, Label):
         app = App.get_running_app()
         if hasattr(app, 'play_click_sound'):
             app.play_click_sound()
-        from components.encyclopedia_popup import EncyclopediaPopup
-        EncyclopediaPopup().open()
+            
+        # ✨ เช็คโหมดเพื่อเปิดคู่มือให้ถูกอัน
+        if getattr(app, 'sub_mode', 'Classic') == 'Divide_Conquer':
+            from components.encyclopedia_dnc_popup import EncyclopediaDNCPopup
+            EncyclopediaDNCPopup().open()
+        else:
+            from components.encyclopedia_popup import EncyclopediaPopup
+            EncyclopediaPopup().open()
 
 
 # ------------------ ส่วนหลักของ UI ------------------
