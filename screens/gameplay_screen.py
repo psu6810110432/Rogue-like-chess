@@ -1,7 +1,7 @@
 # screens/gameplay_screen.py
 import random
 from kivy.app import App
-from kivy.graphics import Rectangle, Color, Line, RoundedRectangle
+from kivy.graphics import Rectangle, Color, Line
 from kivy.uix.screenmanager import Screen
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.boxlayout import BoxLayout
@@ -14,15 +14,17 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.metrics import dp
 
 from logic.board import ChessBoard
-from logic.ai_logic import ChessAI
 from components.chess_square import ChessSquare
 from components.sidebar_ui import SidebarUI
 from components.unit_card import UnitCard
 from components.item_tooltip import ItemTooltip
 from components.crash_overlay import CrashOverlay
-from logic.crash_logic import simulate_ai_crash_result
 from components.inventory_ui import InventorySlot
 from components.gameplay_popups import PromotionPopup, RetreatPopup
+
+# Import Managers ที่เราแยกไว้
+from components.deployment_manager import DeploymentManager
+from logic.ai_controller import AIController
 
 try:
     from logic.maps.forest_map import ForestMap
@@ -41,6 +43,10 @@ class GameplayScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.root_layout = FloatLayout()
+        
+        # เรียกใช้งาน Managers
+        self.deployment_manager = DeploymentManager(self)
+        self.ai_controller = AIController(self)
         
         with self.root_layout.canvas.before:
             Color(1, 1, 1, 1)
@@ -74,8 +80,7 @@ class GameplayScreen(Screen):
 
     def setup_game(self, mode):
         self.main_layout.clear_widgets()
-        if hasattr(self, 'deployment_layer') and self.deployment_layer in self.root_layout.children:
-            self.root_layout.remove_widget(self.deployment_layer)
+        self.deployment_manager.remove_layer()
         self.hide_item_tooltip()
         self.status_popup = self.crash_popup = self.item_tooltip = self.selected_item = None
         self.game_mode, self._game_over_scheduled, self.selected = mode, False, None
@@ -126,7 +131,7 @@ class GameplayScreen(Screen):
         self.divider.bind(pos=self._update_div_bg, size=self._update_div_bg)
         
         def on_quit_action():
-            app = App.get_running_app() # [แก้ไข] ประกาศตัวแปร app ให้ฟังก์ชันมองเห็น เพื่อแก้บัคเด้ง
+            app = App.get_running_app()
             if getattr(self, 'is_input_locked', False): return
             
             if getattr(self.game, 'game_result', None):
@@ -140,10 +145,8 @@ class GameplayScreen(Screen):
                 target_node = getattr(app, 'combat_target', None)
                 target_faction = getattr(target_node, 'faction', 'black') if target_node else 'black'
                 
-                # [เพิ่มระบบใหม่] เช็คว่าฝ่ายป้องกันกดยอมแพ้ในฐานหลักหรือไม่
                 is_defender_turn = (self.game.current_turn == target_faction)
                 if is_defender_turn and target_node and getattr(target_node, 'is_main_base', False):
-                    # ถ้ายอมแพ้ไม่ได้ ให้ขึ้นเตือนแล้วออกคำสั่งทันที
                     self.info_label.text = "[color=ff0000]CANNOT RETREAT FROM MAIN BASE![/color]"
                     return
                 
@@ -181,137 +184,7 @@ class GameplayScreen(Screen):
         
         self.init_board_ui()
         if mode == 'Divide_Conquer':
-            self.setup_deployment_ui()
-
-    def setup_deployment_ui(self):
-        if hasattr(self, 'deployment_layer') and self.deployment_layer:
-            self.root_layout.remove_widget(self.deployment_layer)
-            
-        self.battle_phase = 'deployment_arrange_atk'
-        
-        self.deployment_layer = FloatLayout()
-        self.root_layout.add_widget(self.deployment_layer)
-        
-        if hasattr(self.sidebar, 'hide_buttons'):
-            self.sidebar.hide_buttons()
-
-        self.black_mask = Widget()
-        with self.black_mask.canvas.before:
-            Color(0, 0, 0, 1) 
-            self.mask_rect = Rectangle()
-            
-        def update_mask(*args):
-            if hasattr(self, 'grid') and self.grid:
-                self.mask_rect.pos = (self.grid.x, self.grid.y + self.grid.height * 3 / 8)
-                self.mask_rect.size = (self.grid.width, self.grid.height * 5 / 8)
-                
-        if hasattr(self, 'grid'):
-            self.grid.bind(pos=update_mask, size=update_mask)
-            update_mask()
-            
-        self.deployment_layer.add_widget(self.black_mask)
-        
-        self.deploy_lbl = Label(
-            text="[b]PHASE 1: ATTACKER DEPLOYMENT[/b]\nArrange your units (Bottom 3 rows)", 
-            markup=True, halign='center', pos_hint={'center_x': 0.5, 'center_y': 0.7}, 
-            font_size='24sp', color=(1, 0.8, 0, 1)
-        )
-        self.deployment_layer.add_widget(self.deploy_lbl)
-        
-        self.deployment_btn_box = BoxLayout(
-            orientation='horizontal', size_hint=(None, None), 
-            size=(dp(400), dp(60)), pos_hint={'center_x': 0.5, 'y': 0.1}, spacing=dp(20)
-        )
-        
-        btn_retreat = Button(text="[b]RETREAT[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1), font_size='18sp')
-        btn_retreat.bind(on_release=self.deployment_retreat) 
-        
-        btn_confirm = Button(text="[b]CONFIRM SETUP[/b]", markup=True, background_color=(0.2, 0.6, 0.8, 1), font_size='18sp')
-        btn_confirm.bind(on_release=self.check_next_deployment_phase)
-        
-        self.deployment_btn_box.add_widget(btn_retreat)
-        self.deployment_btn_box.add_widget(btn_confirm)
-        self.deployment_layer.add_widget(self.deployment_btn_box)
-        
-        self.refresh_ui()
-
-    def check_next_deployment_phase(self, instance):
-        app = App.get_running_app()
-        if hasattr(app, 'play_click_sound'): app.play_click_sound()
-
-        target_faction = getattr(app.combat_target, 'faction', 'black') if hasattr(app, 'combat_target') else 'black'
-
-        if target_faction in ['white', 'black'] and getattr(self, 'game_mode', '') == 'Divide_Conquer':
-            self.battle_phase = 'deployment_arrange_def'
-            self.selected = None
-
-            if self.black_mask in self.deployment_layer.children:
-                self.deployment_layer.remove_widget(self.black_mask)
-
-            self.deploy_lbl.text = "[b]PHASE 2: DEFENDER DEPLOYMENT[/b]\nArrange your units (Top 3 rows)\nEnemy is revealed!"
-            self.deploy_lbl.color = (1, 0.4, 0.4, 1)
-
-            self.deployment_btn_box.clear_widgets()
-            btn_confirm = Button(text="[b]CONFIRM DEFENSE[/b]", markup=True, background_color=(0.2, 0.6, 0.8, 1), font_size='18sp')
-            btn_confirm.bind(on_release=self.start_battle_phase)
-            self.deployment_btn_box.add_widget(btn_confirm)
-
-            self.init_board_ui() 
-            self.refresh_ui()
-        else:
-            self.show_reveal_phase(instance)
-
-    def deployment_retreat(self, instance):
-        app = App.get_running_app()
-        if hasattr(app, 'play_click_sound'): app.play_click_sound()
-        
-        app.battle_finished = True
-        app.battle_winner = 'draw'
-        app.survivors_atk = app.combat_marching_army
-        app.survivors_def = app.combat_target_army
-        
-        self.manager.current = 'campaign_map'
-
-    def show_reveal_phase(self, instance):
-        app = App.get_running_app()
-        if hasattr(app, 'play_click_sound'): app.play_click_sound()
-        
-        self.battle_phase = 'deployment_reveal'
-        self.selected = None
-        
-        if hasattr(self.sidebar, 'show_buttons'):
-            self.sidebar.show_buttons()
-
-        if self.black_mask in self.deployment_layer.children:
-            self.deployment_layer.remove_widget(self.black_mask)
-            
-        self.deploy_lbl.text = "[b]PHASE 2: ENEMY REVEALED[/b]\nObserve the enemy Commander's position!"
-        self.deploy_lbl.color = (1, 0.4, 0.4, 1)
-        
-        self.deployment_btn_box.clear_widgets()
-        btn_ready = Button(text="[b]READY TO BATTLE[/b]", markup=True, background_color=(0.2, 0.8, 0.2, 1), font_size='18sp')
-        btn_ready.bind(on_release=self.start_battle_phase)
-        self.deployment_btn_box.add_widget(btn_ready)
-        
-        self.refresh_ui()
-
-    def start_battle_phase(self, instance):
-        app = App.get_running_app()
-        if hasattr(app, 'play_click_sound'): app.play_click_sound()
-        
-        self.battle_phase = 'playing'
-        self.selected = None
-        
-        if hasattr(self, 'deployment_layer') and self.deployment_layer:
-            self.root_layout.remove_widget(self.deployment_layer)
-            self.deployment_layer = None
-            
-        if hasattr(self.sidebar, 'show_buttons'):
-            self.sidebar.show_buttons()
-            
-        self.init_board_ui()
-        self.refresh_ui()
-        self.check_ai_turn()
+            self.deployment_manager.setup_deployment_ui()
 
     def highlight_headers(self):
         for (r, c), square in self.squares.items():
@@ -783,87 +656,7 @@ class GameplayScreen(Screen):
                 if p and getattr(p, 'cannot_get_items', False):
                     p.item = None
                     
-        self.check_ai_turn()
-
-    def check_ai_turn(self):
-        app = App.get_running_app()
-        is_bot_turn = False
-        
-        if getattr(self, 'game_mode', 'PVP') == 'PVE' and self.game.current_turn == 'black': 
-            is_bot_turn = True
-        elif getattr(self, 'game_mode', 'PVP') == 'Divide_Conquer':
-            attacker_faction = getattr(app.combat_source, 'faction', 'red') if hasattr(app, 'combat_source') else 'white'
-            defender_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
-            
-            if self.game.current_turn == 'white' and attacker_faction == 'red':
-                is_bot_turn = True
-            elif self.game.current_turn == 'black' and defender_faction == 'red':
-                is_bot_turn = True
-                
-        if is_bot_turn and not self.game.game_result: 
-            self.is_input_locked = True 
-            self.ai_event = Clock.schedule_once(self.trigger_ai_move, 0.8)
-        else:
-            self.is_input_locked = False 
-
-    def trigger_ai_move(self, dt):
-        if self.game.game_result: return
-        
-        difficulty = getattr(App.get_running_app(), 'ai_difficulty', 'normal')
-        ai_color = self.game.current_turn
-        
-        from logic.ai_logic import ChessAI
-        
-        inv = getattr(self.game, f'inventory_{ai_color}', [])
-        if inv:
-            import random
-            use_chance = 0.6 if difficulty == 'hard' else 0.4 if difficulty == 'normal' else 0.25
-            if len(inv) >= 5 or random.random() < use_chance:
-                item_to_use = random.choice(inv)
-                valid_pieces = [p for row in self.game.board for p in row if p and p.color == ai_color and getattr(p, 'item', None) is None]
-                if valid_pieces:
-                    chosen_piece = random.choice(valid_pieces)
-                    chosen_piece.item = item_to_use
-                    if item_to_use.id == 6: 
-                        chosen_piece.coins += 1; chosen_piece.base_points = max(0, chosen_piece.base_points - 1)
-                    elif item_to_use.id == 10 and chosen_piece.__class__.__name__.lower() == 'pawn': 
-                        chosen_piece.base_points = 5
-                        chosen_piece.coins = 3
-                        
-                    inv.remove(item_to_use)
-                    App.get_running_app().play_click_sound()
-                    self.init_board_ui()
-                    self.update_inventory_ui()
-                    
-        move = ChessAI.get_best_move(self.game, ai_color=ai_color)
-        
-        if move:
-            (sr, sc), (er, ec) = move
-            res = self.game.move_piece(sr, sc, er, ec)
-            
-            if isinstance(res, tuple) and res[0] == "crash":
-                atk, df = res[1], res[2]
-                if not atk or not df: return
-                if getattr(df, 'item', None) and df.item.id == 4:
-                    df.item = None
-                    atk.has_moved = True
-                    self.game.history.save_state(self.game, "Shield Blocked!")
-                    self.game.complete_turn()
-                    self.init_board_ui()
-                    return 
-                self.show_crash_overlay(atk, df, (sr, sc), (er, ec))
-                return
-                
-            if res == "promote":
-                from logic.pieces import Queen
-                self.game.promote_pawn(er, ec, Queen)
-                
-            if res in [True, "promote", "died"]: 
-                App.get_running_app().play_move_sound()
-            self.init_board_ui()
-            
-        self.ai_event = None
-        self.check_ai_turn()
+        self.ai_controller.check_ai_turn()
 
     def on_quit(self):
         app = App.get_running_app()
@@ -941,10 +734,8 @@ class GameplayScreen(Screen):
             app.survivors_atk = surv_atk
             app.survivors_def = surv_def
             
-            if hasattr(self, 'deployment_layer') and self.deployment_layer:
-                self.root_layout.remove_widget(self.deployment_layer)
-                self.deployment_layer = None
-                
+            self.deployment_manager.remove_layer()
+            
             self.manager.current = 'campaign_map'
         else:
             self.manager.current = 'setup'

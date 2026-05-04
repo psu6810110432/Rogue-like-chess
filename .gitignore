@@ -1,11 +1,54 @@
-# Virtual Environment
-.venv/
-venv/
-ENV/
+# ==========================================
+# 1. Machine Learning / AI Training Files
+# ==========================================
+# โฟลเดอร์เก็บโมเดลและ Checkpoint ทั้งหมด
+models/
+checkpoints/
 
-# Python cache
+# ไฟล์โมเดลที่เซฟออกมา (Stable Baselines3 มักจะเซฟเป็น .zip)
+*.zip
+*.pth
+*.pt
+*.h5
+
+# สคริปต์ที่เกี่ยวกับการเทรนและดูผลบอท (ตามที่คุณต้องการซ่อนไว้ก่อน)
+train_ai.py
+train_campaign_ai.py
+watch_ai.py
+watch_campaign_ai.py
+rl_env_dnc_campaign.py
+rl_env.py
+test_ai_env.py
+
+# โฟลเดอร์เก็บ Log สำหรับ TensorBoard หรือการเก็บสถิติเทรน
+logs/
+tensorboard_logs/
+tb_logs/
+
+# ==========================================
+# 2. Python & Virtual Environment
+# ==========================================
+# ไฟล์ Cache ของ Python
 __pycache__/
 *.py[cod]
+*$py.class
 
+# โฟลเดอร์ Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+
+# ==========================================
+# 3. Kivy & OS Specific
+# ==========================================
 # Kivy logs
 .kivy/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# IDE specific files (VSCode, PyCharm)
+.vscode/
+.idea/
