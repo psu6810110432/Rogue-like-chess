@@ -252,6 +252,14 @@ class ChessBoard:
                         p.lifespan -= 1
                         if p.lifespan <= 0: self.board[r][c] = None
                     if getattr(p, 'freeze_timer', 0) > 0: p.freeze_timer -= 1
+                    
+        # เรียกใช้ Map Specific Effects หลังจากเช็ค lifespan จบ
+        self.apply_map_effects()
+
+    def apply_map_effects(self):
+        # ฟังก์ชันพื้นฐาน ว่างเปล่าไว้สำหรับด่านที่ไม่มี Event 
+        # (ด่าน DesertMap, TundraMap ฯลฯ จะทำการ Override ฟังก์ชันนี้เอง)
+        pass
 
     def promote_pawn(self, r, c, cls):
         old_piece = self.board[r][c]
