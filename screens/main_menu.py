@@ -11,6 +11,7 @@ from kivy.animation import Animation
 from kivy.metrics import dp
 
 class RoundedButton(Button):
+    # ... (ส่วนนี้เหมือนเดิม) ...
     def __init__(self, normal_color, **kwargs):
         super().__init__(**kwargs)
         self.background_color = (0, 0, 0, 0)  
@@ -18,7 +19,6 @@ class RoundedButton(Button):
         self.background_down = ''
         
         self.normal_color = normal_color
-        # ปรับเงาให้มืดลงอีกเป็น 0.4 (เพื่อให้ดูมีมิติลึกขึ้นในพื้นหลังมืด)
         self.shadow_color = [max(0, c * 0.4) for c in normal_color[:3]] + [normal_color[3]] 
         self.pressed_color = [max(0, c * 0.8) for c in normal_color[:3]] + [normal_color[3]] 
         
@@ -29,8 +29,8 @@ class RoundedButton(Button):
             self.color_inst = Color(*self.normal_color)
             self.main_rect = RoundedRectangle(radius=[15])
             
-        self.bind(pos=self.update_rect, size=self.update_rect, state=self.update_state)
-        
+        self.bind(pos=self.update_rect, size=self.update_rect, state=self.update_state) 
+
     def update_rect(self, *args):
         self.shadow_rect.pos = self.pos
         self.shadow_rect.size = self.size
@@ -41,7 +41,7 @@ class RoundedButton(Button):
         else:
             self.main_rect.pos = self.pos
             self.main_rect.size = self.size
-            
+
     def update_state(self, *args):
         if self.state == 'down':
             self.color_inst.rgba = self.pressed_color
@@ -59,13 +59,15 @@ class MainMenuScreen(Screen):
         with self.canvas.before:
             Color(1, 1, 1, 1) 
             self.bg_image = Rectangle(source='assets/ui/backgrounds/menu_bg.png', pos=self.pos, size=self.size)
-            # เพิ่มความทึบของฟิลเตอร์ดำอีกนิด (0.75) เพื่อเบลนขอบปุ่มให้เข้ากับฉากหลัง
             Color(0.02, 0.02, 0.05, 0.75) 
             self.bg_overlay = Rectangle(pos=self.pos, size=self.size)
-
         self.bind(pos=self.update_bg, size=self.update_bg)
         
-        layout = BoxLayout(orientation='vertical', padding=[50, 60, 50, 40], spacing=20)
+        # ใช้ FloatLayout เป็น Root เพื่อให้วาง Label เวอร์ชันได้อิสระ
+        root_layout = FloatLayout()
+
+        # Layout หลักของเมนู (อยู่ตรงกลางเหมือนเดิม)
+        layout = BoxLayout(orientation='vertical', padding=[50, 60, 50, 40], spacing=20, size_hint=(1, 1))
         
         title_container = FloatLayout(size_hint_y=0.4)
         
@@ -80,7 +82,7 @@ class MainMenuScreen(Screen):
             pos_hint={'center_x': 0.5, 'center_y': 0.57}
         )
         subtitle = Label(
-            text="Enter the Dark Battlefield • Face Your Destiny",
+            text="Enter the Dark Battlefield   Face Your Destiny",
             font_size='20sp', color=(0.6, 0.6, 0.7, 1),
             pos_hint={'center_x': 0.5, 'center_y': 0.3}
         )
@@ -92,7 +94,6 @@ class MainMenuScreen(Screen):
         
         btn_box = BoxLayout(orientation='vertical', spacing=20, size_hint=(0.35, 0.45), pos_hint={'center_x': 0.5})
         
-        # ✨ ปรับโทนสีใหม่ให้ "ดาร์ก และ คุมโทน" (ตัวเลขสุดท้าย 0.95 คือโปร่งแสงเบาๆ ให้กลืนกับรูป)
         play_btn = RoundedButton(text="PLAY", normal_color=(0.55, 0.15, 0.05, 0.95), bold=True, font_size='26sp')
         play_btn.bind(on_press=self.play_btn_sound, on_release=self.go_play)
         
@@ -115,7 +116,27 @@ class MainMenuScreen(Screen):
         self.prep_label = Label(text=">> PREPARE FOR BATTLE <<", size_hint_y=0.15, color=(0.8, 0.4, 0.1, 1), font_size='18sp')
         layout.add_widget(self.prep_label)
         
-        self.add_widget(layout)
+        root_layout.add_widget(layout)
+
+        # ---------------------------------------------------------
+        # เพิ่ม Label แสดงเวอร์ชันเกมที่มุมซ้ายล่าง
+        # ---------------------------------------------------------
+        game_version = "v2.0.0" # กำหนดเลขเวอร์ชันตรงนี้
+        version_label = Label(
+            text=f"[color=888888]{game_version}[/color]", 
+            markup=True, 
+            font_size='14sp',
+            size_hint=(None, None),
+            size=(dp(100), dp(30)),
+            pos_hint={'x': 0.02, 'y': 0.02}, # วางไว้มุมซ้ายล่าง
+            halign='left',
+            valign='bottom'
+        )
+        version_label.bind(size=version_label.setter('text_size'))
+        root_layout.add_widget(version_label)
+        # ---------------------------------------------------------
+
+        self.add_widget(root_layout)
 
     def update_bg(self, *args):
         self.bg_image.pos = self.pos
