@@ -163,7 +163,7 @@ class SetupSection(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(orientation='vertical', padding=[20, 10, 20, 10], spacing=15, **kwargs)
         self.app = App.get_running_app()
-        self.app.match_type = '' # PVE / PVP
+        self.app.match_type = '' # PVE / LOCAL_PVP / ONLINE_PVP
         self.app.sub_mode = ''   # Classic / Divide_Conquer
         self.app.selected_board = ''
         self.app.selected_unit_white = ''
@@ -174,12 +174,16 @@ class SetupSection(BoxLayout):
         self.type_box = BoxLayout(orientation='vertical', size_hint_y=0.15, spacing=5)
         self.add_header(self.type_box, "1. SELECT MATCH TYPE")
         
-        type_grid = GridLayout(cols=2, spacing=20)
+        type_grid = GridLayout(cols=3, spacing=15)
         self.type_cards = []
-        for m in ['PVE', 'PVP']:
-            desc = "COMMANDER vs AI" if m=='PVE' else "DUEL BETWEEN LORDS"
-            card = SelectionCard(text=f"[b]{m}[/b]\n[size=14sp][color=a0a0a0]{desc}[/color][/size]")
-            card.val = m
+        type_options = [
+            ('PVE', 'PVE', 'COMMANDER vs AI'),
+            ('LOCAL_PVP', 'LOCAL PVP', 'Shared Screen Duel'),
+            ('ONLINE_PVP', 'ONLINE PVP', 'Network Battle'),
+        ]
+        for val, title, desc in type_options:
+            card = SelectionCard(text=f"[b]{title}[/b]\n[size=13sp][color=a0a0a0]{desc}[/color][/size]")
+            card.val = val
             card.bind(on_press=self.play_sound, on_release=self.on_type_select)
             self.type_cards.append(card)
             type_grid.add_widget(card)
@@ -310,10 +314,39 @@ class SetupSection(BoxLayout):
         self.app.match_type = instance.val
         self.update_selections()
         
-        self.mode_box.disabled = False
-        Animation(opacity=1, duration=0.3).start(self.mode_box)
+        # Online PVP: auto-select Classic, lock out D&C
+        is_online = (instance.val == 'ONLINE_PVP')
+        for c in self.mode_cards:
+            if c.val == 'Divide_Conquer':
+                c.disabled = is_online
+                c.opacity = 0.35 if is_online else 1.0
+            else:
+                c.disabled = False
+                c.opacity = 1.0
+        
+        if is_online:
+            # Auto-select Classic Chess for online
+            self.app.sub_mode = 'Classic'
+            self.update_selections()
+            self.load_map_options()
+            self.mode_box.disabled = False
+            Animation(opacity=1, duration=0.3).start(self.mode_box)
+            # Also reveal the map section immediately
+            self.map_box.disabled = False
+            Animation(opacity=1, duration=0.3).start(self.map_box)
+            # Keep timer hidden until map is selected
+            self.timer_box.disabled = True
+            self.timer_box.size_hint_y = 0
+            self.timer_box.opacity = 0
+        else:
+            self.mode_box.disabled = False
+            Animation(opacity=1, duration=0.3).start(self.mode_box)
 
     def on_mode_select(self, instance):
+        # Block D&C selection when online
+        if instance.val == 'Divide_Conquer' and self.app.match_type == 'ONLINE_PVP':
+            return
+        
         self.app.sub_mode = instance.val
         
         self.load_map_options()

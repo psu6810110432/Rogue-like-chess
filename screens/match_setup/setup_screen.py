@@ -68,7 +68,14 @@ class MatchSetupScreen(Screen):
         if not getattr(app, 'selected_unit_black', None): app.selected_unit_black = 'Demon'
         if getattr(app, 'selected_time_limit', None) is None: app.selected_time_limit = 0
 
-        app.game_mode = app.match_type 
+        # Map match types to game_mode for gameplay screen
+        if app.match_type == 'ONLINE_PVP':
+            app.game_mode = 'ONLINE_PVP'
+            app.sub_mode = 'Classic'  # Force Classic for online
+        elif app.match_type == 'LOCAL_PVP':
+            app.game_mode = 'PVP'
+        else:
+            app.game_mode = app.match_type  # PVE
 
         # ✨ ตรวจสอบโหมดย่อย
         if app.sub_mode == 'Divide_Conquer':
