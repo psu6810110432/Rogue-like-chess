@@ -168,9 +168,10 @@ class SetupSection(BoxLayout):
         self.app.selected_board = ''
         self.app.selected_unit_white = ''
         self.app.selected_unit_black = ''
+        self.app.selected_time_limit = 0  # 0 = Unlimited (seconds)
 
         # 1. SELECT MATCH TYPE
-        self.type_box = BoxLayout(orientation='vertical', size_hint_y=0.18, spacing=5)
+        self.type_box = BoxLayout(orientation='vertical', size_hint_y=0.15, spacing=5)
         self.add_header(self.type_box, "1. SELECT MATCH TYPE")
         
         type_grid = GridLayout(cols=2, spacing=20)
@@ -186,7 +187,7 @@ class SetupSection(BoxLayout):
         self.add_widget(self.type_box)
 
         # 2. SELECT GAME MODE
-        self.mode_box = BoxLayout(orientation='vertical', size_hint_y=0.18, spacing=5, opacity=0, disabled=True)
+        self.mode_box = BoxLayout(orientation='vertical', size_hint_y=0.15, spacing=5, opacity=0, disabled=True)
         self.add_header(self.mode_box, "2. SELECT GAME MODE")
         
         mode_grid = GridLayout(cols=2, spacing=20)
@@ -206,7 +207,7 @@ class SetupSection(BoxLayout):
         self.add_widget(self.mode_box)
 
         # 3. SELECT MAP / SIZE (Dynamically changes based on Mode)
-        self.map_box = BoxLayout(orientation='vertical', size_hint_y=0.22, spacing=5, opacity=0, disabled=True)
+        self.map_box = BoxLayout(orientation='vertical', size_hint_y=0.18, spacing=5, opacity=0, disabled=True)
         self.map_header_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(10))
         self.map_box.add_widget(self.map_header_layout)
         
@@ -214,8 +215,28 @@ class SetupSection(BoxLayout):
         self.map_box.add_widget(self.map_grid)
         self.add_widget(self.map_box)
 
+        # 3.5 TURN TIMER LIMIT (Classic Chess only)
+        self.timer_box = BoxLayout(orientation='vertical', size_hint_y=0.12, spacing=5, opacity=0, disabled=True)
+        self.add_header(self.timer_box, "TURN TIMER LIMIT")
+        timer_grid = GridLayout(cols=4, spacing=12)
+        self.timer_cards = []
+        timer_options = [
+            (0, 'Unlimited'),
+            (180, '3 Minutes'),
+            (300, '5 Minutes'),
+            (480, '8 Minutes'),
+        ]
+        for val, display in timer_options:
+            card = SelectionCard(text=f"[b][size=15sp]{display}[/size][/b]")
+            card.val = val
+            card.bind(on_press=self.play_sound, on_release=self.on_timer_select)
+            self.timer_cards.append(card)
+            timer_grid.add_widget(card)
+        self.timer_box.add_widget(timer_grid)
+        self.add_widget(self.timer_box)
+
         # 4. SELECT FACTIONS
-        self.fac_box = BoxLayout(orientation='vertical', size_hint_y=0.42, spacing=5, opacity=0, disabled=True)
+        self.fac_box = BoxLayout(orientation='vertical', size_hint_y=0.40, spacing=5, opacity=0, disabled=True)
         self.add_header(self.fac_box, "4. CHOOSE YOUR LEGION", clickable_info=True)
         
         self.fac_split = BoxLayout(orientation='horizontal', spacing=30)
@@ -281,6 +302,7 @@ class SetupSection(BoxLayout):
         for c in self.type_cards: c.set_selected(c.val == self.app.match_type)
         for c in self.mode_cards: c.set_selected(c.val == self.app.sub_mode)
         for c in getattr(self, 'map_cards', []): c.set_selected(c.val == self.app.selected_board)
+        for c in self.timer_cards: c.set_selected(c.val == self.app.selected_time_limit)
         for c in self.white_cards: c.set_selected(c.val == self.app.selected_unit_white)
         for c in self.black_cards: c.set_selected(c.val == self.app.selected_unit_black)
 
@@ -299,6 +321,21 @@ class SetupSection(BoxLayout):
         
         self.map_box.disabled = False
         Animation(opacity=1, duration=0.3).start(self.map_box)
+
+        # Show/hide timer section based on mode
+        if instance.val == 'Classic':
+            self.timer_box.disabled = False
+            self.timer_box.size_hint_y = 0.12
+            Animation(opacity=1, duration=0.3).start(self.timer_box)
+            # Auto-select Unlimited as default
+            if self.app.selected_time_limit == 0:
+                self.update_selections()
+        else:
+            # Hide timer for Divide & Conquer
+            self.timer_box.disabled = True
+            self.timer_box.size_hint_y = 0
+            Animation(opacity=0, duration=0.2).start(self.timer_box)
+            self.app.selected_time_limit = 0  # Reset to unlimited
 
     def load_map_options(self):
         self.map_header_layout.clear_widgets()
@@ -355,6 +392,10 @@ class SetupSection(BoxLayout):
                 card.bind(on_press=self.play_sound, on_release=self.on_map_select)
                 self.map_cards.append(card)
                 self.map_grid.add_widget(card)
+
+    def on_timer_select(self, instance):
+        self.app.selected_time_limit = instance.val
+        self.update_selections()
 
     def on_map_select(self, instance):
         self.app.selected_board = instance.val

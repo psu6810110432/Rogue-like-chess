@@ -66,6 +66,7 @@ class MatchSetupScreen(Screen):
         if not getattr(app, 'selected_board', None): app.selected_board = 'Classic Board'
         if not getattr(app, 'selected_unit_white', None): app.selected_unit_white = 'Medieval Knights'
         if not getattr(app, 'selected_unit_black', None): app.selected_unit_black = 'Demon'
+        if not hasattr(app, 'selected_time_limit'): app.selected_time_limit = 0
 
         app.game_mode = app.match_type 
 
