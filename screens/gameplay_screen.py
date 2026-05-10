@@ -25,6 +25,7 @@ from components.gameplay_popups import PromotionPopup, RetreatPopup
 # Import Managers ที่เราแยกไว้
 from components.deployment_manager import DeploymentManager
 from logic.ai_controller import AIController
+from controllers.local_controller import LocalGameController
 
 try:
     from logic.maps.forest_map import ForestMap
@@ -108,6 +109,9 @@ class GameplayScreen(Screen):
         elif chosen_map == 'Desert Ruins' and DesertMap: self.game = DesertMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
         elif chosen_map == 'Frozen Tundra' and TundraMap: self.game = TundraMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
         else: self.game = ChessBoard(self.get_tribe_name('white'), self.get_tribe_name('black'), map_name=chosen_map)
+        
+        # Initialize the game controller (LocalGameController for offline modes)
+        self.controller = LocalGameController(self.game)
         
         if mode == 'Divide_Conquer':
             self.setup_divide_conquer_board(app)
@@ -474,12 +478,7 @@ class GameplayScreen(Screen):
                 if self.selected_item.id == 10 and piece.__class__.__name__.lower() != 'pawn':
                     self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); return
                     
-                piece.item = self.selected_item
-                if piece.item.id == 6: piece.coins += 1; piece.base_points = max(0, piece.base_points - 1)
-                elif piece.item.id == 10 and piece.__class__.__name__.lower() == 'pawn': piece.base_points, piece.coins = 5, 3
-                    
-                inv = getattr(self.game, f'inventory_{self.game.current_turn}')
-                if self.selected_item in inv: inv.remove(self.selected_item)
+                self.controller.submit_item_use(self.selected_item, piece, self.game.current_turn)
                 self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui(); self.show_piece_status(piece)
             else: self.selected_item = None; self.hide_item_tooltip(); self.refresh_ui()
             return
@@ -500,7 +499,7 @@ class GameplayScreen(Screen):
                     atk_piece.coins += bonus
                     atk_piece.temp_bonus_coins = bonus
                     
-            res = self.game.move_piece(sr, sc, r, c)
+            res = self.controller.submit_move(sr, sc, r, c)
             if isinstance(res, tuple) and res[0] == "crash": 
                 self.show_crash_overlay(res[1], res[2], (sr, sc), (r, c)); return
                 
@@ -530,7 +529,7 @@ class GameplayScreen(Screen):
                     self.selected = None; self.init_board_ui(); self.trigger_end_turn_logic(old_color); return
                     
                 def do_p(cls): 
-                    self.game.promote_pawn(r, c, cls)
+                    self.controller.submit_promotion(r, c, cls)
                     pop.dismiss(); self.init_board_ui(); self.trigger_end_turn_logic(old_color)
                     
                 pop = PromotionPopup(promoted_pawn.color, ptribe, do_p, is_prince=is_prince)
@@ -553,15 +552,13 @@ class GameplayScreen(Screen):
             if hasattr(atk_piece, 'reset_movement_stacks'): atk_piece.reset_movement_stacks()
             
         if crash_status == "blocked":
-            atk, df = self.game.board[start_pos[0]][start_pos[1]], self.game.board[end_pos[0]][end_pos[1]]
-            if df: df.item = None
-            if atk: atk.has_moved = True
-            self.game.en_passant_target = None
-            self.game.history.save_state(self.game, "Shield Blocked!"); self.game.complete_turn(); self.init_board_ui()
-            self.trigger_end_turn_logic(atk.color)
+            atk = self.game.board[start_pos[0]][start_pos[1]]
+            self.controller.submit_shield_block(start_pos, end_pos)
+            self.init_board_ui()
+            self.trigger_end_turn_logic(atk.color if atk else 'white')
             return
             
-        res = self.game.move_piece(start_pos[0], start_pos[1], end_pos[0], end_pos[1], resolve_crash=True, crash_won=crash_status)
+        res = self.controller.submit_crash_resolve(start_pos[0], start_pos[1], end_pos[0], end_pos[1], crash_won=crash_status)
         end_piece = self.game.board[end_pos[0]][end_pos[1]]
         
         if crash_status == "won" and end_piece:
@@ -589,11 +586,11 @@ class GameplayScreen(Screen):
                 
             if getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer'] and pcolor == 'black':
                 from logic.pieces import Queen, Princess
-                self.game.promote_pawn(end_pos[0], end_pos[1], Queen)
+                self.controller.submit_promotion(end_pos[0], end_pos[1], Queen)
                 self.init_board_ui(); self.trigger_end_turn_logic(old_color)
             else:
                 def do_p(cls): 
-                    self.game.promote_pawn(end_pos[0], end_pos[1], cls); pop.dismiss(); self.init_board_ui(); self.trigger_end_turn_logic(old_color)
+                    self.controller.submit_promotion(end_pos[0], end_pos[1], cls); pop.dismiss(); self.init_board_ui(); self.trigger_end_turn_logic(old_color)
                 pop = PromotionPopup(pcolor, ptribe, do_p, is_prince=is_prince)
                 pop.open()
         elif res in [True, "died", "survived", "defender_survived"]: 
@@ -809,7 +806,7 @@ class GameplayScreen(Screen):
     def on_undo_click(self):
         App.get_running_app().play_click_sound()
         if getattr(self, 'crash_popup', None): return
-        if self.game.undo_move(): self.selected = None; self.init_board_ui()
+        if self.controller.submit_undo(): self.selected = None; self.init_board_ui()
             
     def show_piece_status(self, piece):
         if self.crash_popup: return 

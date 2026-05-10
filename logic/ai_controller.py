@@ -62,15 +62,13 @@ class AIController:
         # 3. จัดการขยับหมากและ Crash
         if move:
             (sr, sc), (er, ec) = move
-            res = self.screen.game.move_piece(sr, sc, er, ec)
+            res = self.screen.controller.submit_move(sr, sc, er, ec)
             
             if isinstance(res, tuple) and res[0] == "crash":
                 atk, df = res[1], res[2]
                 if not atk or not df: return
                 if getattr(df, 'item', None) and df.item.id == 4:
-                    df.item = None; atk.has_moved = True
-                    self.screen.game.history.save_state(self.screen.game, "Shield Blocked!")
-                    self.screen.game.complete_turn()
+                    self.screen.controller.submit_shield_block((sr, sc), (er, ec))
                     self.screen.init_board_ui()
                     return 
                 self.screen.show_crash_overlay(atk, df, (sr, sc), (er, ec))
@@ -78,7 +76,7 @@ class AIController:
                 
             if res == "promote":
                 from logic.pieces import Queen
-                self.screen.game.promote_pawn(er, ec, Queen)
+                self.screen.controller.submit_promotion(er, ec, Queen)
                 
             if res in [True, "promote", "died"]: 
                 App.get_running_app().play_move_sound()
