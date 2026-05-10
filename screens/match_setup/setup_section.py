@@ -168,7 +168,7 @@ class SetupSection(BoxLayout):
         self.app.selected_board = ''
         self.app.selected_unit_white = ''
         self.app.selected_unit_black = ''
-        self.app.selected_time_limit = 0  # 0 = Unlimited (seconds)
+        self.app.selected_time_limit = None  # None = no selection yet
 
         # 1. SELECT MATCH TYPE
         self.type_box = BoxLayout(orientation='vertical', size_hint_y=0.15, spacing=5)
@@ -322,20 +322,17 @@ class SetupSection(BoxLayout):
         self.map_box.disabled = False
         Animation(opacity=1, duration=0.3).start(self.map_box)
 
-        # Show/hide timer section based on mode
-        if instance.val == 'Classic':
-            self.timer_box.disabled = False
-            self.timer_box.size_hint_y = 0.12
-            Animation(opacity=1, duration=0.3).start(self.timer_box)
-            # Auto-select Unlimited as default
-            if self.app.selected_time_limit == 0:
-                self.update_selections()
-        else:
-            # Hide timer for Divide & Conquer
+        # Hide timer when switching to Divide & Conquer
+        if instance.val != 'Classic':
             self.timer_box.disabled = True
             self.timer_box.size_hint_y = 0
             Animation(opacity=0, duration=0.2).start(self.timer_box)
-            self.app.selected_time_limit = 0  # Reset to unlimited
+            self.app.selected_time_limit = None  # Reset selection
+        else:
+            # Keep timer hidden until a map is selected
+            self.timer_box.disabled = True
+            self.timer_box.size_hint_y = 0
+            self.timer_box.opacity = 0
 
     def load_map_options(self):
         self.map_header_layout.clear_widgets()
@@ -396,14 +393,31 @@ class SetupSection(BoxLayout):
     def on_timer_select(self, instance):
         self.app.selected_time_limit = instance.val
         self.update_selections()
+        
+        # Reveal the Legion section after timer is selected
+        def _show_factions(dt):
+            self.fac_box.disabled = False
+            Animation(opacity=1, duration=0.3).start(self.fac_box)
+            Animation(opacity=1, duration=0.3).start(self.w_box)
+        Clock.schedule_once(_show_factions, 0.15)
 
     def on_map_select(self, instance):
         self.app.selected_board = instance.val
         self.update_selections()
         
-        self.fac_box.disabled = False
-        Animation(opacity=1, duration=0.3).start(self.fac_box)
-        Animation(opacity=1, duration=0.3).start(self.w_box)
+        # Show timer section with cascade delay (Classic mode only)
+        if self.app.sub_mode == 'Classic':
+            def _show_timer(dt):
+                self.timer_box.disabled = False
+                self.timer_box.size_hint_y = 0.12
+                Animation(opacity=1, duration=0.3).start(self.timer_box)
+                self.update_selections()
+            Clock.schedule_once(_show_timer, 0.15)
+        else:
+            # Divide & Conquer: skip timer, show factions directly
+            self.fac_box.disabled = False
+            Animation(opacity=1, duration=0.3).start(self.fac_box)
+            Animation(opacity=1, duration=0.3).start(self.w_box)
 
     def on_white_select(self, instance):
         self.app.selected_unit_white = instance.val

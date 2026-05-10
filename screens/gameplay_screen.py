@@ -62,6 +62,10 @@ class GameplayScreen(Screen):
         self._game_over_scheduled = False
         self.countdown_event = None
         self.countdown_time = 0
+        # Turn Timer state
+        self.turn_timer_event = None
+        self.turn_timer_remaining = 0
+        self.turn_timer_limit = 0
 
     def _update_main_bg(self, *args):
         self.main_bg_image.pos, self.main_bg_image.size = self.pos, self.size
@@ -92,6 +96,9 @@ class GameplayScreen(Screen):
             self.countdown_event.cancel()
             self.countdown_event = None
         self.countdown_time = 0
+        
+        # Stop any previous turn timer
+        self.stop_turn_timer()
 
         app = App.get_running_app()
         chosen_map = getattr(app, 'selected_board', 'Classic Board')
@@ -106,7 +113,16 @@ class GameplayScreen(Screen):
             self.setup_divide_conquer_board(app)
             
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
-        self.info_label = Label(text="WHITE'S TURN", size_hint_y=0.08, color=(0.83, 0.68, 0.21, 1), bold=True, font_size='22sp', markup=True)
+        
+        # ---- Top Header Bar: single centered label ----
+        app_timer = getattr(app, 'selected_time_limit', 0)
+        self.turn_timer_limit = app_timer
+        self.turn_timer_remaining = app_timer
+        
+        self.info_label = Label(
+            text="WHITE'S TURN", color=(0.83, 0.68, 0.21, 1),
+            bold=True, font_size='22sp', markup=True, size_hint_y=0.08
+        )
         self.board_area.add_widget(self.info_label)
         self.play_area = BoxLayout(orientation='vertical', size_hint_y=0.92)
         self.board_anchor = AnchorLayout(anchor_x='center', anchor_y='center', size_hint_y=0.82)
@@ -140,6 +156,10 @@ class GameplayScreen(Screen):
         self.init_board_ui()
         if mode == 'Divide_Conquer':
             self.deployment_manager.setup_deployment_ui()
+        
+        # Start turn timer if a limit was selected
+        if self.turn_timer_limit > 0:
+            self.start_turn_timer()
 
     def highlight_headers(self):
         for (r, c), square in self.squares.items():
@@ -298,6 +318,9 @@ class GameplayScreen(Screen):
             return
 
         if self.game.game_result:
+            # Stop the turn timer when the game is over
+            self.stop_turn_timer()
+            
             if not getattr(self, '_end_played', False):
                 if "WHITE WINS" in self.game.game_result.upper() and getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer']:
                     App.get_running_app().play_victory_sound()
@@ -320,7 +343,12 @@ class GameplayScreen(Screen):
             else:
                 self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
         else: 
-            self.info_label.text = f"{self.game.current_turn.upper()}'S TURN"
+            turn_text = f"{self.game.current_turn.upper()}'S TURN"
+            if self.turn_timer_limit > 0 and self.turn_timer_remaining > 0:
+                t = max(0, self.turn_timer_remaining)
+                mins, secs = divmod(t, 60)
+                turn_text += f"   [color=aaaaaa]|[/color]   [color=ffdd55]{mins:02d}:{secs:02d}[/color]"
+            self.info_label.text = turn_text
             self._end_played = False 
 
         cp = self.game.find_king(self.game.current_turn) if self.game.is_in_check(self.game.current_turn) else None
@@ -610,8 +638,91 @@ class GameplayScreen(Screen):
             for p in row:
                 if p and getattr(p, 'cannot_get_items', False):
                     p.item = None
+        
+        # Reset the turn timer for the new turn
+        self.reset_turn_timer()
                     
         self.ai_controller.check_ai_turn()
+
+    # ---- Turn Timer System ----
+    def start_turn_timer(self):
+        """Start the per-turn countdown timer."""
+        self.turn_timer_remaining = self.turn_timer_limit
+        self._update_timer_label()
+        if self.turn_timer_event:
+            self.turn_timer_event.cancel()
+        self.turn_timer_event = Clock.schedule_interval(self._tick_turn_timer, 1.0)
+
+    def stop_turn_timer(self):
+        """Stop and clear the turn timer completely."""
+        if hasattr(self, 'turn_timer_event') and self.turn_timer_event:
+            self.turn_timer_event.cancel()
+            self.turn_timer_event = None
+
+    def reset_turn_timer(self):
+        """Reset the timer back to full at the start of a new turn."""
+        if self.turn_timer_limit <= 0:
+            return
+        self.turn_timer_remaining = self.turn_timer_limit
+        self._update_timer_label()
+        # Restart the interval if it was stopped
+        if not self.turn_timer_event:
+            self.turn_timer_event = Clock.schedule_interval(self._tick_turn_timer, 1.0)
+
+    def _tick_turn_timer(self, dt):
+        """Called every second to decrement the turn timer."""
+        # Don't tick during non-playing phases or if game is over
+        if getattr(self, 'battle_phase', 'playing') != 'playing':
+            return
+        if getattr(self.game, 'game_result', None):
+            self.stop_turn_timer()
+            return
+        
+        self.turn_timer_remaining -= 1
+        self._update_timer_label()
+        
+        if self.turn_timer_remaining <= 0:
+            self._on_timer_timeout()
+
+    def _update_timer_label(self):
+        """Update the info_label to include the timer inline."""
+        if self.turn_timer_limit <= 0:
+            return
+        if getattr(self.game, 'game_result', None):
+            return  # Don't overwrite game-over text
+        t = max(0, self.turn_timer_remaining)
+        mins, secs = divmod(t, 60)
+        # Color shifts: gold -> orange (<=30s) -> red (<=10s)
+        if t <= 10:
+            timer_color = 'ff3333'
+        elif t <= 30:
+            timer_color = 'ffaa33'
+        else:
+            timer_color = 'ffdd55'
+        turn_text = f"{self.game.current_turn.upper()}'S TURN"
+        self.info_label.text = f"{turn_text}   [color=aaaaaa]|[/color]   [color={timer_color}]{mins:02d}:{secs:02d}[/color]"
+
+    def _on_timer_timeout(self):
+        """Handle timer reaching 00:00 — the current player loses."""
+        self.stop_turn_timer()
+        loser = self.game.current_turn
+        if loser == 'white':
+            self.game.game_result = "BLACK WINS (Time Out)"
+        else:
+            self.game.game_result = "WHITE WINS (Time Out)"
+        self.init_board_ui()
+
+    def pause_timer(self):
+        """Pause the turn timer (e.g., during crash/coin-toss events)."""
+        if hasattr(self, 'turn_timer_event') and self.turn_timer_event:
+            self.turn_timer_event.cancel()
+            self.turn_timer_event = None
+
+    def resume_timer(self):
+        """Resume the turn timer after a pause."""
+        if self.turn_timer_limit > 0 and self.turn_timer_remaining > 0 and not self.turn_timer_event:
+            if not getattr(self.game, 'game_result', None):
+                self.turn_timer_event = Clock.schedule_interval(self._tick_turn_timer, 1.0)
 
     def on_quit(self):
         app = App.get_running_app()
