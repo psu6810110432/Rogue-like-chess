@@ -261,28 +261,35 @@ class BuildPopup(ModalView):
 class ArmyStatusPopup(ModalView):
     def __init__(self, army_pieces, **kwargs):
         super().__init__(size_hint=(0.9, 0.9), background_color=(0, 0, 0, 0.8), auto_dismiss=True, **kwargs)
-        self.root_layout = FloatLayout()
-        with self.root_layout.canvas.before:
+
+        # ---- Root: BoxLayout with padding to inset ALL content within the border ----
+        self.root_box = BoxLayout(orientation='vertical', padding=[dp(20), dp(10), dp(20), dp(10)], spacing=dp(8))
+        with self.root_box.canvas.before:
             Color(0.08, 0.08, 0.1, 0.95)
             self.bg = RoundedRectangle(radius=[dp(15)])
             Color(0.2, 0.8, 1, 1)
-            self.border_line = Line(rounded_rectangle=(self.root_layout.x, self.root_layout.y, self.root_layout.width, self.root_layout.height, dp(15)), width=2)
-        self.root_layout.bind(pos=self._update_bg, size=self._update_bg)
-        
-        header = BoxLayout(orientation='horizontal', size_hint=(1, 0.1), pos_hint={'top': 1}, padding=[dp(15), dp(5)])
-        header.add_widget(Label(text="[b]ARMY STATUS[/b]", markup=True, font_size='20sp', halign='left', color=(0.2, 0.8, 1, 1)))
-        
+            self.border_line = Line(rounded_rectangle=(self.root_box.x, self.root_box.y, self.root_box.width, self.root_box.height, dp(15)), width=2)
+        self.root_box.bind(pos=self._update_bg, size=self._update_bg)
+
+        # ---- Header row: [spacer] [centered title] [CLOSE button] ----
+        header = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(40), spacing=dp(5))
+        # Invisible spacer matching CLOSE button width to center the title
+        header.add_widget(Label(size_hint_x=None, width=dp(80), text=''))
+        title_lbl = Label(text="[b]ARMY STATUS[/b]", markup=True, font_size='20sp', halign='center', valign='middle', color=(0.2, 0.8, 1, 1))
+        title_lbl.bind(size=title_lbl.setter('text_size'))
+        header.add_widget(title_lbl)
         close_btn = Button(text="CLOSE", size_hint_x=None, width=dp(80), background_color=(0.8, 0.2, 0.2, 1))
         close_btn.bind(on_release=self.dismiss)
         header.add_widget(close_btn)
-        self.root_layout.add_widget(header)
-        
-        scroll = ScrollView(size_hint=(1, 0.9), pos_hint={'y': 0})
-        grid = GridLayout(cols=3, spacing=dp(15), padding=dp(15), size_hint_y=None)
+        self.root_box.add_widget(header)
+
+        # ---- ScrollView (vertical only, no horizontal scroll) ----
+        scroll = ScrollView(do_scroll_y=True, do_scroll_x=False)
+        grid = GridLayout(cols=3, spacing=dp(12), padding=[dp(5), dp(5), dp(5), dp(5)], size_hint_x=1, size_hint_y=None)
         grid.bind(minimum_height=grid.setter('height'))
-        
+
         for p in army_pieces:
-            box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(250), padding=dp(10), spacing=dp(5))
+            box = BoxLayout(orientation='vertical', size_hint_x=1, size_hint_y=None, height=dp(250), padding=dp(8), spacing=dp(4))
             with box.canvas.before:
                 Color(0.15, 0.15, 0.18, 1)
                 box_bg = RoundedRectangle(radius=[dp(8)])
@@ -313,13 +320,13 @@ class ArmyStatusPopup(ModalView):
             
             img_path = f"assets/pieces/{tribe}/{color}/{stage_folder}/{filename}"
             
-            img = Image(source=img_path, size_hint_y=0.55, allow_stretch=True, keep_ratio=True)
+            img = Image(source=img_path, size_hint=(1, 0.55), allow_stretch=True, keep_ratio=True)
             box.add_widget(img)
             
             p_name = getattr(p, 'name', p.__class__.__name__.capitalize())
             lvl_str = f" [color=ffff00]+{lvl}[/color]" if lvl > 0 else ""
-            title_lbl = Label(text=f"[b]{p_name}{lvl_str}[/b]", markup=True, font_size='14sp', size_hint_y=0.15, halign='center', valign='middle')
-            title_lbl.bind(size=title_lbl.setter('text_size'))
+            card_title = Label(text=f"[b]{p_name}{lvl_str}[/b]", markup=True, font_size='14sp', size_hint_y=0.15, halign='center', valign='middle')
+            card_title.bind(size=card_title.setter('text_size'))
             
             stats_lbl = Label(text=f"[color=ffffaa]Coin:[/color] {p.coins}  [color=ff5555]ATK:[/color] {p.base_atk}  [color=5555ff]DEF:[/color] {p.base_def}", markup=True, font_size='12sp', size_hint_y=0.15)
             
@@ -335,15 +342,15 @@ class ArmyStatusPopup(ModalView):
             pass_lbl = Label(text=passives_text, markup=True, font_size='11sp', size_hint_y=0.25, halign='center', valign='middle')
             pass_lbl.bind(size=pass_lbl.setter('text_size'))
             
-            box.add_widget(title_lbl)
+            box.add_widget(card_title)
             box.add_widget(stats_lbl)
             box.add_widget(pass_lbl)
             
             grid.add_widget(box)
             
         scroll.add_widget(grid)
-        self.root_layout.add_widget(scroll)
-        self.add_widget(self.root_layout)
+        self.root_box.add_widget(scroll)
+        self.add_widget(self.root_box)
 
     def _update_bg(self, instance, value):
         self.bg.pos, self.bg.size = instance.pos, instance.size
