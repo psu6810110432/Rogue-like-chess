@@ -12,7 +12,7 @@ from kivy.metrics import dp
 from kivy.app import App
 from kivy.uix.widget import Widget
 
-from logic.pieces import Praetorian, Royalguard, Menatarm, Hastati, Levies, Prince, Princess, King
+from logic.pieces import Pawn, Praetorian, Royalguard, Menatarm, Hastati, Levies, Prince, Princess, King
 from components.map_node import MapNode
 from components.campaign_cards import RecruitCard
 from components.campaign_popups import TechCard, BuildCard
@@ -20,27 +20,112 @@ from components.campaign_popups import TechCard, BuildCard
 class DNCTutorial:
     def __init__(self, screen):
         self.screen = screen
+        self.current_step = 0
+        self.steps = [
+            self.run_dnc_step1,  # 0
+            self.run_dnc_step2,  # 1
+            self.run_dnc_step3,  # 2
+            self.run_dnc_step4,  # 3
+            self.run_dnc_step5,  # 4
+            self.run_dnc_step6,  # 5
+            self.run_dnc_step7,  # 6
+            self.run_dnc_step8,  # 7
+            self.run_dnc_step9,  # 8
+        ]
 
     def start(self):
-        # ✨ บังคับเซ็ตค่าเผ่าเริ่มต้นให้ Tutorial ป้องกันบั๊กหา path รูปไม่เจอ
         app = App.get_running_app()
         app.selected_unit_white = 'Medieval Knights'
         app.selected_unit_black = 'Demon'
         
+        self.current_step = 0
         self.screen.tut_state = 'dnc_step1'
         self.run_dnc_step1()
 
+    def cleanup(self):
+        """Remove all transient tutorial widgets before replaying a step."""
+        screen = self.screen
+        # Remove mock map layer
+        if hasattr(screen, 'mock_map_layer') and screen.mock_map_layer and screen.mock_map_layer.parent:
+            screen.root_layout.remove_widget(screen.mock_map_layer)
+            screen.mock_map_layer = None
+        screen.mock_castles = []
+        screen.mock_villages = []
+        # Remove NEXT STEP button
+        if hasattr(screen, 'next_step_btn') and screen.next_step_btn and screen.next_step_btn.parent:
+            screen.root_layout.remove_widget(screen.next_step_btn)
+        # Remove mock phase button
+        if hasattr(self, 'mock_phase_btn') and self.mock_phase_btn and self.mock_phase_btn.parent:
+            screen.root_layout.remove_widget(self.mock_phase_btn)
+            self.mock_phase_btn = None
+        # Remove black mask
+        if hasattr(self, 'black_mask') and self.black_mask and self.black_mask.parent:
+            screen.root_layout.remove_widget(self.black_mask)
+            self.black_mask = None
+        # Restore play area
+        if hasattr(screen, 'play_area'):
+            screen.play_area.opacity = 1
+        # Reset board
+        screen.is_input_locked = False
+        screen.game.board = [[None for _ in range(8)] for _ in range(8)]
+        if hasattr(screen, 'board_anchor'):
+            screen._keep_grid_square(screen.board_anchor, screen.board_anchor.size)
+        screen.refresh_ui()
+
+    def go_back(self):
+        """Go to the previous step."""
+        if self.current_step <= 0:
+            return
+        self.current_step -= 1
+        self.cleanup()
+        self.steps[self.current_step]()
+
+    def _ensure_mock_map(self):
+        """Ensure the mock map layer and base nodes exist (recreate after cleanup)."""
+        screen = self.screen
+        if hasattr(screen, 'play_area'):
+            screen.play_area.opacity = 0
+        if not hasattr(screen, 'mock_map_layer') or not screen.mock_map_layer or not screen.mock_map_layer.parent:
+            screen.mock_map_layer = FloatLayout()
+            with screen.mock_map_layer.canvas.before:
+                Color(0.12, 0.18, 0.12, 1)
+                Rectangle(pos=(0, 0), size=(9600, 5400))
+            screen.root_layout.add_widget(screen.mock_map_layer)
+        if not hasattr(screen, 'mock_castles') or not screen.mock_castles:
+            cx = screen.width / 2
+            cy = screen.height / 2
+            screen.mock_castles = []
+            for i in range(3):
+                c = MapNode('castle', 'white', f'C{i+1}', app=None)
+                c.on_release = lambda: None
+                c.pos = (cx - dp(400) + (i * dp(400)) - dp(35), cy + dp(100))
+                c.addons = {}
+                c.sub_villages = []
+                c.update_graphics()
+                screen.mock_map_layer.add_widget(c)
+                screen.mock_castles.append(c)
+            screen.mock_villages = []
+            for i in range(6):
+                v = MapNode('village', 'white', f'V{i+1}', app=None)
+                v.on_release = lambda: None
+                v.pos = (cx - dp(500) + (i * dp(200)) - dp(35), cy - dp(150))
+                v.addons = {}
+                v.update_graphics()
+                screen.mock_map_layer.add_widget(v)
+                screen.mock_villages.append(v)
+
     def run_dnc_step1(self):
+        self.current_step = 0
+        self.screen.tut_state = 'dnc_step1'
+        self.screen.show_retreat_button(self.current_step)
+        
         if hasattr(self.screen, 'play_area'):
             self.screen.play_area.opacity = 0
             
         self.screen.mock_map_layer = FloatLayout()
-        
-        # พื้นหญ้าจำลองฉาก World Map
         with self.screen.mock_map_layer.canvas.before:
             Color(0.12, 0.18, 0.12, 1)
             Rectangle(pos=(0, 0), size=(9600, 5400))
-            
         self.screen.root_layout.add_widget(self.screen.mock_map_layer)
         
         txt = ("Welcome to [b]Divide and Conquer[/b]!\n\n"
@@ -52,33 +137,13 @@ class DNCTutorial:
         self.screen.show_popup("STEP 1: WORLD GENERATION", txt, self.draw_step2_and_wait)
 
     def draw_step2_and_wait(self):
-        cx = self.screen.width / 2
-        cy = self.screen.height / 2
-        
-        self.screen.mock_castles = []
-        for i in range(3):
-            c = MapNode('castle', 'white', f'C{i+1}', app=None)
-            c.on_release = lambda: None 
-            c.pos = (cx - dp(400) + (i * dp(400)) - dp(35), cy + dp(100))
-            c.addons = {} 
-            c.sub_villages = []
-            c.update_graphics()
-            self.screen.mock_map_layer.add_widget(c)
-            self.screen.mock_castles.append(c)
-            
-        self.screen.mock_villages = []
-        for i in range(6):
-            v = MapNode('village', 'white', f'V{i+1}', app=None)
-            v.on_release = lambda: None 
-            v.pos = (cx - dp(500) + (i * dp(200)) - dp(35), cy - dp(150))
-            v.addons = {} 
-            v.update_graphics()
-            self.screen.mock_map_layer.add_widget(v)
-            self.screen.mock_villages.append(v)
-            
+        self._ensure_mock_map()
         self.screen.show_next_step_button(self.run_dnc_step2)
 
     def run_dnc_step2(self):
+        self.current_step = 1
+        self.screen.tut_state = 'dnc_step2'
+        self.screen.show_retreat_button(self.current_step)
         txt = ("Villages have 3 building paths. 2 are guaranteed (Farm, Tavern), and 1 is a random Special building.\n\n"
                "[b]Farm[/b]: Generates Tax income.\n"
                "[b]Tavern[/b]: Recruits units (Row 1-2: Militia like Pawn, Levies. Row 3: Regular like Hastati).\n\n"
@@ -92,6 +157,7 @@ class DNCTutorial:
         self.screen.show_popup("STEP 2: VILLAGES", txt, self.draw_step3_and_wait)
         
     def draw_step3_and_wait(self):
+        self._ensure_mock_map()
         specials = ['mine', 'blacksmith', 'weaponsmith', 'guard', 'statue', None]
         for i, v in enumerate(self.screen.mock_villages):
             v.addons = {
@@ -105,6 +171,9 @@ class DNCTutorial:
         self.screen.show_next_step_button(self.run_dnc_step3)
 
     def run_dnc_step3(self):
+        self.current_step = 2
+        self.screen.tut_state = 'dnc_step3'
+        self.screen.show_retreat_button(self.current_step)
         txt = ("Castles are massive fortresses containing 1 to 3 [color=ffaa00]Sub-Villages[/color].\n"
                "Sub-villages cannot be attacked directly; they are part of the Castle.\n\n"
                "A Castle's Tavern is superior, offering 5 rows of units:\n"
@@ -115,6 +184,7 @@ class DNCTutorial:
         self.screen.show_popup("STEP 3: CASTLES", txt, self.draw_step4_and_wait)
 
     def draw_step4_and_wait(self):
+        self._ensure_mock_map()
         for i, c in enumerate(self.screen.mock_castles):
             num_subs = i + 1 
             c.sub_villages = []
@@ -132,6 +202,9 @@ class DNCTutorial:
         self.screen.show_next_step_button(self.run_dnc_step4)
 
     def run_dnc_step4(self):
+        self.current_step = 3
+        self.screen.tut_state = 'dnc_step4'
+        self.screen.show_retreat_button(self.current_step)
         txt = ("[color=00ff00]Tax and Upgrades[/color]\n\n"
                "[b]Tax[/b] is earned on Next Turn. A Level 1 Farm gives 2 Tax, and adds +2 per level. You can read more about reducing costs and increasing tax in the '?' menu during Match Setup.\n\n"
                "[b]Upgrades[/b] are split into 2 main types:\n"
@@ -160,6 +233,9 @@ class DNCTutorial:
         self.screen.show_popup("STEP 4: TAX & UPGRADES", txt, self.run_dnc_step5, custom_widget=main_box)
 
     def run_dnc_step5(self):
+        self.current_step = 4
+        self.screen.tut_state = 'dnc_step5'
+        self.screen.show_retreat_button(self.current_step)
         txt = ("[color=00ffff]New Units & Exclusives[/color]\n\n"
                "- [b]Praetorian[/b]: Attacking crash wins grant +1 ATK/DEF (Max 5). Buffs last 6 turns.\n"
                "- [b]Royalguard[/b]: ANY crash win grants a permanent +1 ATK or DEF (Max 8).\n"
@@ -200,6 +276,9 @@ class DNCTutorial:
         self.screen.show_next_step_button(self.run_dnc_step6, pos_hint={'right': 0.98, 'top': 0.98})
 
     def run_dnc_step6(self):
+        self.current_step = 5
+        self.screen.tut_state = 'dnc_step6'
+        self.screen.show_retreat_button(self.current_step)
         txt = ("[color=ffaa00]Combat Phases[/color]\n\n"
                "When engaging an enemy base, combat is split into 2 phases:\n\n"
                "[b]Phase 1 (Deployment)[/b]: You arrange your units on the bottom 3 rows. The top rows are hidden (Blind Phase). You can safely [color=ff5555]Retreat[/color] here without losing any units.\n\n"
@@ -210,8 +289,10 @@ class DNCTutorial:
     def start_mock_phase_1(self):
         self.screen.is_input_locked = True
         self.screen.game.board = [[None for _ in range(8)] for _ in range(8)]
-        self.screen.game.board[7][4] = self.screen._create_dummy(King, 'white', 'the knight company')
-        self.screen.game.board[0][4] = self.screen._create_dummy(King, 'black', 'the chaos mankind')
+        # Place exactly 3 Pawns matching the mockup (Max 3/3 units)
+        self.screen.game.board[7][3] = self.screen._create_dummy(Pawn, 'white', 'the knight company')  # d1
+        self.screen.game.board[7][4] = self.screen._create_dummy(Pawn, 'white', 'the knight company')  # e1
+        self.screen.game.board[6][4] = self.screen._create_dummy(Pawn, 'white', 'the knight company')  # e2
         self.screen.init_board_ui()
         
         self.screen.info_label.text = "[color=00ffff]PHASE 1: Arrange your units (Bottom 3 rows)[/color]"
@@ -274,6 +355,9 @@ class DNCTutorial:
         self.screen.show_next_step_button(self.run_dnc_step7, pos_hint={'right': 0.98, 'top': 0.98})
 
     def run_dnc_step7(self):
+        self.current_step = 6
+        self.screen.tut_state = 'dnc_step7'
+        self.screen.show_retreat_button(self.current_step)
         txt = ("[color=00ffff]Army Mechanics[/color]\n\n"
                "[b]Fatigue[/b]: Marching and fighting causes Fatigue.\n"
                "Attacking a Village adds +1 Fatigue. Attacking a Castle adds +2.\n"
@@ -283,6 +367,9 @@ class DNCTutorial:
         self.screen.show_popup("STEP 7: FATIGUE & LOYALTY", txt, self.run_dnc_step8)
 
     def run_dnc_step8(self):
+        self.current_step = 7
+        self.screen.tut_state = 'dnc_step8'
+        self.screen.show_retreat_button(self.current_step)
         txt = ("[color=ffff00]Tavern Recruitment[/color]\n\n"
                "You can buy new units from the Tavern menu inside a base.\n"
                "Each row offers 5 unit slots. Once a unit is purchased, its slot becomes empty [X].\n\n"
@@ -315,6 +402,9 @@ class DNCTutorial:
         self.screen.show_popup("STEP 8: RECRUITMENT", txt, self.run_dnc_step9, custom_widget=layout)
 
     def run_dnc_step9(self):
+        self.current_step = 8
+        self.screen.tut_state = 'dnc_step9'
+        self.screen.show_retreat_button(self.current_step)
         txt = ("[color=00ff00]Victory & Defeat[/color]\n\n"
                "There are 2 ways to eliminate an enemy faction in Divide & Conquer:\n"
                "1. Kill their [b]King[/b] in combat. (Killing a Prince does NOT end the game).\n"
@@ -322,6 +412,7 @@ class DNCTutorial:
                "[color=ff5555]*Critical Rule*[/color]: When defending your Main Base, you CANNOT press Retreat. It's a fight to the death!")
         
         def finish():
+            self.screen.hide_retreat_button()
             self.screen.manager.current = 'main_menu'
             
         self.screen.show_popup("STEP 9: VICTORY CONDITIONS", txt, finish)

@@ -44,7 +44,7 @@ class TutSelectionPopup(ModalView):
 
 # ----------------- General Tutorial Popup Window -----------------
 class TutPopup(ModalView):
-    def __init__(self, title, text, on_next, show_pieces=False, show_kings=False, item_img=None, show_droppers=False, btn_align='right', custom_widget=None, **kwargs):
+    def __init__(self, title, text, on_next, show_pieces=False, show_kings=False, item_img=None, show_droppers=False, btn_align='right', custom_widget=None, on_prev=None, **kwargs):
         super().__init__(size_hint=(0.75, 0.75), auto_dismiss=False, background_color=(0,0,0,0.8), **kwargs)
         
         root = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(10))
@@ -105,7 +105,25 @@ class TutPopup(ModalView):
         content_box.add_widget(lbl)
         root.add_widget(content_box)
 
-        btn_box = BoxLayout(orientation='horizontal', size_hint_y=0.15)
+        btn_box = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(15))
+        
+        from kivy.uix.anchorlayout import AnchorLayout
+        
+        if on_prev:
+            is_exit = isinstance(on_prev, dict) and on_prev.get('is_exit', False)
+            prev_cb = on_prev.get('callback') if isinstance(on_prev, dict) else on_prev
+            prev_text = "[b]QUIT TUTORIAL[/b]" if is_exit else "[b]<< PREV[/b]"
+            prev_color = (0.8, 0.2, 0.2, 1) if is_exit else (0.6, 0.3, 0.1, 1)
+            prev_btn = Button(text=prev_text, markup=True, size_hint=(None, None), size=(dp(200), dp(50)), background_color=prev_color)
+            def _on_prev(*args, cb=prev_cb):
+                App.get_running_app().play_click_sound()
+                self.dismiss()
+                if cb: cb()
+            prev_btn.bind(on_release=_on_prev)
+            prev_anchor = AnchorLayout(anchor_x='center', anchor_y='center')
+            prev_anchor.add_widget(prev_btn)
+            btn_box.add_widget(prev_anchor)
+        
         next_btn = Button(text="[b]NEXT[/b]", markup=True, size_hint=(None, None), size=(dp(200), dp(50)), background_color=(0.2, 0.6, 0.2, 1))
         
         def _on_next(*args):
@@ -114,7 +132,6 @@ class TutPopup(ModalView):
             if on_next: on_next()
         next_btn.bind(on_release=_on_next)
 
-        from kivy.uix.anchorlayout import AnchorLayout
         btn_anchor = AnchorLayout(anchor_x='center', anchor_y='center')
         btn_anchor.add_widget(next_btn)
         btn_box.add_widget(btn_anchor)
@@ -210,19 +227,86 @@ class TutorialScreen(GameplayScreen):
         self.tut_state = ''
         self.classic_tut = ClassicTutorial(self)
         self.dnc_tut = DNCTutorial(self)
+        self.retreat_btn = None
 
     def on_enter(self):
         super().setup_game(mode='TUTORIAL')
         self.game.current_turn = 'white'
         self.tut_state = 'select_mode'
         
+        # Create singleton retreat button once (hidden by default)
+        if self.retreat_btn and self.retreat_btn.parent:
+            self.retreat_btn.parent.remove_widget(self.retreat_btn)
+        self.retreat_btn = Button(
+            text="[b]<< PREV[/b]", markup=True, font_size='16sp',
+            size_hint=(None, None), size=(dp(180), dp(50)),
+            pos_hint={'x': 0.02, 'top': 0.98},
+            background_color=(0.6, 0.3, 0.1, 1),
+            opacity=0, disabled=True
+        )
+        self.retreat_btn.bind(on_release=self.go_to_previous_step)
+        self.root_layout.add_widget(self.retreat_btn)
+        
         Clock.schedule_once(lambda dt: TutSelectionPopup(
             on_classic=self.classic_tut.start,
             on_dnc=self.dnc_tut.start
         ).open(), 0.5)
 
+    def show_retreat_button(self, step_index):
+        """Toggle retreat button visibility and text based on step index."""
+        if not self.retreat_btn:
+            return
+        self.retreat_btn.opacity = 1
+        self.retreat_btn.disabled = False
+        if step_index <= 0:
+            self.retreat_btn.text = "[b]QUIT TUTORIAL[/b]"
+            self.retreat_btn.background_color = (0.8, 0.2, 0.2, 1)
+        else:
+            self.retreat_btn.text = "[b]<< PREV[/b]"
+            self.retreat_btn.background_color = (0.6, 0.3, 0.1, 1)
+
+    def hide_retreat_button(self):
+        """Hide the retreat button."""
+        if self.retreat_btn:
+            self.retreat_btn.opacity = 0
+            self.retreat_btn.disabled = True
+
+    def exit_tutorial(self):
+        """Cleanly exit the tutorial and return to main menu."""
+        # Cleanup DNC state if active
+        if self.tut_state.startswith('dnc'):
+            self.dnc_tut.cleanup()
+        self.hide_retreat_button()
+        self.manager.current = 'main_menu'
+
+    def go_to_previous_step(self, instance):
+        """Delegate retreat to the active tutorial, or exit at step 0."""
+        App.get_running_app().play_click_sound()
+        if self.tut_state.startswith('dnc'):
+            if self.dnc_tut.current_step <= 0:
+                self.exit_tutorial()
+            else:
+                self.dnc_tut.go_back()
+        else:
+            if self.classic_tut.current_step <= 0:
+                self.exit_tutorial()
+            else:
+                self.classic_tut.go_back()
+
     def show_popup(self, title, text, on_next=None, show_pieces=False, show_kings=False, item_img=None, show_droppers=False, btn_align='right', custom_widget=None):
-        TutPopup(title, text, on_next, show_pieces, show_kings, item_img, show_droppers, btn_align, custom_widget).open()
+        # Auto-wire on_prev: EXIT at step 0, go_back at step 1+
+        on_prev = None
+        if self.tut_state.startswith('dnc'):
+            if self.dnc_tut.current_step <= 0:
+                on_prev = {'callback': self.exit_tutorial, 'is_exit': True}
+            else:
+                on_prev = self.dnc_tut.go_back
+        elif self.tut_state != 'select_mode':
+            if self.classic_tut.current_step <= 0:
+                on_prev = {'callback': self.exit_tutorial, 'is_exit': True}
+            else:
+                on_prev = self.classic_tut.go_back
+        TutPopup(title, text, on_next, show_pieces, show_kings, item_img, show_droppers, btn_align, custom_widget, on_prev=on_prev).open()
         
     def _create_dummy(self, cls, color, faction):
         p = cls(color, faction)
