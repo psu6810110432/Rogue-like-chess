@@ -83,6 +83,8 @@ class SidebarUI(BoxLayout):
         
         self.action_btn_layout = btn_layout # บันทึกตัวแปรไว้ใช้ตอนซ่อนปุ่ม
         self.add_widget(btn_layout)
+        self._tut_action_btn = None  # Singleton tutorial action button
+
 
     def update_history_text(self, text_list):
         self.history_grid.clear_widgets()
@@ -108,3 +110,21 @@ class SidebarUI(BoxLayout):
             turn += 1
             
         Clock.schedule_once(lambda dt: setattr(self.scroll, 'scroll_y', 0), 0.1)
+
+    def show_tutorial_action_btn(self, text, on_click, color=(0.15, 0.45, 0.6, 0.95)):
+        """Insert a styled tutorial action button at the top of the sidebar button stack."""
+        # Remove any existing one first (singleton guard)
+        self.hide_tutorial_action_btn()
+        btn = RoundedButton(text=text, bold=True, font_size='18sp', normal_color=color)
+        btn.bind(on_release=lambda x: on_click())
+        self._tut_action_btn = btn
+        # Expand the btn_layout height and insert at top (index = total children count)
+        self.action_btn_layout.height += dp(50) + 10  # button height + spacing
+        self.action_btn_layout.add_widget(btn, index=len(self.action_btn_layout.children))
+
+    def hide_tutorial_action_btn(self):
+        """Remove the tutorial action button and restore original stack height."""
+        if self._tut_action_btn and self._tut_action_btn.parent:
+            self.action_btn_layout.remove_widget(self._tut_action_btn)
+            self.action_btn_layout.height -= dp(50) + 10
+            self._tut_action_btn = None

@@ -322,6 +322,38 @@ class TutorialScreen(GameplayScreen):
         if hasattr(self, 'board_anchor'): self._keep_grid_square(self.board_anchor, self.board_anchor.size)
         self.refresh_ui()
 
+    def on_square_tap(self, instance):
+        """Override: intercept taps during D&C Phase 1 to show piece status only."""
+        if self.tut_state == 'dnc_phase1':
+            App.get_running_app().play_click_sound()
+            r, c = instance.row, instance.col
+            piece = self.game.board[r][c]
+            # Toggle: clicking the already-selected square deselects
+            if self.selected == (r, c):
+                self.selected = None
+                self.hide_piece_status()
+                self.refresh_ui()
+                return
+            if piece and piece.color == 'white':
+                self.selected = (r, c)
+                # Highlight the selected square; clear all others
+                for (pr, pc), sq in self.squares.items():
+                    sq.update_square_style(
+                        highlight=((pr, pc) == (r, c)),
+                        is_legal=False, is_check=False, is_last=False
+                    )
+                    p = self.game.board[pr][pc]
+                    sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+                self.show_piece_status(piece)
+            else:
+                # Clicked empty square — deselect
+                self.selected = None
+                self.hide_piece_status()
+                self.refresh_ui()
+            return
+        # All other tutorial states: delegate to parent GameplayScreen
+        super().on_square_tap(instance)
+
     def check_winner(self): pass
     def check_game_over(self): pass
     def end_game(self, *args, **kwargs): pass
@@ -402,28 +434,56 @@ class TutorialScreen(GameplayScreen):
                 self.tut_state = 'step5_attack2_wait'
                 Clock.schedule_once(lambda dt: self.classic_tut.setup_step5_attack2(), 0.5)
 
-    def show_next_step_button(self, on_click, pos_hint=None):
-        if pos_hint is None:
-            pos_hint = {'center_x': 0.5, 'y': 0.05}
-            
-        if hasattr(self, 'next_step_btn') and self.next_step_btn.parent:
+    def show_next_step_button(self, on_click, pos_hint=None, use_sidebar=None):
+        """Show a tutorial NEXT STEP button. Auto-detects sidebar vs floating mode."""
+        # Remove any existing floating next_step_btn
+        if hasattr(self, 'next_step_btn') and self.next_step_btn and self.next_step_btn.parent:
             self.next_step_btn.parent.remove_widget(self.next_step_btn)
+            self.next_step_btn = None
+        # Also remove any sidebar version
+        if hasattr(self, 'sidebar') and self.sidebar:
+            self.sidebar.hide_tutorial_action_btn()
 
-        self.next_step_btn = Button(
-            text="[b]NEXT STEP >>[/b]", markup=True, font_size='18sp',
-            size_hint=(None, None), size=(dp(200), dp(50)),
-            pos_hint=pos_hint,
-            background_color=(0.2, 0.8, 0.2, 1)
-        )
-        self.root_layout.add_widget(self.next_step_btn)
-        
-        if hasattr(self, '_next_step_cb'):
-            self.next_step_btn.unbind(on_release=self._next_step_cb)
-            
-        def _cb(instance):
+        # Auto-detect: if play_area is hidden (map mode), use floating button
+        if use_sidebar is None:
+            use_sidebar = hasattr(self, 'play_area') and self.play_area.opacity > 0
+
+        if use_sidebar:
+            def _cb():
+                App.get_running_app().play_click_sound()
+                self.sidebar.hide_tutorial_action_btn()
+                if on_click: on_click()
+            self.sidebar.show_tutorial_action_btn("NEXT STEP >>", _cb, color=(0.15, 0.55, 0.2, 0.95))
+        else:
+            # Floating button for full-screen / map steps
+            if pos_hint is None:
+                pos_hint = {'center_x': 0.5, 'y': 0.05}
+            from kivy.uix.button import Button
+            self.next_step_btn = Button(
+                text="[b]NEXT STEP >>[/b]", markup=True, font_size='18sp',
+                size_hint=(None, None), size=(dp(200), dp(50)),
+                pos_hint=pos_hint,
+                background_color=(0.2, 0.8, 0.2, 1)
+            )
+            def _cb_float(instance):
+                App.get_running_app().play_click_sound()
+                if self.next_step_btn and self.next_step_btn.parent:
+                    self.next_step_btn.parent.remove_widget(self.next_step_btn)
+                    self.next_step_btn = None
+                if on_click: on_click()
+            self.next_step_btn.bind(on_release=_cb_float)
+            self.root_layout.add_widget(self.next_step_btn)
+
+    def show_tutorial_phase_button(self, text, on_click, color=(0.15, 0.45, 0.6, 0.95)):
+        """Show a phase-specific action button (e.g. CONFIRM SETUP) in the sidebar."""
+        def _cb():
             App.get_running_app().play_click_sound()
-            self.root_layout.remove_widget(self.next_step_btn)
+            self.sidebar.hide_tutorial_action_btn()
             if on_click: on_click()
-            
-        self._next_step_cb = _cb
-        self.next_step_btn.bind(on_release=self._next_step_cb)
+
+        self.sidebar.show_tutorial_action_btn(text, _cb, color=color)
+
+    def hide_tutorial_phase_button(self):
+        """Remove the tutorial phase button from the sidebar."""
+        self.sidebar.hide_tutorial_action_btn()
+

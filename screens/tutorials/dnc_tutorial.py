@@ -51,13 +51,13 @@ class DNCTutorial:
             screen.mock_map_layer = None
         screen.mock_castles = []
         screen.mock_villages = []
-        # Remove NEXT STEP button
+        # Remove tutorial action button from sidebar (covers board-phase buttons)
+        if hasattr(screen, 'sidebar') and screen.sidebar:
+            screen.sidebar.hide_tutorial_action_btn()
+        # Remove floating next_step_btn (for map steps)
         if hasattr(screen, 'next_step_btn') and screen.next_step_btn and screen.next_step_btn.parent:
-            screen.root_layout.remove_widget(screen.next_step_btn)
-        # Remove mock phase button
-        if hasattr(self, 'mock_phase_btn') and self.mock_phase_btn and self.mock_phase_btn.parent:
-            screen.root_layout.remove_widget(self.mock_phase_btn)
-            self.mock_phase_btn = None
+            screen.next_step_btn.parent.remove_widget(screen.next_step_btn)
+            screen.next_step_btn = None
         # Remove black mask
         if hasattr(self, 'black_mask') and self.black_mask and self.black_mask.parent:
             screen.root_layout.remove_widget(self.black_mask)
@@ -273,7 +273,7 @@ class DNCTutorial:
             self.screen.game.board[0][pieces_to_show.index(cls)] = p
             
         self.screen.refresh_ui()
-        self.screen.show_next_step_button(self.run_dnc_step6, pos_hint={'right': 0.98, 'top': 0.98})
+        self.screen.show_next_step_button(self.run_dnc_step6, pos_hint={'right': 0.98, 'y': 0.22})
 
     def run_dnc_step6(self):
         self.current_step = 5
@@ -287,7 +287,9 @@ class DNCTutorial:
         self.screen.show_popup("STEP 6: COMBAT PHASES", txt, self.start_mock_phase_1)
 
     def start_mock_phase_1(self):
-        self.screen.is_input_locked = True
+        # Allow clicks so players can inspect pieces during deployment
+        self.screen.is_input_locked = False
+        self.screen.tut_state = 'dnc_phase1'
         self.screen.game.board = [[None for _ in range(8)] for _ in range(8)]
         # Place exactly 3 Pawns matching the mockup (Max 3/3 units)
         self.screen.game.board[7][3] = self.screen._create_dummy(Pawn, 'white', 'the knight company')  # d1
@@ -315,44 +317,35 @@ class DNCTutorial:
             update_mask()
         self.screen.root_layout.add_widget(self.black_mask)
         
-        self.mock_phase_btn = Button(
-            text="[b]CONFIRM SETUP[/b]", markup=True, font_size='18sp',
-            size_hint=(None, None), size=(dp(200), dp(50)), 
-            pos_hint={'right': 0.98, 'top': 0.98}, 
-            background_color=(0.2, 0.6, 0.8, 1)
+        self.screen.show_tutorial_phase_button(
+            "CONFIRM SETUP",
+            self.start_mock_phase_2,
+            color=(0.15, 0.45, 0.65, 0.95)
         )
-        self.mock_phase_btn.bind(on_release=self.start_mock_phase_2)
-        self.screen.root_layout.add_widget(self.mock_phase_btn)
 
-    def start_mock_phase_2(self, instance):
-        App.get_running_app().play_click_sound()
-        self.screen.root_layout.remove_widget(self.mock_phase_btn)
-        
-        if hasattr(self, 'black_mask') and self.black_mask.parent:
+    def start_mock_phase_2(self):
+        # Button callback fires via show_tutorial_phase_button which already hides itself
+        if hasattr(self, 'black_mask') and self.black_mask and self.black_mask.parent:
             self.black_mask.parent.remove_widget(self.black_mask)
         
         self.screen.info_label.text = "[color=ffaa00]PHASE 2: Enemy Revealed! Observe their position.[/color]"
         for r in range(8):
             for c in range(8):
                 self.screen.squares[(r,c)].update_square_style(is_legal=False, is_check=(r==0 and c==4))
-                
-        self.mock_phase_btn = Button(
-            text="[b]READY TO BATTLE[/b]", markup=True, font_size='18sp',
-            size_hint=(None, None), size=(dp(200), dp(50)), 
-            pos_hint={'right': 0.98, 'top': 0.98}, 
-            background_color=(0.2, 0.8, 0.2, 1)
+        
+        self.screen.show_tutorial_phase_button(
+            "READY TO BATTLE",
+            self.finish_mock_phases,
+            color=(0.15, 0.55, 0.2, 0.95)
         )
-        self.mock_phase_btn.bind(on_release=self.finish_mock_phases)
-        self.screen.root_layout.add_widget(self.mock_phase_btn)
 
-    def finish_mock_phases(self, instance):
-        App.get_running_app().play_click_sound()
-        self.screen.root_layout.remove_widget(self.mock_phase_btn)
+    def finish_mock_phases(self):
+        # Button already removed by show_tutorial_phase_button callback wrapper
         self.screen.info_label.text = "BATTLE COMMENCED!"
         for r in range(8):
             for c in range(8):
                 self.screen.squares[(r,c)].update_square_style(is_legal=False, is_check=False)
-        self.screen.show_next_step_button(self.run_dnc_step7, pos_hint={'right': 0.98, 'top': 0.98})
+        self.screen.show_next_step_button(self.run_dnc_step7)
 
     def run_dnc_step7(self):
         self.current_step = 6
