@@ -106,7 +106,7 @@ class TutPopup(ModalView):
         root.add_widget(content_box)
 
         btn_box = BoxLayout(orientation='horizontal', size_hint_y=0.15)
-        next_btn = Button(text="[b]NEXT[/b]", markup=True, size_hint_x=0.4, background_color=(0.2, 0.6, 0.2, 1))
+        next_btn = Button(text="[b]NEXT[/b]", markup=True, size_hint=(None, None), size=(dp(200), dp(50)), background_color=(0.2, 0.6, 0.2, 1))
         
         def _on_next(*args):
             App.get_running_app().play_click_sound()
@@ -114,12 +114,10 @@ class TutPopup(ModalView):
             if on_next: on_next()
         next_btn.bind(on_release=_on_next)
 
-        if btn_align == 'right':
-            btn_box.add_widget(Label(size_hint_x=0.6))
-            btn_box.add_widget(next_btn)
-        else:
-            btn_box.add_widget(next_btn)
-            btn_box.add_widget(Label(size_hint_x=0.6))
+        from kivy.uix.anchorlayout import AnchorLayout
+        btn_anchor = AnchorLayout(anchor_x='center', anchor_y='center')
+        btn_anchor.add_widget(next_btn)
+        btn_box.add_widget(btn_anchor)
             
         root.add_widget(btn_box)
         self.add_widget(root)
@@ -320,17 +318,19 @@ class TutorialScreen(GameplayScreen):
                 self.tut_state = 'step5_attack2_wait'
                 Clock.schedule_once(lambda dt: self.classic_tut.setup_step5_attack2(), 0.5)
 
-    def show_next_step_button(self, on_click):
-        if not hasattr(self, 'next_step_btn'):
-            self.next_step_btn = Button(
-                text="[b]NEXT STEP >>[/b]", markup=True, font_size='18sp',
-                size_hint=(None, None), size=(dp(160), dp(55)),
-                pos_hint={'right': 0.98, 'y': 0.05},
-                background_color=(0.2, 0.8, 0.2, 1)
-            )
-        if self.next_step_btn.parent:
-            self.next_step_btn.parent.remove_widget(self.next_step_btn)
+    def show_next_step_button(self, on_click, pos_hint=None):
+        if pos_hint is None:
+            pos_hint = {'center_x': 0.5, 'y': 0.05}
             
+        if hasattr(self, 'next_step_btn') and self.next_step_btn.parent:
+            self.next_step_btn.parent.remove_widget(self.next_step_btn)
+
+        self.next_step_btn = Button(
+            text="[b]NEXT STEP >>[/b]", markup=True, font_size='18sp',
+            size_hint=(None, None), size=(dp(200), dp(50)),
+            pos_hint=pos_hint,
+            background_color=(0.2, 0.8, 0.2, 1)
+        )
         self.root_layout.add_widget(self.next_step_btn)
         
         if hasattr(self, '_next_step_cb'):

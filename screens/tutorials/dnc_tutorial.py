@@ -197,7 +197,7 @@ class DNCTutorial:
             self.screen.game.board[0][pieces_to_show.index(cls)] = p
             
         self.screen.refresh_ui()
-        self.screen.show_next_step_button(self.run_dnc_step6)
+        self.screen.show_next_step_button(self.run_dnc_step6, pos_hint={'right': 0.98, 'top': 0.98})
 
     def run_dnc_step6(self):
         txt = ("[color=ffaa00]Combat Phases[/color]\n\n"
@@ -236,8 +236,8 @@ class DNCTutorial:
         
         self.mock_phase_btn = Button(
             text="[b]CONFIRM SETUP[/b]", markup=True, font_size='18sp',
-            size_hint=(None, None), size=(dp(200), dp(55)), 
-            pos_hint={'center_x': 0.5, 'y': 0.1}, 
+            size_hint=(None, None), size=(dp(200), dp(50)), 
+            pos_hint={'right': 0.98, 'top': 0.98}, 
             background_color=(0.2, 0.6, 0.8, 1)
         )
         self.mock_phase_btn.bind(on_release=self.start_mock_phase_2)
@@ -257,8 +257,8 @@ class DNCTutorial:
                 
         self.mock_phase_btn = Button(
             text="[b]READY TO BATTLE[/b]", markup=True, font_size='18sp',
-            size_hint=(None, None), size=(dp(200), dp(55)), 
-            pos_hint={'center_x': 0.5, 'y': 0.1}, 
+            size_hint=(None, None), size=(dp(200), dp(50)), 
+            pos_hint={'right': 0.98, 'top': 0.98}, 
             background_color=(0.2, 0.8, 0.2, 1)
         )
         self.mock_phase_btn.bind(on_release=self.finish_mock_phases)
@@ -271,7 +271,7 @@ class DNCTutorial:
         for r in range(8):
             for c in range(8):
                 self.screen.squares[(r,c)].update_square_style(is_legal=False, is_check=False)
-        self.screen.show_next_step_button(self.run_dnc_step7)
+        self.screen.show_next_step_button(self.run_dnc_step7, pos_hint={'right': 0.98, 'top': 0.98})
 
     def run_dnc_step7(self):
         txt = ("[color=00ffff]Army Mechanics[/color]\n\n"
