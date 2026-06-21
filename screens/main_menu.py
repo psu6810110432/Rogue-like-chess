@@ -1,5 +1,4 @@
-# screens/main_menu.py
-from kivy.uix.screenmanager import Screen
+from kivy.uix.screenmanager import Screen, ScreenManager, FadeTransition
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
@@ -9,9 +8,12 @@ from kivy.app import App
 from kivy.graphics import Rectangle, Color, RoundedRectangle 
 from kivy.animation import Animation 
 from kivy.metrics import dp
+from kivy.clock import Clock
+
+from screens.parallax_screen import MenuScreen, Stage1Screen, Stage2Screen
+from screens.parallax_screen import Fight1Screen, Fight2Screen, Fight3Screen, Fight4Screen, Fight5Screen, Fight6Screen, Fight7Screen
 
 class RoundedButton(Button):
-    # ... (ส่วนนี้เหมือนเดิม) ...
     def __init__(self, normal_color, **kwargs):
         super().__init__(**kwargs)
         self.background_color = (0, 0, 0, 0)  
@@ -29,41 +31,41 @@ class RoundedButton(Button):
             self.color_inst = Color(*self.normal_color)
             self.main_rect = RoundedRectangle(radius=[15])
             
-        self.bind(pos=self.update_rect, size=self.update_rect, state=self.update_state) 
+        self.bind(pos=self.update_rect, size=self.update_rect, state=self.on_state_change)
 
     def update_rect(self, *args):
-        self.shadow_rect.pos = self.pos
+        self.main_rect.pos = self.pos
+        self.main_rect.size = self.size
+        self.shadow_rect.pos = (self.pos[0], self.pos[1] - dp(4))
         self.shadow_rect.size = self.size
-        
-        if self.state == 'normal':
-            self.main_rect.pos = (self.pos[0], self.pos[1] + dp(6))
-            self.main_rect.size = (self.size[0], self.size[1] - dp(6))
-        else:
-            self.main_rect.pos = self.pos
-            self.main_rect.size = self.size
 
-    def update_state(self, *args):
-        if self.state == 'down':
+    def on_state_change(self, instance, value):
+        if value == 'down':
             self.color_inst.rgba = self.pressed_color
-            self.main_rect.pos = self.pos
-            self.main_rect.size = self.size
+            self.main_rect.pos = (self.pos[0], self.pos[1] - dp(2))
         else:
             self.color_inst.rgba = self.normal_color
-            self.main_rect.pos = (self.pos[0], self.pos[1] + dp(6))
-            self.main_rect.size = (self.size[0], self.size[1] - dp(6))
+            self.main_rect.pos = self.pos
 
 class MainMenuScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        self.bg_manager = ScreenManager(transition=FadeTransition())
+        self.bg_manager.add_widget(MenuScreen(name='menu'))
+        self.bg_manager.add_widget(Stage1Screen(name='stage1'))
+        self.bg_manager.add_widget(Stage2Screen(name='stage2'))
+        self.bg_manager.add_widget(Fight1Screen(name='fight1'))
+        self.bg_manager.add_widget(Fight2Screen(name='fight2'))
+        self.bg_manager.add_widget(Fight3Screen(name='fight3'))
+        self.bg_manager.add_widget(Fight4Screen(name='fight4'))
+        self.bg_manager.add_widget(Fight5Screen(name='fight5'))
+        self.bg_manager.add_widget(Fight6Screen(name='fight6'))
+        self.bg_manager.add_widget(Fight7Screen(name='fight7'))
         
-        with self.canvas.before:
-            Color(1, 1, 1, 1) 
-            self.bg_image = Rectangle(source='assets/ui/backgrounds/menu_bg.png', pos=self.pos, size=self.size)
-            Color(0.02, 0.02, 0.05, 0.75) 
-            self.bg_overlay = Rectangle(pos=self.pos, size=self.size)
-        self.bind(pos=self.update_bg, size=self.update_bg)
-        
-        # ใช้ FloatLayout เป็น Root เพื่อให้วาง Label เวอร์ชันได้อิสระ
+        self.add_widget(self.bg_manager) 
+
+
         root_layout = FloatLayout()
 
         # Layout หลักของเมนู (อยู่ตรงกลางเหมือนเดิม)
@@ -121,7 +123,7 @@ class MainMenuScreen(Screen):
         # ---------------------------------------------------------
         # เพิ่ม Label แสดงเวอร์ชันเกมที่มุมซ้ายล่าง
         # ---------------------------------------------------------
-        game_version = "v2.2.0" # กำหนดเลขเวอร์ชันตรงนี้
+        game_version = "v2.3.0" # กำหนดเลขเวอร์ชันตรงนี้
         version_label = Label(
             text=f"[color=888888]{game_version}[/color]", 
             markup=True, 
@@ -138,18 +140,22 @@ class MainMenuScreen(Screen):
 
         self.add_widget(root_layout)
 
-    def update_bg(self, *args):
-        self.bg_image.pos = self.pos
-        self.bg_image.size = self.size
-        self.bg_overlay.pos = self.pos
-        self.bg_overlay.size = self.size
+    def update_rect(self, *args):
+        self.overlay.pos = self.pos
+        self.overlay.size = self.size
 
     def on_enter(self, *args):
+        super().on_enter(*args) 
+        self.bg_clock = Clock.schedule_interval(self.auto_change_bg, 10.0)
+
         anim = Animation(opacity=0.3, duration=1.2) + Animation(opacity=1, duration=1.2)
         anim.repeat = True 
         anim.start(self.prep_label) 
 
     def on_leave(self, *args):
+        super().on_leave(*args) 
+        if hasattr(self, 'bg_clock'):
+            self.bg_clock.cancel()
         Animation.cancel_all(self.prep_label)
 
     def play_btn_sound(self, instance=None):
@@ -168,3 +174,14 @@ class MainMenuScreen(Screen):
 
     def do_exit(self, instance):
         App.get_running_app().stop()
+    
+    def auto_change_bg(self, dt):
+        scene_order = [
+            'menu', 'stage1', 'stage2',
+            'fight1', 'fight2', 'fight3', 'fight4', 'fight5', 'fight6', 'fight7'
+        ]
+        current_scene = self.bg_manager.current
+        if current_scene in scene_order:
+            current_index = scene_order.index(current_scene)
+            next_index = (current_index + 1) % len(scene_order)
+            self.bg_manager.current = scene_order[next_index]

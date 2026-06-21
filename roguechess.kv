@@ -1,0 +1,136 @@
+# -----------------------------------------
+# เทมเพลตกลางสำหรับฉากหลัก (5 เลเยอร์)
+# -----------------------------------------
+<ParallaxScreen>:
+    FloatLayout:
+        Image:
+            id: layer_1
+            source: root.layer_1_src
+            fit_mode: 'fill'
+            size_hint: 1.03, 1.03
+            pos_hint: {'center_x': 0.5, 'y': 0}
+        Image:
+            id: layer_2
+            source: root.layer_2_src
+            fit_mode: 'fill'
+            size_hint: 1.08, 1.08
+            pos_hint: {'center_x': 0.5, 'y': 0}
+        Image:
+            id: layer_3
+            source: root.layer_3_src
+            fit_mode: 'fill'
+            size_hint: 1.12, 1.12
+            pos_hint: {'center_x': 0.5, 'y': 0}
+        Image:
+            id: layer_4
+            source: root.layer_4_src
+            fit_mode: 'fill'
+            size_hint: 1.18, 1.18
+            pos_hint: {'center_x': 0.5, 'y': 0}
+        Image:
+            id: layer_5
+            source: root.layer_5_src
+            fit_mode: 'fill'
+            size_hint: 1.26, 1.26
+            pos_hint: {'center_x': 0.5, 'y': 0}
+
+# -----------------------------------------
+# เทมเพลตกลางสำหรับฉากต่อสู้ (3 เลเยอร์ ขยับช้า)
+# -----------------------------------------
+<FightScreen>:
+    FloatLayout:
+        Image:
+            id: layer_1
+            source: root.layer_1_src
+            fit_mode: 'fill'
+            size_hint: 1.03, 1.03
+            pos_hint: {'center_x': 0.5, 'y': 0}
+        Image:
+            id: layer_2
+            source: root.layer_2_src
+            fit_mode: 'fill'
+            size_hint: 1.08, 1.08
+            pos_hint: {'center_x': 0.5, 'y': 0}
+        Image:
+            id: layer_3
+            source: root.layer_3_src
+            fit_mode: 'fill'
+            size_hint: 1.12, 1.12
+            pos_hint: {'center_x': 0.5, 'y': 0}
+
+# =========================================
+# การกำหนดไฟล์ภาพให้แต่ละฉากและการเชื่อมโยงโปรเจค
+# =========================================
+
+# --- ฉากใช้งานร่วมกับโปรเจคหน้าแรกและหน้า Match Making ---
+<MainMenuScreen>:
+    layer_1_src: 'assets/menu_background/bg_layer1.png'
+    layer_2_src: 'assets/menu_background/bg_layer2.png'
+    layer_3_src: 'assets/menu_background/bg_layer3.png'
+    layer_4_src: 'assets/menu_background/bg_layer4.png'
+    layer_5_src: 'assets/menu_background/bg_layer5.png'
+
+<MatchSetupScreen>:
+    layer_1_src: 'assets/menu_background/bg_layer1.png'
+    layer_2_src: 'assets/menu_background/bg_layer2.png'
+    layer_3_src: 'assets/menu_background/bg_layer3.png'
+    layer_4_src: 'assets/menu_background/bg_layer4.png'
+    layer_5_src: 'assets/menu_background/bg_layer5.png'
+
+# --- 3 ฉากหลักต้นฉบับ ---
+<MenuScreen>:
+    layer_1_src: 'assets/menu_background/bg_layer1.png'
+    layer_2_src: 'assets/menu_background/bg_layer2.png'
+    layer_3_src: 'assets/menu_background/bg_layer3.png'
+    layer_4_src: 'assets/menu_background/bg_layer4.png'
+    layer_5_src: 'assets/menu_background/bg_layer5.png'
+
+<Stage1Screen>:
+    layer_1_src: 'assets/menu_background/bg_stage1_1.png'
+    layer_2_src: 'assets/menu_background/bg_stage1_2.png'
+    layer_3_src: 'assets/menu_background/bg_stage1_3.png'
+    layer_4_src: 'assets/menu_background/bg_stage1_4.png'
+    layer_5_src: 'assets/menu_background/bg_stage1_5.png'
+
+<Stage2Screen>:
+    layer_1_src: 'assets/menu_background/bg_stage2_1.png'
+    layer_2_src: 'assets/menu_background/bg_stage2_2.png'
+    layer_3_src: 'assets/menu_background/bg_stage2_3.png'
+    layer_4_src: 'assets/menu_background/bg_stage2_4.png'
+    layer_5_src: 'assets/menu_background/bg_stage2_5.png'
+
+# --- 7 ฉากต่อสู้ต้นฉบับ ---
+<Fight1Screen>:
+    layer_1_src: 'assets/menu_background/fight1_layer1.png'
+    layer_2_src: 'assets/menu_background/fight1_layer2.png'
+    layer_3_src: 'assets/menu_background/fight1_layer3.png'
+
+<Fight2Screen>:
+    layer_1_src: 'assets/menu_background/fight2_layer1.png'
+    layer_2_src: 'assets/menu_background/fight2_layer2.png'
+    layer_3_src: 'assets/menu_background/fight2_layer3.png'
+
+<Fight3Screen>:
+    layer_1_src: 'assets/menu_background/fight3_layer1.png'
+    layer_2_src: 'assets/menu_background/fight3_layer2.png'
+    layer_3_src: 'assets/menu_background/fight3_layer3.png'
+
+<Fight4Screen>:
+    layer_1_src: 'assets/menu_background/fight4_layer1.png'
+    layer_2_src: 'assets/menu_background/fight4_layer2.png'
+    layer_3_src: 'assets/menu_background/fight4_layer3.png'
+
+<Fight5Screen>:
+    layer_1_src: 'assets/menu_background/fight5_layer1.png'
+    layer_2_src: 'assets/menu_background/fight5_layer2.png'
+    layer_3_src: 'assets/menu_background/fight5_layer3.png'
+
+<Fight6Screen>:
+    layer_1_src: 'assets/menu_background/fight6_layer1.png'
+    layer_2_src: 'assets/menu_background/fight6_layer2.png'
+    layer_3_src: 'assets/menu_background/fight6_layer3.png'
+
+<Fight7Screen>:
+    layer_1_src: 'assets/menu_background/fight7_layer1.png'
+    layer_2_src: 'assets/menu_background/fight7_layer2.png'
+    layer_3_src: 'assets/menu_background/fight7_layer3.png'

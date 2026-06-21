@@ -1,4 +1,3 @@
-# main.py
 from kivy.app import App
 from kivy.uix.screenmanager import ScreenManager, FadeTransition
 from screens.main_menu import MainMenuScreen
@@ -18,37 +17,31 @@ class RogueChessApp(App):
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # ระบบ Cache สำหรับเก็บไฟล์เสียงที่ถูกโหลดแล้ว
         self._sound_cache = {}
         self.bgm = None
         self._bgm_volume = 0.5
 
     def build(self):
-        # โหลดเฉพาะ BGM เพื่อเล่นตอนเริ่มเกม
         self.play_bgm('assets/audio/bgm/main_theme.mp3')
 
-        sm = ScreenManager(transition=FadeTransition())
-        sm.add_widget(MainMenuScreen(name='main_menu'))
-        sm.add_widget(MatchSetupScreen(name='setup'))
-        sm.add_widget(GameplayScreen(name='gameplay'))
-        sm.add_widget(TutorialScreen(name='tutorial'))
-        sm.add_widget(OptionsScreen(name='options'))
-        sm.add_widget(CampaignMapScreen(name='campaign_map'))
+        self.sm = ScreenManager(transition=FadeTransition())
         
-        return sm
-
-    def get_sound(self, path):
-        """โหลดเสียงแบบ Lazy Load ประหยัด RAM"""
-        if path not in self._sound_cache:
-            self._sound_cache[path] = SoundLoader.load(path)
-        return self._sound_cache[path]
+        self.sm.add_widget(MainMenuScreen(name='main_menu'))
+        self.sm.add_widget(MatchSetupScreen(name='setup'))
+        self.sm.add_widget(GameplayScreen(name='gameplay'))
+        self.sm.add_widget(TutorialScreen(name='tutorial'))
+        self.sm.add_widget(OptionsScreen(name='options'))
+        self.sm.add_widget(CampaignMapScreen(name='campaign_map'))
+        
+        return self.sm
 
     def play_bgm(self, path):
-        sound = self.get_sound(path)
-        if sound:
-            self.bgm = sound
-            self.bgm.loop = True
+        if self.bgm:
+            self.bgm.stop()
+        self.bgm = SoundLoader.load(path)
+        if self.bgm:
             self.bgm.volume = self._bgm_volume
+            self.bgm.loop = True
             self.bgm.play()
 
     def set_bgm_volume(self, volume):
@@ -57,10 +50,16 @@ class RogueChessApp(App):
             self.bgm.volume = volume
 
     def _play_sfx(self, path):
-        """Helper เล่น SFX ทั่วไป"""
-        sfx = self.get_sound(path)
-        if sfx:
-            sfx.play()
+        if path not in self._sound_cache:
+            sound = SoundLoader.load(path)
+            if sound:
+                self._sound_cache[path] = sound
+        
+        sound = self._sound_cache.get(path)
+        if sound:
+            if sound.state == 'play':
+                sound.stop()
+            sound.play()
 
     def play_click_sound(self): self._play_sfx('assets/audio/sfx/click.mp3')
     def play_coin_sound(self): self._play_sfx('assets/audio/sfx/coin.mp3')
@@ -71,5 +70,5 @@ class RogueChessApp(App):
     def play_move_sound(self): self._play_sfx('assets/audio/sfx/chessmove.mp3')
     def play_distortion_sound(self): self._play_sfx('assets/audio/sfx/distorsion.mp3')
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     RogueChessApp().run()
