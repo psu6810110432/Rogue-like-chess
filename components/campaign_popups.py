@@ -3,6 +3,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.widget import Widget
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.image import Image
@@ -59,7 +60,7 @@ def create_subvillage_nav(panel, popup_instance):
 # ----------------- Recruit Popup -----------------
 class RecruitPopup(ModalView):
     def __init__(self, panel, **kwargs):
-        super().__init__(size_hint=(0.85, 0.85), background_color=(0,0,0,0.8), auto_dismiss=True, **kwargs)
+        super().__init__(size_hint=(0.85, 0.85), pos_hint={'center_x': 0.5, 'center_y': 0.5}, background_color=(0,0,0,0.8), auto_dismiss=True, **kwargs)
         self.panel = panel
         self.app = panel.app
         self.node = panel.current_node
@@ -130,15 +131,18 @@ class RecruitPopup(ModalView):
             req_lvl = row_data['req_lvl']
             items = row_data['data']
             
-            self.content_grid.add_widget(Label(text=f"[b]{title}[/b]", markup=True, size_hint_y=None, height=dp(30), halign='left', color=(0.9,0.8,0.2,1)))
+            row_title = Label(text=f"[b]{title}[/b]", markup=True, size_hint_y=None, height=dp(30), halign='center', color=(0.9,0.8,0.2,1))
+            row_title.bind(size=row_title.setter('text_size'))
+            self.content_grid.add_widget(row_title)
             
             if tav_lvl < req_lvl:
                 locked_btn = Button(text=f"[b]Unlock: Tavern Lvl {req_lvl}[/b]", markup=True, background_color=(0.3, 0.1, 0.1, 1), size_hint_y=None, height=dp(140))
                 self.content_grid.add_widget(locked_btn)
                 return
 
-            row_grid = GridLayout(rows=1, spacing=dp(12), size_hint_y=None, height=dp(140), size_hint_x=None)
-            row_grid.bind(minimum_width=row_grid.setter('width'))
+            # Centered row: spring Widget on each side pushes cards to center
+            row_box = BoxLayout(orientation='horizontal', spacing=dp(15), size_hint_y=None, height=dp(140))
+            row_box.add_widget(Widget())  # left spring
             
             for idx, p_data in enumerate(items):
                 if p_data is None:
@@ -151,11 +155,10 @@ class RecruitPopup(ModalView):
                     cb = lambda n, c, r=row_key, i=idx: self.on_buy_piece(n, c, r, i)
                     card = RecruitCard(p_name, final_cost, self.node.faction, self.app, cb)
                     
-                row_grid.add_widget(card)
+                row_box.add_widget(card)
                 
-            row_scroll = ScrollView(size_hint_y=None, height=dp(150), do_scroll_x=True, do_scroll_y=False)
-            row_scroll.add_widget(row_grid)
-            self.content_grid.add_widget(row_scroll)
+            row_box.add_widget(Widget())  # right spring
+            self.content_grid.add_widget(row_box)
             
         build_row('row1')
         build_row('row2')

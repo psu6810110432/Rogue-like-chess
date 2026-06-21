@@ -119,7 +119,7 @@ class GameplayScreen(Screen):
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
         
         # ---- Top Header Bar: single centered label ----
-        app_timer = getattr(app, 'selected_time_limit', 0)
+        app_timer = getattr(app, 'selected_time_limit', 0) or 0
         self.turn_timer_limit = app_timer
         self.turn_timer_remaining = app_timer
         

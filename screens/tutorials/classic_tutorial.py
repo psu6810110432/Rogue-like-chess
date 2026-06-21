@@ -16,21 +16,51 @@ from logic.item_logic import ITEM_DATABASE, Item
 class ClassicTutorial:
     def __init__(self, screen):
         self.screen = screen
+        self.current_step = 0
+        self.steps = [
+            self.run_step1,        # 0
+            self.run_step2_intro,  # 1
+            self.run_step3,        # 2
+            self.run_step4,        # 3
+            self.run_step5_intro,  # 4
+            self.run_step6,        # 5
+            self.run_step7,        # 6
+        ]
 
     def start(self):
         app = App.get_running_app()
         app.selected_unit_white = 'Medieval Knights'
         app.selected_unit_black = 'Demon'
 
+        self.current_step = 0
         self.screen.tut_state = 'step1'
         Clock.schedule_once(lambda dt: self.run_step1(), 0.5)
 
+    def cleanup(self):
+        """Reset transient state before replaying a step."""
+        self.screen.selected = None
+        self.screen.valid_moves = []
+        self.screen.set_board()
+
+    def go_back(self):
+        """Go to the previous step."""
+        if self.current_step <= 0:
+            return
+        self.current_step -= 1
+        self.cleanup()
+        self.steps[self.current_step]()
+
     def run_step1(self):
+        self.current_step = 0
+        self.screen.tut_state = 'step1'
+        self.screen.show_retreat_button(self.current_step)
         txt = ("All pieces move exactly like traditional chess.\n"
                "(Pawns move 2 squares on their first move, then 1 square forward).")
         self.screen.show_popup("STEP 1: MOVEMENT", txt, self.run_step2_intro, show_pieces=True)
 
     def run_step2_intro(self):
+        self.current_step = 1
+        self.screen.show_retreat_button(self.current_step)
         txt = ("[b]Base Points + Coin Tosses[/b] decide the winner!\n\n"
                "[color=00ff00]Breaking[/color]: You Win.\n"
                "[color=ffff00]Draw[/color]: Tie, reroll.\n"
@@ -55,15 +85,21 @@ class ClassicTutorial:
         self.screen.refresh_ui()
 
     def run_step3(self):
+        self.current_step = 2
+        self.screen.show_retreat_button(self.current_step)
         txt = "ROGuelike Chess features 4 unique Legions:"
         self.screen.show_popup("STEP 3: LEGIONS", txt, self.run_step4, show_kings=True)
 
     def run_step4(self):
+        self.current_step = 3
+        self.screen.show_retreat_button(self.current_step)
         txt = ("Every Legion has its own unique Passive skills, and each piece has a chance to get a 'Hidden Passive' (bonus or penalty in points/coins).\n\n"
                "You can read more in the 'Making Match' screen by clicking '?' behind 'Choose your Legion'.")
         self.screen.show_popup("STEP 4: PASSIVES", txt, self.run_step5_intro)
 
     def run_step5_intro(self):
+        self.current_step = 4
+        self.screen.show_retreat_button(self.current_step)
         txt = ("Items drop when you Win a Crash as an Attacker using a Knight, Bishop, or Rook. (No items if you win as Defender).\n\n"
                "There are 4 types: Universal, Specific, Permanent, and Consumable.")
         self.screen.show_popup("STEP 5: ITEMS", txt, self.setup_step5_attack1, show_droppers=True)
@@ -97,6 +133,8 @@ class ClassicTutorial:
         self.screen.refresh_ui()
 
     def run_step6(self):
+        self.current_step = 5
+        self.screen.show_retreat_button(self.current_step)
         txt = ("[color=ffcc00]Classic:[/color] Standard chess board.\n"
                "[color=00ff44]Enchanted Forest:[/color] Thorny vines may block squares (3 turns).\n"
                "[color=ffaa00]Desert Ruins:[/color] Empty rows/cols may spawn Sandstorms (3 turns).\n"
@@ -104,10 +142,13 @@ class ClassicTutorial:
         self.screen.show_popup("STEP 6: BATTLEFIELDS", txt, self.run_step7)
 
     def run_step7(self):
+        self.current_step = 6
+        self.screen.show_retreat_button(self.current_step)
         txt = ("There are 2 ways to win:\n"
                "1. Standard Checkmate.\n"
                "2. Corner the enemy King so it's forced to Crash with your pieces and lose!")
         def finish():
+            self.screen.hide_retreat_button()
             self.screen.manager.current = 'main_menu'
         self.screen.show_popup("STEP 7: VICTORY & DEFEAT", txt, finish)
 

@@ -70,6 +70,8 @@ class AIController:
                 if getattr(df, 'item', None) and df.item.id == 4:
                     self.screen.controller.submit_shield_block((sr, sc), (er, ec))
                     self.screen.init_board_ui()
+                    self.screen.ai_event = None
+                    self.screen.trigger_end_turn_logic(ai_color)
                     return 
                 self.screen.show_crash_overlay(atk, df, (sr, sc), (er, ec))
                 return

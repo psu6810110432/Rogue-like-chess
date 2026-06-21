@@ -171,7 +171,7 @@ class SetupSection(BoxLayout):
         self.app.selected_time_limit = None  # None = no selection yet
 
         # 1. SELECT MATCH TYPE
-        self.type_box = BoxLayout(orientation='vertical', size_hint_y=0.15, spacing=5)
+        self.type_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(100), spacing=5)
         self.add_header(self.type_box, "1. SELECT MATCH TYPE")
         
         type_grid = GridLayout(cols=3, spacing=15)
@@ -191,7 +191,7 @@ class SetupSection(BoxLayout):
         self.add_widget(self.type_box)
 
         # 2. SELECT GAME MODE
-        self.mode_box = BoxLayout(orientation='vertical', size_hint_y=0.15, spacing=5, opacity=0, disabled=True)
+        self.mode_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(100), spacing=5, opacity=0, disabled=True)
         self.add_header(self.mode_box, "2. SELECT GAME MODE")
         
         mode_grid = GridLayout(cols=2, spacing=20)
@@ -211,7 +211,7 @@ class SetupSection(BoxLayout):
         self.add_widget(self.mode_box)
 
         # 3. SELECT MAP / SIZE (Dynamically changes based on Mode)
-        self.map_box = BoxLayout(orientation='vertical', size_hint_y=0.18, spacing=5, opacity=0, disabled=True)
+        self.map_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(110), spacing=5, opacity=0, disabled=True)
         self.map_header_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(10))
         self.map_box.add_widget(self.map_header_layout)
         
@@ -220,7 +220,7 @@ class SetupSection(BoxLayout):
         self.add_widget(self.map_box)
 
         # 3.5 TURN TIMER LIMIT (Classic Chess only)
-        self.timer_box = BoxLayout(orientation='vertical', size_hint_y=0.12, spacing=5, opacity=0, disabled=True)
+        self.timer_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(90), spacing=5, opacity=0, disabled=True)
         self.add_header(self.timer_box, "TURN TIMER LIMIT")
         timer_grid = GridLayout(cols=4, spacing=12)
         self.timer_cards = []
@@ -240,7 +240,7 @@ class SetupSection(BoxLayout):
         self.add_widget(self.timer_box)
 
         # 4. SELECT FACTIONS
-        self.fac_box = BoxLayout(orientation='vertical', size_hint_y=0.40, spacing=5, opacity=0, disabled=True)
+        self.fac_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(280), spacing=5, opacity=0, disabled=True)
         self.add_header(self.fac_box, "4. CHOOSE YOUR LEGION", clickable_info=True)
         
         self.fac_split = BoxLayout(orientation='horizontal', spacing=30)
@@ -273,6 +273,9 @@ class SetupSection(BoxLayout):
         self.fac_split.add_widget(self.b_box)
         self.fac_box.add_widget(self.fac_split)
         self.add_widget(self.fac_box)
+
+        # Bottom spacer: absorbs leftover vertical space so sections stay anchored to the top
+        self.add_widget(Widget(size_hint_y=1))
 
         self.update_selections()
 
@@ -336,7 +339,7 @@ class SetupSection(BoxLayout):
             Animation(opacity=1, duration=0.3).start(self.map_box)
             # Keep timer hidden until map is selected
             self.timer_box.disabled = True
-            self.timer_box.size_hint_y = 0
+            self.timer_box.height = dp(0)
             self.timer_box.opacity = 0
         else:
             self.mode_box.disabled = False
@@ -358,13 +361,13 @@ class SetupSection(BoxLayout):
         # Hide timer when switching to Divide & Conquer
         if instance.val != 'Classic':
             self.timer_box.disabled = True
-            self.timer_box.size_hint_y = 0
+            self.timer_box.height = dp(0)
             Animation(opacity=0, duration=0.2).start(self.timer_box)
             self.app.selected_time_limit = None  # Reset selection
         else:
             # Keep timer hidden until a map is selected
             self.timer_box.disabled = True
-            self.timer_box.size_hint_y = 0
+            self.timer_box.height = dp(0)
             self.timer_box.opacity = 0
 
     def load_map_options(self):
@@ -442,7 +445,7 @@ class SetupSection(BoxLayout):
         if self.app.sub_mode == 'Classic':
             def _show_timer(dt):
                 self.timer_box.disabled = False
-                self.timer_box.size_hint_y = 0.12
+                self.timer_box.height = dp(90)
                 Animation(opacity=1, duration=0.3).start(self.timer_box)
                 self.update_selections()
             Clock.schedule_once(_show_timer, 0.15)

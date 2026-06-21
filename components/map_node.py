@@ -149,19 +149,19 @@ class MapNode(Button):
             else:
                 self.aura = None
 
-            Color(0.4, 0.3, 0.2, 1)
+            Color(0.9, 0.15, 0.1, 1)
             self.sv_lines = []
             for sv in self.sub_villages:
-                l = Line(width=1.5)
+                l = Line(width=dp(2.5))
                 self.sv_lines.append((l, sv['rel_pos']))
                 sv['a_lines'] = []
                 for ad in sv['addon_data']:
-                    al = Line(width=1)
+                    al = Line(width=dp(2))
                     sv['a_lines'].append((al, sv['rel_pos'], ad['rel_pos']))
 
             self.main_a_lines = []
             for ad in self.addon_data:
-                al = Line(width=1.5)
+                al = Line(width=dp(2.5))
                 self.main_a_lines.append((al, ad['rel_pos']))
                 
             Color(1, 1, 1, 1)

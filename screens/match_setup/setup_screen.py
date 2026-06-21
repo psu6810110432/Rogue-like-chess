@@ -1,6 +1,7 @@
 # screens/match_setup/setup_screen.py
 from kivy.uix.screenmanager import Screen, ScreenManager, FadeTransition
 from kivy.uix.boxlayout import BoxLayout
+from kivy.metrics import dp
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 from kivy.app import App 
@@ -32,7 +33,7 @@ class MatchSetupScreen(Screen):
         # ==========================================
         main_layout = BoxLayout(orientation='vertical', padding=[30, 20, 30, 20], spacing=15)
         
-        top_bar = BoxLayout(size_hint_y=0.1, spacing=20)
+        top_bar = BoxLayout(size_hint_y=None, height=dp(60), spacing=20)
         back_btn = RoundedButton(text="< Back", normal_color=(0.2, 0.2, 0.25, 0.9), size_hint_x=0.15, font_size='18sp')
         back_btn.bind(on_press=self.play_sound, on_release=self.go_back)
         top_bar.add_widget(back_btn)
@@ -43,10 +44,10 @@ class MatchSetupScreen(Screen):
         top_bar.add_widget(BoxLayout(size_hint_x=0.15))
         main_layout.add_widget(top_bar)
         
-        self.setup_ui = SetupSection(size_hint_y=0.75)
+        self.setup_ui = SetupSection(size_hint_y=1)
         main_layout.add_widget(self.setup_ui)
         
-        start_btn = RoundedButton(text="ENGAGE BATTLE", normal_color=(0.55, 0.15, 0.05, 1), size_hint_y=0.15, bold=True, font_size='28sp')
+        start_btn = RoundedButton(text="ENGAGE BATTLE", normal_color=(0.55, 0.15, 0.05, 1), size_hint_y=None, height=dp(55), bold=True, font_size='28sp')
         start_btn.bind(on_press=self.play_sound, on_release=self.start_game)
         main_layout.add_widget(start_btn)
         

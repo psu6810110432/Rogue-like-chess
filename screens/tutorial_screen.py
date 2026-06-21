@@ -44,7 +44,7 @@ class TutSelectionPopup(ModalView):
 
 # ----------------- General Tutorial Popup Window -----------------
 class TutPopup(ModalView):
-    def __init__(self, title, text, on_next, show_pieces=False, show_kings=False, item_img=None, show_droppers=False, btn_align='right', custom_widget=None, **kwargs):
+    def __init__(self, title, text, on_next, show_pieces=False, show_kings=False, item_img=None, show_droppers=False, btn_align='right', custom_widget=None, on_prev=None, **kwargs):
         super().__init__(size_hint=(0.75, 0.75), auto_dismiss=False, background_color=(0,0,0,0.8), **kwargs)
         
         root = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(10))
@@ -105,8 +105,26 @@ class TutPopup(ModalView):
         content_box.add_widget(lbl)
         root.add_widget(content_box)
 
-        btn_box = BoxLayout(orientation='horizontal', size_hint_y=0.15)
-        next_btn = Button(text="[b]NEXT[/b]", markup=True, size_hint_x=0.4, background_color=(0.2, 0.6, 0.2, 1))
+        btn_box = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(15))
+        
+        from kivy.uix.anchorlayout import AnchorLayout
+        
+        if on_prev:
+            is_exit = isinstance(on_prev, dict) and on_prev.get('is_exit', False)
+            prev_cb = on_prev.get('callback') if isinstance(on_prev, dict) else on_prev
+            prev_text = "[b]QUIT TUTORIAL[/b]" if is_exit else "[b]<< PREV[/b]"
+            prev_color = (0.8, 0.2, 0.2, 1) if is_exit else (0.6, 0.3, 0.1, 1)
+            prev_btn = Button(text=prev_text, markup=True, size_hint=(None, None), size=(dp(200), dp(50)), background_color=prev_color)
+            def _on_prev(*args, cb=prev_cb):
+                App.get_running_app().play_click_sound()
+                self.dismiss()
+                if cb: cb()
+            prev_btn.bind(on_release=_on_prev)
+            prev_anchor = AnchorLayout(anchor_x='center', anchor_y='center')
+            prev_anchor.add_widget(prev_btn)
+            btn_box.add_widget(prev_anchor)
+        
+        next_btn = Button(text="[b]NEXT[/b]", markup=True, size_hint=(None, None), size=(dp(200), dp(50)), background_color=(0.2, 0.6, 0.2, 1))
         
         def _on_next(*args):
             App.get_running_app().play_click_sound()
@@ -114,12 +132,9 @@ class TutPopup(ModalView):
             if on_next: on_next()
         next_btn.bind(on_release=_on_next)
 
-        if btn_align == 'right':
-            btn_box.add_widget(Label(size_hint_x=0.6))
-            btn_box.add_widget(next_btn)
-        else:
-            btn_box.add_widget(next_btn)
-            btn_box.add_widget(Label(size_hint_x=0.6))
+        btn_anchor = AnchorLayout(anchor_x='center', anchor_y='center')
+        btn_anchor.add_widget(next_btn)
+        btn_box.add_widget(btn_anchor)
             
         root.add_widget(btn_box)
         self.add_widget(root)
@@ -212,19 +227,86 @@ class TutorialScreen(GameplayScreen):
         self.tut_state = ''
         self.classic_tut = ClassicTutorial(self)
         self.dnc_tut = DNCTutorial(self)
+        self.retreat_btn = None
 
     def on_enter(self):
         super().setup_game(mode='TUTORIAL')
         self.game.current_turn = 'white'
         self.tut_state = 'select_mode'
         
+        # Create singleton retreat button once (hidden by default)
+        if self.retreat_btn and self.retreat_btn.parent:
+            self.retreat_btn.parent.remove_widget(self.retreat_btn)
+        self.retreat_btn = Button(
+            text="[b]<< PREV[/b]", markup=True, font_size='16sp',
+            size_hint=(None, None), size=(dp(180), dp(50)),
+            pos_hint={'x': 0.02, 'top': 0.98},
+            background_color=(0.6, 0.3, 0.1, 1),
+            opacity=0, disabled=True
+        )
+        self.retreat_btn.bind(on_release=self.go_to_previous_step)
+        self.root_layout.add_widget(self.retreat_btn)
+        
         Clock.schedule_once(lambda dt: TutSelectionPopup(
             on_classic=self.classic_tut.start,
             on_dnc=self.dnc_tut.start
         ).open(), 0.5)
 
+    def show_retreat_button(self, step_index):
+        """Toggle retreat button visibility and text based on step index."""
+        if not self.retreat_btn:
+            return
+        self.retreat_btn.opacity = 1
+        self.retreat_btn.disabled = False
+        if step_index <= 0:
+            self.retreat_btn.text = "[b]QUIT TUTORIAL[/b]"
+            self.retreat_btn.background_color = (0.8, 0.2, 0.2, 1)
+        else:
+            self.retreat_btn.text = "[b]<< PREV[/b]"
+            self.retreat_btn.background_color = (0.6, 0.3, 0.1, 1)
+
+    def hide_retreat_button(self):
+        """Hide the retreat button."""
+        if self.retreat_btn:
+            self.retreat_btn.opacity = 0
+            self.retreat_btn.disabled = True
+
+    def exit_tutorial(self):
+        """Cleanly exit the tutorial and return to main menu."""
+        # Cleanup DNC state if active
+        if self.tut_state.startswith('dnc'):
+            self.dnc_tut.cleanup()
+        self.hide_retreat_button()
+        self.manager.current = 'main_menu'
+
+    def go_to_previous_step(self, instance):
+        """Delegate retreat to the active tutorial, or exit at step 0."""
+        App.get_running_app().play_click_sound()
+        if self.tut_state.startswith('dnc'):
+            if self.dnc_tut.current_step <= 0:
+                self.exit_tutorial()
+            else:
+                self.dnc_tut.go_back()
+        else:
+            if self.classic_tut.current_step <= 0:
+                self.exit_tutorial()
+            else:
+                self.classic_tut.go_back()
+
     def show_popup(self, title, text, on_next=None, show_pieces=False, show_kings=False, item_img=None, show_droppers=False, btn_align='right', custom_widget=None):
-        TutPopup(title, text, on_next, show_pieces, show_kings, item_img, show_droppers, btn_align, custom_widget).open()
+        # Auto-wire on_prev: EXIT at step 0, go_back at step 1+
+        on_prev = None
+        if self.tut_state.startswith('dnc'):
+            if self.dnc_tut.current_step <= 0:
+                on_prev = {'callback': self.exit_tutorial, 'is_exit': True}
+            else:
+                on_prev = self.dnc_tut.go_back
+        elif self.tut_state != 'select_mode':
+            if self.classic_tut.current_step <= 0:
+                on_prev = {'callback': self.exit_tutorial, 'is_exit': True}
+            else:
+                on_prev = self.classic_tut.go_back
+        TutPopup(title, text, on_next, show_pieces, show_kings, item_img, show_droppers, btn_align, custom_widget, on_prev=on_prev).open()
         
     def _create_dummy(self, cls, color, faction):
         p = cls(color, faction)
@@ -239,6 +321,38 @@ class TutorialScreen(GameplayScreen):
         
         if hasattr(self, 'board_anchor'): self._keep_grid_square(self.board_anchor, self.board_anchor.size)
         self.refresh_ui()
+
+    def on_square_tap(self, instance):
+        """Override: intercept taps during D&C Phase 1 to show piece status only."""
+        if self.tut_state == 'dnc_phase1':
+            App.get_running_app().play_click_sound()
+            r, c = instance.row, instance.col
+            piece = self.game.board[r][c]
+            # Toggle: clicking the already-selected square deselects
+            if self.selected == (r, c):
+                self.selected = None
+                self.hide_piece_status()
+                self.refresh_ui()
+                return
+            if piece and piece.color == 'white':
+                self.selected = (r, c)
+                # Highlight the selected square; clear all others
+                for (pr, pc), sq in self.squares.items():
+                    sq.update_square_style(
+                        highlight=((pr, pc) == (r, c)),
+                        is_legal=False, is_check=False, is_last=False
+                    )
+                    p = self.game.board[pr][pc]
+                    sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+                self.show_piece_status(piece)
+            else:
+                # Clicked empty square — deselect
+                self.selected = None
+                self.hide_piece_status()
+                self.refresh_ui()
+            return
+        # All other tutorial states: delegate to parent GameplayScreen
+        super().on_square_tap(instance)
 
     def check_winner(self): pass
     def check_game_over(self): pass
@@ -320,26 +434,56 @@ class TutorialScreen(GameplayScreen):
                 self.tut_state = 'step5_attack2_wait'
                 Clock.schedule_once(lambda dt: self.classic_tut.setup_step5_attack2(), 0.5)
 
-    def show_next_step_button(self, on_click):
-        if not hasattr(self, 'next_step_btn'):
+    def show_next_step_button(self, on_click, pos_hint=None, use_sidebar=None):
+        """Show a tutorial NEXT STEP button. Auto-detects sidebar vs floating mode."""
+        # Remove any existing floating next_step_btn
+        if hasattr(self, 'next_step_btn') and self.next_step_btn and self.next_step_btn.parent:
+            self.next_step_btn.parent.remove_widget(self.next_step_btn)
+            self.next_step_btn = None
+        # Also remove any sidebar version
+        if hasattr(self, 'sidebar') and self.sidebar:
+            self.sidebar.hide_tutorial_action_btn()
+
+        # Auto-detect: if play_area is hidden (map mode), use floating button
+        if use_sidebar is None:
+            use_sidebar = hasattr(self, 'play_area') and self.play_area.opacity > 0
+
+        if use_sidebar:
+            def _cb():
+                App.get_running_app().play_click_sound()
+                self.sidebar.hide_tutorial_action_btn()
+                if on_click: on_click()
+            self.sidebar.show_tutorial_action_btn("NEXT STEP >>", _cb, color=(0.15, 0.55, 0.2, 0.95))
+        else:
+            # Floating button for full-screen / map steps
+            if pos_hint is None:
+                pos_hint = {'center_x': 0.5, 'y': 0.05}
+            from kivy.uix.button import Button
             self.next_step_btn = Button(
                 text="[b]NEXT STEP >>[/b]", markup=True, font_size='18sp',
-                size_hint=(None, None), size=(dp(160), dp(55)),
-                pos_hint={'right': 0.98, 'y': 0.05},
+                size_hint=(None, None), size=(dp(200), dp(50)),
+                pos_hint=pos_hint,
                 background_color=(0.2, 0.8, 0.2, 1)
             )
-        if self.next_step_btn.parent:
-            self.next_step_btn.parent.remove_widget(self.next_step_btn)
-            
-        self.root_layout.add_widget(self.next_step_btn)
-        
-        if hasattr(self, '_next_step_cb'):
-            self.next_step_btn.unbind(on_release=self._next_step_cb)
-            
-        def _cb(instance):
+            def _cb_float(instance):
+                App.get_running_app().play_click_sound()
+                if self.next_step_btn and self.next_step_btn.parent:
+                    self.next_step_btn.parent.remove_widget(self.next_step_btn)
+                    self.next_step_btn = None
+                if on_click: on_click()
+            self.next_step_btn.bind(on_release=_cb_float)
+            self.root_layout.add_widget(self.next_step_btn)
+
+    def show_tutorial_phase_button(self, text, on_click, color=(0.15, 0.45, 0.6, 0.95)):
+        """Show a phase-specific action button (e.g. CONFIRM SETUP) in the sidebar."""
+        def _cb():
             App.get_running_app().play_click_sound()
-            self.root_layout.remove_widget(self.next_step_btn)
+            self.sidebar.hide_tutorial_action_btn()
             if on_click: on_click()
-            
-        self._next_step_cb = _cb
-        self.next_step_btn.bind(on_release=self._next_step_cb)
+
+        self.sidebar.show_tutorial_action_btn(text, _cb, color=color)
+
+    def hide_tutorial_phase_button(self):
+        """Remove the tutorial phase button from the sidebar."""
+        self.sidebar.hide_tutorial_action_btn()
+
