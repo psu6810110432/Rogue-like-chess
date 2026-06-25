@@ -12,6 +12,102 @@ from kivy.graphics import Color, RoundedRectangle, Line
 from kivy.metrics import dp
 from kivy.core.window import Window
 from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.image import Image
+
+from kivy.uix.image import Image # อย่าลืม import Image เพิ่มไว้ที่ด้านบนของไฟล์
+
+class MapSelectionCard(ButtonBehavior, BoxLayout):
+    def __init__(self, text, image_source, val, **kwargs):
+        # ตั้งค่า Layout ให้เรียงจากบนลงล่าง (รูปภาพอยู่บน ข้อความอยู่ล่าง)
+        super().__init__(orientation='vertical', padding=dp(8), spacing=dp(5), **kwargs)
+        self.val = val
+        self.is_selected = False
+        
+        with self.canvas.before:
+            self.card_bg_color = Color(0.1, 0.1, 0.12, 0.7)
+            self.card_rect = RoundedRectangle(radius=[12])
+            self.card_border_color = Color(0.3, 0.3, 0.35, 1)
+            self.card_border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, 12], width=1.2)
+            
+        self.bind(pos=self.update_graphics, size=self.update_graphics, state=self.update_state)
+
+        # 1. เพิ่มส่วนรูปภาพ
+        self.img = Image(source=image_source, allow_stretch=True, keep_ratio=False, size_hint_y=0.75)
+        self.add_widget(self.img)
+
+        # 2. เพิ่มส่วนข้อความ
+        self.lbl = Label(text=text, markup=True, halign='center', size_hint_y=0.25)
+        self.add_widget(self.lbl)
+
+    def update_graphics(self, *args):
+        self.card_rect.pos = self.pos
+        self.card_rect.size = self.size
+        self.card_border_line.rounded_rectangle = [self.x, self.y, self.width, self.height, 12]
+
+    def update_state(self, *args):
+        if not self.is_selected:
+            if self.state == 'down':
+                self.card_bg_color.rgba = (0.2, 0.2, 0.25, 0.8)
+            else:
+                self.card_bg_color.rgba = (0.1, 0.1, 0.12, 0.7)
+
+    def set_selected(self, selected):
+        self.is_selected = selected
+        if selected:
+            self.card_bg_color.rgba = (0.15, 0.2, 0.15, 0.85)
+            self.card_border_color.rgba = (0.83, 0.68, 0.21, 1)
+            self.card_border_line.width = 2.0
+        else:
+            self.card_bg_color.rgba = (0.1, 0.1, 0.12, 0.7)
+            self.card_border_color.rgba = (0.3, 0.3, 0.35, 1)
+            self.card_border_line.width = 1.2
+
+class IconSelectionCard(ButtonBehavior, BoxLayout):
+    def __init__(self, text, image_source, val, **kwargs):
+        # ตั้งค่า Layout แนวนอน (รูปอยู่ซ้าย ข้อความอยู่ขวา)
+        super().__init__(orientation='horizontal', padding=dp(8), spacing=dp(15), **kwargs)
+        self.val = val
+        self.is_selected = False
+        
+        with self.canvas.before:
+            self.card_bg_color = Color(0.1, 0.1, 0.12, 0.7)
+            self.card_rect = RoundedRectangle(radius=[12])
+            self.card_border_color = Color(0.3, 0.3, 0.35, 1)
+            self.card_border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, 12], width=1.2)
+            
+        self.bind(pos=self.update_graphics, size=self.update_graphics, state=self.update_state)
+
+        # 1. รูปภาพฝั่งซ้าย
+        self.img = Image(source=image_source, allow_stretch=True, keep_ratio=True, size_hint_x=0.25)
+        self.add_widget(self.img)
+
+        # 2. ข้อความฝั่งขวา
+        self.lbl = Label(text=text, markup=True, halign='left', valign='middle', size_hint_x=0.75)
+        self.lbl.bind(size=self.lbl.setter('text_size')) # ล็อกขนาดเพื่อให้ข้อความชิดซ้าย
+        self.add_widget(self.lbl)
+
+    def update_graphics(self, *args):
+        self.card_rect.pos = self.pos
+        self.card_rect.size = self.size
+        self.card_border_line.rounded_rectangle = [self.x, self.y, self.width, self.height, 12]
+
+    def update_state(self, *args):
+        if not self.is_selected:
+            if self.state == 'down':
+                self.card_bg_color.rgba = (0.2, 0.2, 0.25, 0.8)
+            else:
+                self.card_bg_color.rgba = (0.1, 0.1, 0.12, 0.7)
+
+    def set_selected(self, selected):
+        self.is_selected = selected
+        if selected:
+            self.card_bg_color.rgba = (0.15, 0.2, 0.15, 0.85)
+            self.card_border_color.rgba = (0.83, 0.68, 0.21, 1)
+            self.card_border_line.width = 2.0
+        else:
+            self.card_bg_color.rgba = (0.1, 0.1, 0.12, 0.7)
+            self.card_border_color.rgba = (0.3, 0.3, 0.35, 1)
+            self.card_border_line.width = 1.2
 
 # ------------------ ระบบ Hover Tooltip สำหรับแผนที่ ------------------
 class HoverTooltip(Label):
@@ -245,14 +341,21 @@ class SetupSection(BoxLayout):
         
         self.fac_split = BoxLayout(orientation='horizontal', spacing=30)
         
+        # กำหนดข้อมูล Legion และรูปภาพอ้างอิง[cite: 1]
+        legion_options = [
+            ('The Knight Company', 'assets/map_card/the_knight_company.png'),
+            ('The Chaos Mankind', 'assets/map_card/the_chaos_mankind.png'),
+            ('The Deep Anomaly', 'assets/map_card/the_deep_anomaly.png'),
+            ('The Ancient Runes', 'assets/map_card/the_ancient_runes.png')
+        ]
+        
         # WHITE
         self.w_box = BoxLayout(orientation='vertical', spacing=8, opacity=0)
         self.w_box.add_widget(Label(text="DIVINE ORDER (WHITE)", font_size='14sp', color=(0.8, 0.8, 0.8, 1), bold=True, size_hint_y=None, height=20))
         self.white_cards = []
-        # ✨ อัปเดตรายชื่อเผ่า และเพิ่ม Bandit
-        for f in ['The Knight Company', 'The Chaos Mankind', 'The Deep Anomaly', 'The Ancient Runes']:
-            card = SelectionCard(text=f"[b][size=16sp]{f}[/size][/b]")
-            card.val = f
+        for f_name, f_img in legion_options:
+            # เรียกใช้ IconSelectionCard แทน
+            card = IconSelectionCard(text=f"[b][size=15sp]{f_name}[/size][/b]", image_source=f_img, val=f_name)
             card.bind(on_press=self.play_sound, on_release=self.on_white_select)
             self.white_cards.append(card)
             self.w_box.add_widget(card)
@@ -261,10 +364,9 @@ class SetupSection(BoxLayout):
         self.b_box = BoxLayout(orientation='vertical', spacing=8, opacity=0)
         self.b_box.add_widget(Label(text="DARK ABYSS (BLACK)", font_size='14sp', color=(0.8, 0.8, 0.8, 1), bold=True, size_hint_y=None, height=20))
         self.black_cards = []
-        # ✨ อัปเดตรายชื่อเผ่า และเพิ่ม Bandit
-        for f in ['The Knight Company', 'The Chaos Mankind', 'The Deep Anomaly', 'The Ancient Runes']:
-            card = SelectionCard(text=f"[b][size=16sp]{f}[/size][/b]")
-            card.val = f
+        for f_name, f_img in legion_options:
+            # เรียกใช้ IconSelectionCard แทน
+            card = IconSelectionCard(text=f"[b][size=15sp]{f_name}[/size][/b]", image_source=f_img, val=f_name)
             card.bind(on_press=self.play_sound, on_release=self.on_black_select)
             self.black_cards.append(card)
             self.b_box.add_widget(card)
@@ -391,11 +493,18 @@ class SetupSection(BoxLayout):
             self.map_header_layout.add_widget(icon_container)
             
             self.map_grid.cols = 5
-            options = ['Classic Board', 'Enchanted Forest', 'Desert Ruins', 'Frozen Tundra', 'Random Board']
-            for mp in options:
+            # อัปเดต options ให้รวมที่อยู่ของไฟล์ภาพไปด้วย
+            options = [
+                ('Classic Board', 'assets/map_card/classic.png'),
+                ('Enchanted Forest', 'assets/map_card/enchanted_forest.png'),
+                ('Desert Ruins', 'assets/map_card/desert_ruins.png'),
+                ('Frozen Tundra', 'assets/map_card/frozen_trundra.png'),
+                ('Random Board', 'assets/map_card/random.png')
+            ]
+            for mp, img_src in options:
                 display_name = mp.replace(" Board", "")
-                card = SelectionCard(text=f"[b][size=15sp]{display_name}[/size][/b]")
-                card.val = mp
+                # เรียกใช้ MapSelectionCard แทน
+                card = MapSelectionCard(text=f"[b][size=15sp]{display_name}[/size][/b]", image_source=img_src, val=mp)
                 card.bind(on_press=self.play_sound, on_release=self.on_map_select)
                 self.map_cards.append(card)
                 self.map_grid.add_widget(card)
@@ -416,12 +525,15 @@ class SetupSection(BoxLayout):
             self.map_header_layout.add_widget(icon_container)
             
             self.map_grid.cols = 3
-            options = [('Size_S', 'SMALL WORLD\n[size=12sp](3 Farming Bases)[/size]'), 
-                       ('Size_M', 'MEDIUM WORLD\n[size=12sp](5 Farming Bases)[/size]'), 
-                       ('Size_L', 'LARGE WORLD\n[size=12sp](7 Farming Bases)[/size]')]
-            for val, display_name in options:
-                card = SelectionCard(text=f"[b][size=16sp]{display_name}[/size][/b]")
-                card.val = val
+            # อัปเดต options ให้รวมรูป DNC size ต่างๆ เข้าไปด้วย
+            options = [
+                ('Size_S', 'SMALL WORLD\n[size=12sp](3 Farming Bases)[/size]', 'assets/map_card/dnc_small.png'),
+                ('Size_M', 'MEDIUM WORLD\n[size=12sp](5 Farming Bases)[/size]', 'assets/map_card/dnc_medium.png'),
+                ('Size_L', 'LARGE WORLD\n[size=12sp](7 Farming Bases)[/size]', 'assets/map_card/dnc_large.png')
+            ]
+            for val, display_name, img_src in options:
+                # เรียกใช้ MapSelectionCard แทน
+                card = MapSelectionCard(text=f"[b][size=16sp]{display_name}[/size][/b]", image_source=img_src, val=val)
                 card.bind(on_press=self.play_sound, on_release=self.on_map_select)
                 self.map_cards.append(card)
                 self.map_grid.add_widget(card)
