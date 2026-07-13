@@ -14,6 +14,15 @@ from kivy.core.window import Window
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.image import Image
 
+
+def apply_nearest_texture_filter(image_widget):
+    image_widget.mag_filter = 'nearest'
+    image_widget.min_filter = 'nearest'
+    if image_widget.texture:
+        image_widget.texture.mag_filter = 'nearest'
+        image_widget.texture.min_filter = 'nearest'
+
+
 class MapSelectionCard(ButtonBehavior, BoxLayout):
     def __init__(self, text, image_source, val, **kwargs):
         super().__init__(orientation='vertical', padding=dp(8), spacing=dp(5), **kwargs)
@@ -30,6 +39,7 @@ class MapSelectionCard(ButtonBehavior, BoxLayout):
 
         # 1. เพิ่มส่วนรูปภาพ + ตั้งค่าความคมชัดผ่านการ bind texture
         self.img = Image(source=image_source, allow_stretch=True, keep_ratio=False, size_hint_y=0.75)
+        apply_nearest_texture_filter(self.img)
         self.img.bind(texture=self._update_texture_filter)
         self.add_widget(self.img)
 
@@ -39,10 +49,12 @@ class MapSelectionCard(ButtonBehavior, BoxLayout):
         self.add_widget(self.lbl)
 
     def _update_texture_filter(self, instance, texture):
-        # ทำให้รูปคมชัดแบบ Nearest
+        # ทำให้รูปคมชัดแบบ Nearest เมื่อ texture ถูกโหลดเสร็จ
         if texture:
             texture.mag_filter = 'nearest'
             texture.min_filter = 'nearest'
+            instance.mag_filter = 'nearest'
+            instance.min_filter = 'nearest'
 
     def update_graphics(self, *args):
         self.card_rect.pos = self.pos
@@ -84,6 +96,7 @@ class IconSelectionCard(ButtonBehavior, BoxLayout):
 
         # 1. รูปภาพด้านบน
         self.img = Image(source=image_source, allow_stretch=True, keep_ratio=True, size_hint_y=0.7)
+        apply_nearest_texture_filter(self.img)
         self.img.bind(texture=self._update_texture_filter)
         self.add_widget(self.img)
 
