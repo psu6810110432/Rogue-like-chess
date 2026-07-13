@@ -1,0 +1,49 @@
+# Technical Summary and Implementation Plan
+
+## Current AI Architecture
+
+- [logic/ai_logic.py](logic/ai_logic.py) is the active intelligence layer.
+- The AI currently uses a heuristic evaluator instead of a true minimax search tree.
+- `get_best_move()` enumerates legal moves, scores each candidate with a static piece-value table, and selects the highest-scoring move.
+- Base piece weights are:
+  - Pawn: 10
+  - Knight: 30
+  - Bishop: 30
+  - Rook: 50
+  - Queen: 90
+  - King: 900
+- Captures and central-board positioning raise the score for a move.
+
+## Difficulty Tiers
+
+- Difficulty is read from the running Kivy app instance in [logic/ai_controller.py](logic/ai_controller.py).
+- The controller toggles AI behavior by tier:
+  - Easy: more stochastic and less consistent move selection
+  - Normal: standard heuristic move choice
+  - Hard: same evaluation framework plus additional tactical safety checks
+- Hard mode is stronger because it inspects whether the source square is threatened and penalizes moves that expose the AI piece to attack.
+
+## Important Limitation
+
+- The current code is not a real minimax engine.
+- There is no recursive depth search, alpha-beta pruning, or deeper adversarial tree evaluation in the active implementation.
+- Therefore, the “Hard” tier is currently a tactical heuristic upgrade, not a true deep-search AI.
+
+## UI Responsiveness and Concurrency
+
+- The AI turn is scheduled with Kivy `Clock` callbacks in [logic/ai_controller.py](logic/ai_controller.py).
+- That keeps the UI event loop responsive, but the move evaluation itself still executes synchronously in [logic/ai_logic.py](logic/ai_logic.py).
+- The project does not currently offload search work into a background thread or executor.
+- If deeper minimax evaluation is added later, background execution will be required to avoid freezing the Kivy UI during long branch searches.
+
+## Recommended Future Implementation Path
+
+1. Keep the current heuristic scorer as the evaluation baseline.
+2. Add recursive minimax with difficulty-controlled depth.
+3. Add alpha-beta pruning to lower the search cost.
+4. For Hard mode, extend evaluation to include future safety, item opportunities, and tactical ruin checks.
+5. Move the search worker into a background thread or executor so the UI remains responsive.
+
+## Handoff Note
+
+This repository already has a solid heuristic AI baseline, but it does not yet implement the deeper Minimax + concurrency architecture described in the original request. The main gap is the absence of recursive search depth and background search execution.

@@ -14,11 +14,8 @@ from kivy.core.window import Window
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.image import Image
 
-from kivy.uix.image import Image # อย่าลืม import Image เพิ่มไว้ที่ด้านบนของไฟล์
-
 class MapSelectionCard(ButtonBehavior, BoxLayout):
     def __init__(self, text, image_source, val, **kwargs):
-        # ตั้งค่า Layout ให้เรียงจากบนลงล่าง (รูปภาพอยู่บน ข้อความอยู่ล่าง)
         super().__init__(orientation='vertical', padding=dp(8), spacing=dp(5), **kwargs)
         self.val = val
         self.is_selected = False
@@ -31,13 +28,21 @@ class MapSelectionCard(ButtonBehavior, BoxLayout):
             
         self.bind(pos=self.update_graphics, size=self.update_graphics, state=self.update_state)
 
-        # 1. เพิ่มส่วนรูปภาพ
+        # 1. เพิ่มส่วนรูปภาพ + ตั้งค่าความคมชัดผ่านการ bind texture
         self.img = Image(source=image_source, allow_stretch=True, keep_ratio=False, size_hint_y=0.75)
+        self.img.bind(texture=self._update_texture_filter)
         self.add_widget(self.img)
 
         # 2. เพิ่มส่วนข้อความ
-        self.lbl = Label(text=text, markup=True, halign='center', size_hint_y=0.25)
+        self.lbl = Label(text=text, markup=True, halign='center', valign='middle', size_hint_y=0.25)
+        self.lbl.bind(size=self.lbl.setter('text_size'))
         self.add_widget(self.lbl)
+
+    def _update_texture_filter(self, instance, texture):
+        # ทำให้รูปคมชัดแบบ Nearest
+        if texture:
+            texture.mag_filter = 'nearest'
+            texture.min_filter = 'nearest'
 
     def update_graphics(self, *args):
         self.card_rect.pos = self.pos
@@ -64,8 +69,8 @@ class MapSelectionCard(ButtonBehavior, BoxLayout):
 
 class IconSelectionCard(ButtonBehavior, BoxLayout):
     def __init__(self, text, image_source, val, **kwargs):
-        # ตั้งค่า Layout แนวนอน (รูปอยู่ซ้าย ข้อความอยู่ขวา)
-        super().__init__(orientation='horizontal', padding=dp(8), spacing=dp(15), **kwargs)
+        # เปลี่ยน Layout เป็นแนวตั้ง (รูปภาพอยู่บน)
+        super().__init__(orientation='vertical', padding=dp(8), spacing=dp(5), **kwargs)
         self.val = val
         self.is_selected = False
         
@@ -77,14 +82,20 @@ class IconSelectionCard(ButtonBehavior, BoxLayout):
             
         self.bind(pos=self.update_graphics, size=self.update_graphics, state=self.update_state)
 
-        # 1. รูปภาพฝั่งซ้าย
-        self.img = Image(source=image_source, allow_stretch=True, keep_ratio=True, size_hint_x=0.25)
+        # 1. รูปภาพด้านบน
+        self.img = Image(source=image_source, allow_stretch=True, keep_ratio=True, size_hint_y=0.7)
+        self.img.bind(texture=self._update_texture_filter)
         self.add_widget(self.img)
 
-        # 2. ข้อความฝั่งขวา
-        self.lbl = Label(text=text, markup=True, halign='left', valign='middle', size_hint_x=0.75)
-        self.lbl.bind(size=self.lbl.setter('text_size')) # ล็อกขนาดเพื่อให้ข้อความชิดซ้าย
+        # 2. ข้อความด้านล่าง
+        self.lbl = Label(text=text, markup=True, halign='center', valign='middle', size_hint_y=0.3)
+        self.lbl.bind(size=self.lbl.setter('text_size'))
         self.add_widget(self.lbl)
+
+    def _update_texture_filter(self, instance, texture):
+        if texture:
+            texture.mag_filter = 'nearest'
+            texture.min_filter = 'nearest'
 
     def update_graphics(self, *args):
         self.card_rect.pos = self.pos
@@ -203,7 +214,6 @@ class ClickableInfoIcon(ButtonBehavior, Label):
         if hasattr(app, 'play_click_sound'):
             app.play_click_sound()
             
-        # ✨ เช็คโหมดเพื่อเปิดคู่มือให้ถูกอัน
         if getattr(app, 'sub_mode', 'Classic') == 'Divide_Conquer':
             from components.encyclopedia_dnc_popup import EncyclopediaDNCPopup
             EncyclopediaDNCPopup().open()
@@ -259,23 +269,27 @@ class SetupSection(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(orientation='vertical', padding=[20, 10, 20, 10], spacing=15, **kwargs)
         self.app = App.get_running_app()
-        self.app.match_type = '' # PVE / LOCAL_PVP / ONLINE_PVP
-        self.app.sub_mode = ''   # Classic / Divide_Conquer
+        self.app.match_type = '' 
+        self.app.sub_mode = ''   
         self.app.selected_board = ''
         self.app.selected_unit_white = ''
         self.app.selected_unit_black = ''
-        self.app.selected_time_limit = None  # None = no selection yet
-
+        self.app.selected_time_limit = None  
+        
+        # จัดเก็บหน้าสองหน้า
+        self.page1 = BoxLayout(orientation='vertical', spacing=15)
+        self.page2 = BoxLayout(orientation='vertical', spacing=15)
+        
+        # ================= PAGE 1 =================
         # 1. SELECT MATCH TYPE
         self.type_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(100), spacing=5)
         self.add_header(self.type_box, "1. SELECT MATCH TYPE")
         
-        type_grid = GridLayout(cols=3, spacing=15)
+        type_grid = GridLayout(cols=2, spacing=15) # เหลือ 2 คอลัมน์เพราะเอา ONLINE ออก
         self.type_cards = []
         type_options = [
             ('PVE', 'PVE', 'COMMANDER vs AI'),
             ('LOCAL_PVP', 'LOCAL PVP', 'Shared Screen Duel'),
-            ('ONLINE_PVP', 'ONLINE PVP', 'Network Battle'),
         ]
         for val, title, desc in type_options:
             card = SelectionCard(text=f"[b]{title}[/b]\n[size=13sp][color=a0a0a0]{desc}[/color][/size]")
@@ -284,7 +298,7 @@ class SetupSection(BoxLayout):
             self.type_cards.append(card)
             type_grid.add_widget(card)
         self.type_box.add_widget(type_grid)
-        self.add_widget(self.type_box)
+        self.page1.add_widget(self.type_box)
 
         # 2. SELECT GAME MODE
         self.mode_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(100), spacing=5, opacity=0, disabled=True)
@@ -304,20 +318,22 @@ class SetupSection(BoxLayout):
             self.mode_cards.append(card)
             mode_grid.add_widget(card)
         self.mode_box.add_widget(mode_grid)
-        self.add_widget(self.mode_box)
+        self.page1.add_widget(self.mode_box)
 
-        # 3. SELECT MAP / SIZE (Dynamically changes based on Mode)
-        self.map_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(110), spacing=5, opacity=0, disabled=True)
+        # 3. SELECT MAP / SIZE 
+        self.map_box = BoxLayout(orientation='vertical', size_hint_y=1, spacing=5, opacity=0, disabled=True)
         self.map_header_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(10))
         self.map_box.add_widget(self.map_header_layout)
         
         self.map_grid = GridLayout(cols=5, spacing=12)
         self.map_box.add_widget(self.map_grid)
-        self.add_widget(self.map_box)
+        self.page1.add_widget(self.map_box)
 
-        # 3.5 TURN TIMER LIMIT (Classic Chess only)
-        self.timer_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(90), spacing=5, opacity=0, disabled=True)
-        self.add_header(self.timer_box, "TURN TIMER LIMIT")
+
+        # ================= PAGE 2 =================
+        # 3.5 BATTLEFIELD OPTION (TURN TIME LIMIT)
+        self.timer_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(90), spacing=5)
+        self.add_header(self.timer_box, "BATTLEFIELD OPTIONS (TIMER)")
         timer_grid = GridLayout(cols=4, spacing=12)
         self.timer_cards = []
         timer_options = [
@@ -333,15 +349,14 @@ class SetupSection(BoxLayout):
             self.timer_cards.append(card)
             timer_grid.add_widget(card)
         self.timer_box.add_widget(timer_grid)
-        self.add_widget(self.timer_box)
+        self.page2.add_widget(self.timer_box)
 
         # 4. SELECT FACTIONS
-        self.fac_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(280), spacing=5, opacity=0, disabled=True)
+        self.fac_box = BoxLayout(orientation='vertical', size_hint_y=1, spacing=5)
         self.add_header(self.fac_box, "4. CHOOSE YOUR LEGION", clickable_info=True)
         
         self.fac_split = BoxLayout(orientation='horizontal', spacing=30)
         
-        # กำหนดข้อมูล Legion และรูปภาพอ้างอิง[cite: 1]
         legion_options = [
             ('The Knight Company', 'assets/map_card/the_knight_company.png'),
             ('The Chaos Mankind', 'assets/map_card/the_chaos_mankind.png'),
@@ -350,23 +365,21 @@ class SetupSection(BoxLayout):
         ]
         
         # WHITE
-        self.w_box = BoxLayout(orientation='vertical', spacing=8, opacity=0)
+        self.w_box = BoxLayout(orientation='vertical', spacing=8)
         self.w_box.add_widget(Label(text="DIVINE ORDER (WHITE)", font_size='14sp', color=(0.8, 0.8, 0.8, 1), bold=True, size_hint_y=None, height=20))
         self.white_cards = []
         for f_name, f_img in legion_options:
-            # เรียกใช้ IconSelectionCard แทน
-            card = IconSelectionCard(text=f"[b][size=15sp]{f_name}[/size][/b]", image_source=f_img, val=f_name)
+            card = IconSelectionCard(text=f"[b][size=14sp]{f_name}[/size][/b]", image_source=f_img, val=f_name)
             card.bind(on_press=self.play_sound, on_release=self.on_white_select)
             self.white_cards.append(card)
             self.w_box.add_widget(card)
             
         # BLACK
-        self.b_box = BoxLayout(orientation='vertical', spacing=8, opacity=0)
+        self.b_box = BoxLayout(orientation='vertical', spacing=8)
         self.b_box.add_widget(Label(text="DARK ABYSS (BLACK)", font_size='14sp', color=(0.8, 0.8, 0.8, 1), bold=True, size_hint_y=None, height=20))
         self.black_cards = []
         for f_name, f_img in legion_options:
-            # เรียกใช้ IconSelectionCard แทน
-            card = IconSelectionCard(text=f"[b][size=15sp]{f_name}[/size][/b]", image_source=f_img, val=f_name)
+            card = IconSelectionCard(text=f"[b][size=14sp]{f_name}[/size][/b]", image_source=f_img, val=f_name)
             card.bind(on_press=self.play_sound, on_release=self.on_black_select)
             self.black_cards.append(card)
             self.b_box.add_widget(card)
@@ -374,12 +387,26 @@ class SetupSection(BoxLayout):
         self.fac_split.add_widget(self.w_box)
         self.fac_split.add_widget(self.b_box)
         self.fac_box.add_widget(self.fac_split)
-        self.add_widget(self.fac_box)
+        self.page2.add_widget(self.fac_box)
 
-        # Bottom spacer: absorbs leftover vertical space so sections stay anchored to the top
-        self.add_widget(Widget(size_hint_y=1))
-
+        # เริ่มต้นแสดงหน้าแรก
+        self.add_widget(self.page1)
+        self.current_page = 1
         self.update_selections()
+
+    def switch_page(self, page_num):
+        # สลับการแสดงผลหน้าของ UI
+        self.clear_widgets()
+        if page_num == 1:
+            self.add_widget(self.page1)
+            self.current_page = 1
+        elif page_num == 2:
+            self.add_widget(self.page2)
+            self.current_page = 2
+        
+        # อัปเดตปุ่มใน SetupScreen (ถ้ามีการผูกไว้)
+        if hasattr(self, 'screen_ref'):
+            self.screen_ref.update_buttons()
 
     def add_header(self, parent_box, text, tooltip_text=None, clickable_info=False):
         header_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(10))
@@ -419,39 +446,10 @@ class SetupSection(BoxLayout):
         self.app.match_type = instance.val
         self.update_selections()
         
-        # Online PVP: auto-select Classic, lock out D&C
-        is_online = (instance.val == 'ONLINE_PVP')
-        for c in self.mode_cards:
-            if c.val == 'Divide_Conquer':
-                c.disabled = is_online
-                c.opacity = 0.35 if is_online else 1.0
-            else:
-                c.disabled = False
-                c.opacity = 1.0
-        
-        if is_online:
-            # Auto-select Classic Chess for online
-            self.app.sub_mode = 'Classic'
-            self.update_selections()
-            self.load_map_options()
-            self.mode_box.disabled = False
-            Animation(opacity=1, duration=0.3).start(self.mode_box)
-            # Also reveal the map section immediately
-            self.map_box.disabled = False
-            Animation(opacity=1, duration=0.3).start(self.map_box)
-            # Keep timer hidden until map is selected
-            self.timer_box.disabled = True
-            self.timer_box.height = dp(0)
-            self.timer_box.opacity = 0
-        else:
-            self.mode_box.disabled = False
-            Animation(opacity=1, duration=0.3).start(self.mode_box)
+        self.mode_box.disabled = False
+        Animation(opacity=1, duration=0.3).start(self.mode_box)
 
     def on_mode_select(self, instance):
-        # Block D&C selection when online
-        if instance.val == 'Divide_Conquer' and self.app.match_type == 'ONLINE_PVP':
-            return
-        
         self.app.sub_mode = instance.val
         
         self.load_map_options()
@@ -460,17 +458,16 @@ class SetupSection(BoxLayout):
         self.map_box.disabled = False
         Animation(opacity=1, duration=0.3).start(self.map_box)
 
-        # Hide timer when switching to Divide & Conquer
-        if instance.val != 'Classic':
-            self.timer_box.disabled = True
-            self.timer_box.height = dp(0)
-            Animation(opacity=0, duration=0.2).start(self.timer_box)
-            self.app.selected_time_limit = None  # Reset selection
-        else:
-            # Keep timer hidden until a map is selected
+        # จัดการการแสดงผลของ Timer Box สำหรับหน้าที่ 2
+        if instance.val == 'Divide_Conquer':
             self.timer_box.disabled = True
             self.timer_box.height = dp(0)
             self.timer_box.opacity = 0
+            self.app.selected_time_limit = None
+        else:
+            self.timer_box.disabled = False
+            self.timer_box.height = dp(90)
+            self.timer_box.opacity = 1
 
     def load_map_options(self):
         self.map_header_layout.clear_widgets()
@@ -493,7 +490,6 @@ class SetupSection(BoxLayout):
             self.map_header_layout.add_widget(icon_container)
             
             self.map_grid.cols = 5
-            # อัปเดต options ให้รวมที่อยู่ของไฟล์ภาพไปด้วย
             options = [
                 ('Classic Board', 'assets/map_card/classic.png'),
                 ('Enchanted Forest', 'assets/map_card/enchanted_forest.png'),
@@ -503,7 +499,6 @@ class SetupSection(BoxLayout):
             ]
             for mp, img_src in options:
                 display_name = mp.replace(" Board", "")
-                # เรียกใช้ MapSelectionCard แทน
                 card = MapSelectionCard(text=f"[b][size=15sp]{display_name}[/size][/b]", image_source=img_src, val=mp)
                 card.bind(on_press=self.play_sound, on_release=self.on_map_select)
                 self.map_cards.append(card)
@@ -525,14 +520,12 @@ class SetupSection(BoxLayout):
             self.map_header_layout.add_widget(icon_container)
             
             self.map_grid.cols = 3
-            # อัปเดต options ให้รวมรูป DNC size ต่างๆ เข้าไปด้วย
             options = [
                 ('Size_S', 'SMALL WORLD\n[size=12sp](3 Farming Bases)[/size]', 'assets/map_card/dnc_small.png'),
                 ('Size_M', 'MEDIUM WORLD\n[size=12sp](5 Farming Bases)[/size]', 'assets/map_card/dnc_medium.png'),
                 ('Size_L', 'LARGE WORLD\n[size=12sp](7 Farming Bases)[/size]', 'assets/map_card/dnc_large.png')
             ]
             for val, display_name, img_src in options:
-                # เรียกใช้ MapSelectionCard แทน
                 card = MapSelectionCard(text=f"[b][size=16sp]{display_name}[/size][/b]", image_source=img_src, val=val)
                 card.bind(on_press=self.play_sound, on_release=self.on_map_select)
                 self.map_cards.append(card)
@@ -541,36 +534,14 @@ class SetupSection(BoxLayout):
     def on_timer_select(self, instance):
         self.app.selected_time_limit = instance.val
         self.update_selections()
-        
-        # Reveal the Legion section after timer is selected
-        def _show_factions(dt):
-            self.fac_box.disabled = False
-            Animation(opacity=1, duration=0.3).start(self.fac_box)
-            Animation(opacity=1, duration=0.3).start(self.w_box)
-        Clock.schedule_once(_show_factions, 0.15)
 
     def on_map_select(self, instance):
         self.app.selected_board = instance.val
         self.update_selections()
-        
-        # Show timer section with cascade delay (Classic mode only)
-        if self.app.sub_mode == 'Classic':
-            def _show_timer(dt):
-                self.timer_box.disabled = False
-                self.timer_box.height = dp(90)
-                Animation(opacity=1, duration=0.3).start(self.timer_box)
-                self.update_selections()
-            Clock.schedule_once(_show_timer, 0.15)
-        else:
-            # Divide & Conquer: skip timer, show factions directly
-            self.fac_box.disabled = False
-            Animation(opacity=1, duration=0.3).start(self.fac_box)
-            Animation(opacity=1, duration=0.3).start(self.w_box)
 
     def on_white_select(self, instance):
         self.app.selected_unit_white = instance.val
         self.update_selections()
-        Animation(opacity=1, duration=0.3).start(self.b_box)
 
     def on_black_select(self, instance):
         self.app.selected_unit_black = instance.val

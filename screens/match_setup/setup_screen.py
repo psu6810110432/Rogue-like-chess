@@ -45,17 +45,39 @@ class MatchSetupScreen(Screen):
         main_layout.add_widget(top_bar)
         
         self.setup_ui = SetupSection(size_hint_y=1)
+        self.setup_ui.screen_ref = self # เชื่อมโยง Reference กลับมาเพื่อใช้อัปเดตปุ่ม
         main_layout.add_widget(self.setup_ui)
         
-        start_btn = RoundedButton(text="ENGAGE BATTLE", normal_color=(0.55, 0.15, 0.05, 1), size_hint_y=None, height=dp(55), bold=True, font_size='28sp')
-        start_btn.bind(on_press=self.play_sound, on_release=self.start_game)
-        main_layout.add_widget(start_btn)
+        # คอนเทนเนอร์สำหรับปุ่มควบคุมด้านล่าง (Next / Previous / Engage)
+        self.btn_layout = BoxLayout(size_hint_y=None, height=dp(55), spacing=15)
+        
+        self.next_btn = RoundedButton(text="NEXT >", normal_color=(0.15, 0.45, 0.75, 1), bold=True, font_size='28sp')
+        self.next_btn.bind(on_press=self.play_sound, on_release=self.go_next)
+        
+        self.prev_btn = RoundedButton(text="< PREVIOUS", normal_color=(0.4, 0.4, 0.4, 1), size_hint_x=0.3, bold=True, font_size='22sp')
+        self.prev_btn.bind(on_press=self.play_sound, on_release=self.go_prev)
+        
+        self.start_btn = RoundedButton(text="ENGAGE BATTLE", normal_color=(0.55, 0.15, 0.05, 1), size_hint_x=0.7, bold=True, font_size='28sp')
+        self.start_btn.bind(on_press=self.play_sound, on_release=self.start_game)
+        
+        main_layout.add_widget(self.btn_layout)
+        self.update_buttons() # แสดงปุ่มเริ่มต้น
         
         self.add_widget(main_layout)
 
-    def update_rect(self, *args):
-        self.overlay.pos = self.pos
-        self.overlay.size = self.size
+    def update_buttons(self):
+        self.btn_layout.clear_widgets()
+        if self.setup_ui.current_page == 1:
+            self.btn_layout.add_widget(self.next_btn)
+        else:
+            self.btn_layout.add_widget(self.prev_btn)
+            self.btn_layout.add_widget(self.start_btn)
+
+    def go_next(self, instance):
+        self.setup_ui.switch_page(2)
+
+    def go_prev(self, instance):
+        self.setup_ui.switch_page(1)
 
     def on_enter(self, *args):
         super().on_enter(*args)
@@ -69,7 +91,6 @@ class MatchSetupScreen(Screen):
             self.bg_clock.cancel()
 
     def auto_change_bg(self, dt):
-        # รายชื่อฉากแค่ 3 อันตามที่คุณต้องการ
         scene_order = ['menu', 'stage1', 'stage2']
         current_scene = self.bg_manager.current
         if current_scene in scene_order:
@@ -95,10 +116,7 @@ class MatchSetupScreen(Screen):
         if not getattr(app, 'selected_unit_black', None): app.selected_unit_black = 'Demon'
         if getattr(app, 'selected_time_limit', None) is None: app.selected_time_limit = 0
 
-        if app.match_type == 'ONLINE_PVP':
-            app.game_mode = 'ONLINE_PVP'
-            app.sub_mode = 'Classic'  
-        elif app.match_type == 'LOCAL_PVP':
+        if app.match_type == 'LOCAL_PVP':
             app.game_mode = 'PVP'
         else:
             app.game_mode = app.match_type  
