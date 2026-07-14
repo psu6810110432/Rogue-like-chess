@@ -25,6 +25,8 @@ class Piece:
         self.active_buffs = []
         self.def_stacks = 0
         self.rg_upgrades = 0
+        self.rg_atk_buffs = 0
+        self.rg_def_buffs = 0
 
     def tick_turn(self): pass
     def mark_moved(self): self.has_moved_this_turn = True
@@ -273,12 +275,15 @@ class Royalguard(Piece):
         self.cannot_get_items = True
         
     def on_crash_win(self):
-        if self.rg_upgrades < 8:
+        total_buffs = self.rg_atk_buffs + self.rg_def_buffs
+        if total_buffs < 8:
             if random.choice([True, False]):
                 self.base_atk += 1
+                self.rg_atk_buffs += 1
             else:
                 self.base_def += 1
-            self.rg_upgrades += 1
+                self.rg_def_buffs += 1
+            self.rg_upgrades = total_buffs + 1
             
     def is_valid_move(self, s, e, b):
         if s == e: return False

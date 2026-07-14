@@ -34,13 +34,20 @@ class BuildCard(ButtonBehavior, FloatLayout):
         lbl_box = BoxLayout(orientation='vertical', size_hint=(0.55, 0.9), pos_hint={'right': 0.95, 'center_y': 0.5})
         lbl_box.add_widget(Label(text=f"[b]{title}[/b]", markup=True, font_size='14sp', halign='center'))
         lbl_box.add_widget(Label(text=f"[size=11sp]{desc}[/size]", markup=True, halign='center'))
-        lbl_box.add_widget(Label(text=f"[color=ffff00]Cost: {cost} Tax[/color]", markup=True, font_size='12sp', halign='center'))
+        
+        # Cost with Tax icon using BoxLayout
+        cost_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(20), spacing=dp(3))
+        tax_img = Image(source='assets/icon_effect/tax.png', size_hint_x=None, width=16)
+        tax_img.texture.mag_filter = 'nearest' if tax_img.texture else 'linear'
+        cost_box.add_widget(tax_img)
+        cost_box.add_widget(Label(text=f"{cost}", font_size='12sp', halign='center', color=(1, 1, 0, 1)))
+        lbl_box.add_widget(cost_box)
+        
         self.add_widget(lbl_box)
 
     def _update_bg(self, instance, value):
         self.bg.pos, self.bg.size = instance.pos, instance.size
 
-# --- Helper สำหรับสร้าง Nav ข้างบน Popup ---
 def create_subvillage_nav(panel, popup_instance):
     nav_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(40), spacing=dp(5))
     if panel.current_node.node_type != 'castle': 
@@ -75,16 +82,16 @@ class RecruitPopup(ModalView):
         self.root_box.bind(pos=self._update_bg, size=self._update_bg)
         
         self.header = BoxLayout(size_hint_y=None, height=dp(40))
-        self.title = Label(text="[b]RECRUITMENT CAMP[/b]", markup=True, font_size='22sp', halign='left', color=(0.3, 0.8, 0.3, 1))
-        self.title.bind(size=self.title.setter('text_size'))
-        self.status_lbl = Label(text="", markup=True, font_size='16sp', halign='right')
-        self.status_lbl.bind(size=self.status_lbl.setter('text_size'))
+        self.title = Label(text="[b]RECRUITMENT CAMP[/b]", markup=True, font_size='22sp', halign='left', color=(0.3, 0.8, 0.3, 1), size_hint_x=0.4)
+        
+        # แทนที่ Label เดิมด้วย BoxLayout สำหรับแสดงค่า Tax
+        self.status_box = BoxLayout(orientation='horizontal', size_hint_x=0.4, spacing=dp(5))
         
         close_btn = Button(text="CLOSE", size_hint_x=0.2, background_color=(0.8, 0.2, 0.2, 1))
         close_btn.bind(on_release=self.dismiss)
         
         self.header.add_widget(self.title)
-        self.header.add_widget(self.status_lbl)
+        self.header.add_widget(self.status_box)
         self.header.add_widget(close_btn)
         self.root_box.add_widget(self.header)
         
@@ -98,7 +105,6 @@ class RecruitPopup(ModalView):
         
         self.root_box.add_widget(self.scroll)
         self.add_widget(self.root_box)
-        
         self.refresh_ui()
         
     def _update_bg(self, instance, value):
@@ -113,26 +119,28 @@ class RecruitPopup(ModalView):
     def refresh_ui(self):
         self.nav_container.clear_widgets()
         self.nav_container.add_widget(create_subvillage_nav(self.panel, self))
-        
         self.content_grid.clear_widgets()
+        
         tax = self.app.tax_points.get(self.node.faction, 0)
         addons = self.panel.get_active_addons()
         tav_lvl = addons.get('tavern', 1)
-        self.status_lbl.text = f"Tax: [color=00ff00]{tax}[/color] | Tavern Lvl: {tav_lvl}"
+        
+        # อัปเดต Status Box (Tax + Tavern Level)
+        self.status_box.clear_widgets()
+        tax_img = Image(source='assets/icon_effect/tax.png', size_hint_x=None, width=dp(24))
+        self.status_box.add_widget(tax_img)
+        self.status_box.add_widget(Label(text=f"{tax} | Tavern Lvl: {tav_lvl}", font_size='16sp', color=(0, 1, 0, 1), halign='left'))
         
         shop = self.panel.active_sub_village['shop_recruits'] if self.panel.active_sub_village else getattr(self.node, 'shop_recruits', {})
         
         def build_row(row_key):
             if row_key not in shop: return
             row_data = shop[row_key]
-            
-            # ดึง Title มาจาก Dictionary โดยตรง จะได้ชื่อไม่หลอกตา
             title = row_data.get('title', f"Row: {row_key}")
             req_lvl = row_data['req_lvl']
             items = row_data['data']
             
             row_title = Label(text=f"[b]{title}[/b]", markup=True, size_hint_y=None, height=dp(30), halign='center', color=(0.9,0.8,0.2,1))
-            row_title.bind(size=row_title.setter('text_size'))
             self.content_grid.add_widget(row_title)
             
             if tav_lvl < req_lvl:
@@ -140,10 +148,8 @@ class RecruitPopup(ModalView):
                 self.content_grid.add_widget(locked_btn)
                 return
 
-            # Centered row: spring Widget on each side pushes cards to center
             row_box = BoxLayout(orientation='horizontal', spacing=dp(15), size_hint_y=None, height=dp(140))
-            row_box.add_widget(Widget())  # left spring
-            
+            row_box.add_widget(Widget())  
             for idx, p_data in enumerate(items):
                 if p_data is None:
                     card = RecruitCard(None, 0, self.node.faction, self.app, None)
@@ -151,24 +157,16 @@ class RecruitPopup(ModalView):
                     p_name = p_data['name']
                     base_cost = p_data['cost']
                     final_cost = self.panel.get_discounted_price(base_cost, addons)
-                    
                     cb = lambda n, c, r=row_key, i=idx: self.on_buy_piece(n, c, r, i)
                     card = RecruitCard(p_name, final_cost, self.node.faction, self.app, cb)
-                    
                 row_box.add_widget(card)
-                
-            row_box.add_widget(Widget())  # right spring
+            row_box.add_widget(Widget())  
             self.content_grid.add_widget(row_box)
             
-        build_row('row1')
-        build_row('row2')
-        build_row('row3')
-        build_row('row4')
-        build_row('row5')
+        build_row('row1'); build_row('row2'); build_row('row3'); build_row('row4'); build_row('row5')
         
     def on_buy_piece(self, piece_name, cost, row_key, idx):
-        success = self.panel.buy_piece(piece_name, cost, row_key, idx)
-        if success:
+        if self.panel.buy_piece(piece_name, cost, row_key, idx):
             self.refresh_ui()
 
 # ----------------- Build Popup -----------------
@@ -189,16 +187,16 @@ class BuildPopup(ModalView):
         self.root_box.bind(pos=self._update_bg, size=self._update_bg)
         
         self.header = BoxLayout(size_hint_y=None, height=dp(40))
-        self.title = Label(text="[b]CONSTRUCTION[/b]", markup=True, font_size='22sp', halign='left', color=(0.8, 0.5, 0.2, 1))
-        self.title.bind(size=self.title.setter('text_size'))
-        self.status_lbl = Label(text="", markup=True, font_size='16sp', halign='right')
-        self.status_lbl.bind(size=self.status_lbl.setter('text_size'))
+        self.title = Label(text="[b]CONSTRUCTION[/b]", markup=True, font_size='22sp', halign='left', color=(0.8, 0.5, 0.2, 1), size_hint_x=0.4)
+        
+        # แท่นที่ Label เดิมด้วย BoxLayout สำหรับค่า Tax
+        self.status_box = BoxLayout(orientation='horizontal', size_hint_x=0.4, spacing=dp(5))
         
         close_btn = Button(text="CLOSE", size_hint_x=0.2, background_color=(0.8, 0.2, 0.2, 1))
         close_btn.bind(on_release=self.dismiss)
         
         self.header.add_widget(self.title)
-        self.header.add_widget(self.status_lbl)
+        self.header.add_widget(self.status_box)
         self.header.add_widget(close_btn)
         self.root_box.add_widget(self.header)
         
@@ -212,7 +210,6 @@ class BuildPopup(ModalView):
         
         self.root_box.add_widget(self.scroll)
         self.add_widget(self.root_box)
-        
         self.refresh_ui()
         
     def _update_bg(self, instance, value):
@@ -227,12 +224,16 @@ class BuildPopup(ModalView):
     def refresh_ui(self):
         self.nav_container.clear_widgets()
         self.nav_container.add_widget(create_subvillage_nav(self.panel, self))
-        
         self.content_grid.clear_widgets()
+        
         tax = self.app.tax_points.get(self.node.faction, 0)
         addons = self.panel.get_active_addons()
         
-        self.status_lbl.text = f"Tax: [color=00ff00]{tax}[/color]"
+        # อัปเดต Status Box
+        self.status_box.clear_widgets()
+        tax_img = Image(source='assets/icon_effect/tax.png', size_hint_x=None, width=dp(24))
+        self.status_box.add_widget(tax_img)
+        self.status_box.add_widget(Label(text=f"{tax}", font_size='16sp', color=(0, 1, 0, 1), halign='left'))
         
         farm_lvl = addons.get('farm', 1)
         farm_cost = farm_lvl * 5
@@ -241,18 +242,16 @@ class BuildPopup(ModalView):
             self.content_grid.add_widget(BuildCard("Farm", f"Lvl {farm_lvl} -> {farm_lvl+1}\n(+2 Tax)", farm_cost, img, lambda: self.on_upgrade_addon('farm', farm_cost)))
             
         tav_lvl = addons.get('tavern', 1)
-        tav_max = 3
         tav_cost = tav_lvl * 6
-        if tav_lvl < tav_max:
+        if tav_lvl < 3:
             img = get_addon_img('tavern', tav_lvl)
             self.content_grid.add_widget(BuildCard("Tavern", f"Lvl {tav_lvl} -> {tav_lvl+1}\n(Unlocks Units)", tav_cost, img, lambda: self.on_upgrade_addon('tavern', tav_cost)))
             
         spec = addons.get('special')
         spec_lvl = addons.get('special_lvl', 0)
         if spec and spec not in ['mine']: 
-            max_slvl = 3
             spec_cost = spec_lvl * 8
-            if spec_lvl < max_slvl:
+            if spec_lvl < 3:
                 img = get_addon_img(spec, spec_lvl)
                 self.content_grid.add_widget(BuildCard(spec.capitalize(), f"Lvl {spec_lvl} -> {spec_lvl+1}", spec_cost, img, lambda: self.on_upgrade_addon('special_lvl', spec_cost)))
                 
@@ -260,12 +259,10 @@ class BuildPopup(ModalView):
         self.panel.upgrade_addon(key, cost)
         self.refresh_ui()
 
-# ----------------- Army Status (เหมือนเดิม) -----------------
+# ----------------- Army Status (เปลี่ยน Text เป็น BoxLayout Icons) -----------------
 class ArmyStatusPopup(ModalView):
     def __init__(self, army_pieces, **kwargs):
         super().__init__(size_hint=(0.9, 0.9), background_color=(0, 0, 0, 0.8), auto_dismiss=True, **kwargs)
-
-        # ---- Root: BoxLayout with padding to inset ALL content within the border ----
         self.root_box = BoxLayout(orientation='vertical', padding=[dp(20), dp(10), dp(20), dp(10)], spacing=dp(8))
         with self.root_box.canvas.before:
             Color(0.08, 0.08, 0.1, 0.95)
@@ -274,19 +271,15 @@ class ArmyStatusPopup(ModalView):
             self.border_line = Line(rounded_rectangle=(self.root_box.x, self.root_box.y, self.root_box.width, self.root_box.height, dp(15)), width=2)
         self.root_box.bind(pos=self._update_bg, size=self._update_bg)
 
-        # ---- Header row: [spacer] [centered title] [CLOSE button] ----
         header = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(40), spacing=dp(5))
-        # Invisible spacer matching CLOSE button width to center the title
         header.add_widget(Label(size_hint_x=None, width=dp(80), text=''))
         title_lbl = Label(text="[b]ARMY STATUS[/b]", markup=True, font_size='20sp', halign='center', valign='middle', color=(0.2, 0.8, 1, 1))
-        title_lbl.bind(size=title_lbl.setter('text_size'))
         header.add_widget(title_lbl)
         close_btn = Button(text="CLOSE", size_hint_x=None, width=dp(80), background_color=(0.8, 0.2, 0.2, 1))
         close_btn.bind(on_release=self.dismiss)
         header.add_widget(close_btn)
         self.root_box.add_widget(header)
 
-        # ---- ScrollView (vertical only, no horizontal scroll) ----
         scroll = ScrollView(do_scroll_y=True, do_scroll_x=False)
         grid = GridLayout(cols=3, spacing=dp(12), padding=[dp(5), dp(5), dp(5), dp(5)], size_hint_x=1, size_hint_y=None)
         grid.bind(minimum_height=grid.setter('height'))
@@ -304,7 +297,6 @@ class ArmyStatusPopup(ModalView):
             p_cls_name = p.__class__.__name__.lower()
             tribe = getattr(p, 'tribe', 'the knight company')
             color = p.color
-            
             lvl = getattr(p, 'upgrade_level', 0)
             path = getattr(p, 'upgrade_path', 'standard')
             
@@ -316,39 +308,60 @@ class ArmyStatusPopup(ModalView):
             if p_cls_name in ['pawn', 'hastati', 'levies']:
                 num = getattr(p, 'variant', 1)
                 filename = f"{p_cls_name}{num}.png"
-            else:
-                filename = f"{p_cls_name}.png"
-                
+            else: filename = f"{p_cls_name}.png"
             if getattr(p, 'name', '') == 'Prince': filename = 'prince.png'
             
-            img_path = f"assets/pieces/{tribe}/{color}/{stage_folder}/{filename}"
-            
-            img = Image(source=img_path, size_hint=(1, 0.55), allow_stretch=True, keep_ratio=True)
+            img = Image(source=f"assets/pieces/{tribe}/{color}/{stage_folder}/{filename}", size_hint=(1, 0.55), allow_stretch=True, keep_ratio=True)
             box.add_widget(img)
             
             p_name = getattr(p, 'name', p.__class__.__name__.capitalize())
             lvl_str = f" [color=ffff00]+{lvl}[/color]" if lvl > 0 else ""
             card_title = Label(text=f"[b]{p_name}{lvl_str}[/b]", markup=True, font_size='14sp', size_hint_y=0.15, halign='center', valign='middle')
-            card_title.bind(size=card_title.setter('text_size'))
+            box.add_widget(card_title)
             
-            stats_lbl = Label(text=f"[color=ffffaa]Coin:[/color] {p.coins}  [color=ff5555]ATK:[/color] {p.base_atk}  [color=5555ff]DEF:[/color] {p.base_def}", markup=True, font_size='12sp', size_hint_y=0.15)
+            # 1. เปลี่ยนตัวหนังสือเป็น BoxLayout ATK/DEF/COIN ไอคอน
+            stats_box = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(2))
             
+            coin_img = Image(source='assets/icon_effect/base_coin.png', size_hint_x=None, width=dp(16))
+            stats_box.add_widget(coin_img)
+            stats_box.add_widget(Label(text=f"{p.coins}", font_size='12sp', color=(1, 1, 0, 1), halign='left'))
+            
+            atk_img = Image(source='assets/icon_effect/base_atk.png', size_hint_x=None, width=dp(16))
+            stats_box.add_widget(atk_img)
+            stats_box.add_widget(Label(text=f"{p.base_atk}", font_size='12sp', color=(1, 0.2, 0.2, 1), halign='left'))
+            
+            def_img = Image(source='assets/icon_effect/base_def.png', size_hint_x=None, width=dp(16))
+            stats_box.add_widget(def_img)
+            stats_box.add_widget(Label(text=f"{p.base_def}", font_size='12sp', color=(0.2, 0.6, 1, 1), halign='left'))
+            box.add_widget(stats_box)
+
+            # 2. เพิ่ม Dynamic Stats (บัฟพิเศษเฉพาะตัว)
+            dynamic_box = BoxLayout(orientation='horizontal', size_hint_y=0.1, spacing=dp(4))
+            if p_cls_name == 'menatarm' and hasattr(p, 'charge_stacks'):
+                dynamic_box.add_widget(Image(source='assets/icon_effect/charge.png', size_hint_x=None, width=dp(14)))
+                dynamic_box.add_widget(Label(text=f"{p.charge_stacks}/3", font_size='11sp', color=(0, 1, 1, 1)))
+            elif p_cls_name == 'hastati' and hasattr(p, 'def_stacks'):
+                dynamic_box.add_widget(Image(source='assets/icon_effect/buff_def.png', size_hint_x=None, width=dp(14)))
+                dynamic_box.add_widget(Label(text=f"{p.def_stacks}/5", font_size='11sp', color=(0, 1, 0, 1)))
+            elif p_cls_name == 'praetorian' and hasattr(p, 'active_buffs'):
+                dynamic_box.add_widget(Image(source='assets/icon_effect/buff_atk_def.png', size_hint_x=None, width=dp(14)))
+                dynamic_box.add_widget(Label(text=f"{len(p.active_buffs)}/5", font_size='11sp', color=(1, 0.6, 0, 1)))
+            elif p_cls_name == 'royalguard' and hasattr(p, 'rg_atk_buffs'):
+                dynamic_box.add_widget(Image(source='assets/icon_effect/buff_atk.png', size_hint_x=None, width=dp(14)))
+                dynamic_box.add_widget(Label(text=f"{p.rg_atk_buffs}", font_size='11sp', color=(1, 0.2, 0.2, 1)))
+                dynamic_box.add_widget(Image(source='assets/icon_effect/buff_def.png', size_hint_x=None, width=dp(14)))
+                dynamic_box.add_widget(Label(text=f"{p.rg_def_buffs}", font_size='11sp', color=(0.2, 0.6, 1, 1)))
+            if len(dynamic_box.children) > 0: box.add_widget(dynamic_box)
+            
+            # Passives
             hp1 = getattr(p, 'hidden_passive', None)
             desc1 = hp1.description if hp1 and getattr(hp1, 'passive_type', None) else "None"
             passives_text = f"[color=00ffcc]P1:[/color] {desc1}"
-            
             hp2 = getattr(p, 'second_hidden_passive', None)
             if hp2 and getattr(hp2, 'passive_type', None):
-                desc2 = hp2.description
-                passives_text += f"\n[color=ff00cc]P2:[/color] {desc2}"
+                passives_text += f"\n[color=ff00cc]P2:[/color] {hp2.description}"
                 
-            pass_lbl = Label(text=passives_text, markup=True, font_size='11sp', size_hint_y=0.25, halign='center', valign='middle')
-            pass_lbl.bind(size=pass_lbl.setter('text_size'))
-            
-            box.add_widget(card_title)
-            box.add_widget(stats_lbl)
-            box.add_widget(pass_lbl)
-            
+            box.add_widget(Label(text=passives_text, markup=True, font_size='11sp', size_hint_y=0.2, halign='center', valign='middle'))
             grid.add_widget(box)
             
         scroll.add_widget(grid)
@@ -359,7 +372,7 @@ class ArmyStatusPopup(ModalView):
         self.bg.pos, self.bg.size = instance.pos, instance.size
         self.border_line.rounded_rectangle = (instance.x, instance.y, instance.width, instance.height, dp(15))
 
-# ----------------- Upgrade Tree UI (เหมือนเดิม) -----------------
+# ----------------- Upgrade Tree UI (เปลี่ยน Text เป็น BoxLayout Icons) -----------------
 class TechCard(ButtonBehavior, BoxLayout):
     def __init__(self, title, desc, atk, def_pt, coins, img_path, is_unlocked, is_available, on_click_cb, **kwargs):
         super().__init__(orientation='vertical', padding=dp(10), spacing=dp(5), size_hint=(None, None), size=(dp(160), dp(200)), **kwargs)
@@ -370,17 +383,9 @@ class TechCard(ButtonBehavior, BoxLayout):
         with self.canvas.before:
             Color(0.15, 0.15, 0.2, 0.9)
             self.bg = RoundedRectangle(radius=[dp(8)])
-            
-            if is_unlocked:
-                Color(0.9, 0.8, 0.2, 1) 
-                width = 2.5
-            elif is_available:
-                Color(0.4, 0.8, 0.4, 1) 
-                width = 2
-            else:
-                Color(0.3, 0.3, 0.35, 1) 
-                width = 1.5
-                
+            if is_unlocked: Color(0.9, 0.8, 0.2, 1); width = 2.5
+            elif is_available: Color(0.4, 0.8, 0.4, 1); width = 2
+            else: Color(0.3, 0.3, 0.35, 1); width = 1.5
             self.border_line = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(8)), width=width)
             
         self.bind(pos=self._update_bg, size=self._update_bg)
@@ -390,8 +395,23 @@ class TechCard(ButtonBehavior, BoxLayout):
         if not is_unlocked and not is_available: img.opacity = 0.4
         self.add_widget(img)
         
-        stats_color = "aaaaaa" if not is_unlocked and not is_available else "ffffff"
-        self.add_widget(Label(text=f"[color={stats_color}]ATK: {atk} | DEF: {def_pt}\nCoins: {coins}[/color]", markup=True, font_size='12sp', size_hint_y=0.15, halign='center'))
+        # แทนที่ Label(ATK/DEF/Coin) ด้วย BoxLayout + Icon
+        stats_box = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(2))
+        atk_img = Image(source='assets/icon_effect/base_atk.png', size_hint_x=None, width=dp(14))
+        stats_box.add_widget(atk_img)
+        stats_box.add_widget(Label(text=f"{atk}", font_size='11sp', color=(1, 0.2, 0.2, 1)))
+        
+        def_img = Image(source='assets/icon_effect/base_def.png', size_hint_x=None, width=dp(14))
+        stats_box.add_widget(def_img)
+        stats_box.add_widget(Label(text=f"{def_pt}", font_size='11sp', color=(0.2, 0.6, 1, 1)))
+        
+        coin_img = Image(source='assets/icon_effect/base_coin.png', size_hint_x=None, width=dp(14))
+        stats_box.add_widget(coin_img)
+        stats_box.add_widget(Label(text=f"{coins}", font_size='11sp', color=(1, 1, 0, 1)))
+        
+        if not is_unlocked and not is_available: stats_box.opacity = 0.4
+        self.add_widget(stats_box)
+        
         self.add_widget(Label(text=f"[color=00ffcc]{desc}[/color]", markup=True, font_size='11sp', size_hint_y=0.15, halign='center'))
 
     def _update_bg(self, instance, value):
@@ -399,8 +419,7 @@ class TechCard(ButtonBehavior, BoxLayout):
         self.border_line.rounded_rectangle = (instance.x, instance.y, instance.width, instance.height, dp(8))
 
     def on_release(self):
-        if self.is_available and self.on_click_cb:
-            self.on_click_cb()
+        if self.is_available and self.on_click_cb: self.on_click_cb()
 
 class UpgradeTreePopup(ModalView):
     def __init__(self, piece_obj, update_callback, **kwargs):
@@ -421,7 +440,13 @@ class UpgradeTreePopup(ModalView):
         
         header = BoxLayout(orientation='horizontal', size_hint=(1, 0.1), pos_hint={'top': 1}, padding=[dp(15), dp(5)])
         p_name_display = getattr(self.piece, 'name', self.piece.__class__.__name__.capitalize())
-        header.add_widget(Label(text=f"[b]UPGRADE PATH: {p_name_display} (Cost: {self.upgrade_cost} Tax)[/b]", markup=True, font_size='20sp', halign='left', color=(1, 0.8, 0.2, 1)))
+        
+        title_box = BoxLayout(orientation='horizontal', size_hint_x=0.8, spacing=dp(5))
+        title_box.add_widget(Label(text=f"[b]UPGRADE PATH: {p_name_display} (Cost: {self.upgrade_cost}[/b]", markup=True, font_size='20sp', halign='right', color=(1, 0.8, 0.2, 1)))
+        title_box.add_widget(Image(source='assets/icon_effect/tax.png', size_hint_x=None, width=dp(20)))
+        title_box.add_widget(Label(text="[b])[/b]", markup=True, font_size='20sp', halign='left', size_hint_x=None, width=dp(20), color=(1, 0.8, 0.2, 1)))
+        
+        header.add_widget(title_box)
         
         close_btn = Button(text="CLOSE", size_hint_x=None, width=dp(80), background_color=(0.8, 0.2, 0.2, 1))
         close_btn.bind(on_release=self.dismiss)
@@ -447,7 +472,6 @@ class UpgradeTreePopup(ModalView):
         c_name = p.__class__.__name__.lower()
         tribe = getattr(p, 'tribe', 'the knight company')
         color = p.color
-        
         lvl = getattr(p, 'upgrade_level', 0)
         path = getattr(p, 'upgrade_path', 'standard')
         
@@ -472,13 +496,8 @@ class UpgradeTreePopup(ModalView):
         cx = self.width / 2 if self.width > 1 else dp(400)
         cy = self.height / 2 if self.height > 1 else dp(300)
         card_w, card_h = dp(160), dp(200)
-        
-        x_left = cx - dp(240)
-        x_mid = cx
-        x_right = cx + dp(240)
-        
-        y_top = cy + dp(120)
-        y_bot = cy - dp(120)
+        x_left, x_mid, x_right = cx - dp(240), cx, cx + dp(240)
+        y_top, y_bot = cy + dp(120), cy - dp(120)
 
         b_atk = getattr(p, 'base_atk', p.base_points) if lvl == 0 else p.base_points
         b_def = getattr(p, 'base_def', p.base_points) if lvl == 0 else p.base_points
@@ -488,33 +507,25 @@ class UpgradeTreePopup(ModalView):
         self.tree_layout.add_widget(node_base)
 
         if not has_special:
-            n1_unlocked = (lvl >= 1)
-            n1_avail = (lvl == 0)
             n1_atk = b_atk + 2
-            node_u1 = TechCard("Rank I", "+2 Base ATK", n1_atk, b_def, p.coins, atk1_img, n1_unlocked, n1_avail, lambda: self.do_upgrade("standard"))
+            node_u1 = TechCard("Rank I", "+2 Base ATK", n1_atk, b_def, p.coins, atk1_img, (lvl >= 1), (lvl == 0), lambda: self.do_upgrade("standard"))
             node_u1.pos = (x_mid - card_w/2, cy - card_h/2)
             self.tree_layout.add_widget(node_u1)
             
-            n2_unlocked = (lvl == 2)
-            n2_avail = (lvl == 1)
-            n2_def = b_def + 2
-            node_u2 = TechCard("Rank II", "+2 Base DEF", n1_atk, n2_def, p.coins, def2_img, n2_unlocked, n2_avail, lambda: self.do_upgrade("standard"))
+            node_u2 = TechCard("Rank II", "+2 Base DEF", n1_atk, b_def + 2, p.coins, def2_img, (lvl == 2), (lvl == 1), lambda: self.do_upgrade("standard"))
             node_u2.pos = (x_right - card_w/2, cy - card_h/2)
             self.tree_layout.add_widget(node_u2)
             
-            Clock.schedule_once(lambda dt: draw_line((node_base.right, node_base.center_y), (node_u1.x, node_u1.center_y), n1_unlocked), 0.1)
-            Clock.schedule_once(lambda dt: draw_line((node_u1.right, node_u1.center_y), (node_u2.x, node_u2.center_y), n2_unlocked), 0.1)
-            
+            Clock.schedule_once(lambda dt: draw_line((node_base.right, node_base.center_y), (node_u1.x, node_u1.center_y), (lvl >= 1)), 0.1)
+            Clock.schedule_once(lambda dt: draw_line((node_u1.right, node_u1.center_y), (node_u2.x, node_u2.center_y), (lvl == 2)), 0.1)
         else:
             n1_std_unlocked = (lvl >= 1 and path == "standard")
-            n1_std_avail = (lvl == 0)
-            node_u1_std = TechCard("Rank I (Combat)", "+2 Base ATK", b_atk+2, b_def, p.coins, atk1_img, n1_std_unlocked, n1_std_avail, lambda: self.do_upgrade("standard"))
+            node_u1_std = TechCard("Rank I (Combat)", "+2 Base ATK", b_atk+2, b_def, p.coins, atk1_img, n1_std_unlocked, (lvl == 0), lambda: self.do_upgrade("standard"))
             node_u1_std.pos = (x_mid - card_w/2, y_top - card_h/2)
             self.tree_layout.add_widget(node_u1_std)
             
             n2_std_unlocked = (lvl == 2 and path == "standard")
-            n2_std_avail = (lvl == 1 and path == "standard")
-            node_u2_std = TechCard("Rank II (Combat)", "+2 Base DEF", b_atk+2, b_def+2, p.coins, def2_img, n2_std_unlocked, n2_std_avail, lambda: self.do_upgrade("standard"))
+            node_u2_std = TechCard("Rank II (Combat)", "+2 Base DEF", b_atk+2, b_def+2, p.coins, def2_img, n2_std_unlocked, (lvl == 1 and path == "standard"), lambda: self.do_upgrade("standard"))
             node_u2_std.pos = (x_right - card_w/2, y_top - card_h/2)
             self.tree_layout.add_widget(node_u2_std)
             
@@ -522,20 +533,16 @@ class UpgradeTreePopup(ModalView):
             Clock.schedule_once(lambda dt: draw_line((node_u1_std.right, node_u1_std.center_y), (node_u2_std.x, node_u2_std.center_y), n2_std_unlocked), 0.1)
 
             n1_spc_unlocked = (lvl >= 1 and path == "special")
-            n1_spc_avail = (lvl == 0)
             desc1 = "Reroll Hidden Passive" if not n1_spc_unlocked else getattr(p.hidden_passive, 'description', 'Passive Re-rolled')
-            n1_spc_atk = b_atk if not n1_spc_unlocked else p.base_atk
-            n1_spc_def = b_def if not n1_spc_unlocked else p.base_def
             
-            node_u1_spc = TechCard("Rank I (Utility)", desc1, n1_spc_atk, n1_spc_def, p.coins, spec1_img, n1_spc_unlocked, n1_spc_avail, lambda: self.do_upgrade("special"))
+            node_u1_spc = TechCard("Rank I (Utility)", desc1, (p.base_atk if n1_spc_unlocked else b_atk), (p.base_def if n1_spc_unlocked else b_def), p.coins, spec1_img, n1_spc_unlocked, (lvl == 0), lambda: self.do_upgrade("special"))
             node_u1_spc.pos = (x_mid - card_w/2, y_bot - card_h/2)
             self.tree_layout.add_widget(node_u1_spc)
             
             n2_spc_unlocked = (lvl == 2 and path == "special")
-            n2_spc_avail = (lvl == 1 and path == "special")
             desc2 = "Gain 2nd Hidden Passive" if not n2_spc_unlocked else getattr(p.second_hidden_passive, 'description', '2nd Passive Active')
             
-            node_u2_spc = TechCard("Rank II (Utility)", desc2, p.base_atk, p.base_def, p.coins, spec2_img, n2_spc_unlocked, n2_spc_avail, lambda: self.do_upgrade("special"))
+            node_u2_spc = TechCard("Rank II (Utility)", desc2, p.base_atk, p.base_def, p.coins, spec2_img, n2_spc_unlocked, (lvl == 1 and path == "special"), lambda: self.do_upgrade("special"))
             node_u2_spc.pos = (x_right - card_w/2, y_bot - card_h/2)
             self.tree_layout.add_widget(node_u2_spc)
             
@@ -545,16 +552,9 @@ class UpgradeTreePopup(ModalView):
     def do_upgrade(self, path):
         app = App.get_running_app()
         app.play_click_sound()
-        
         faction = app.current_map_turn
-        if app.tax_points.get(faction, 0) < self.upgrade_cost:
-            return
-            
+        if app.tax_points.get(faction, 0) < self.upgrade_cost: return
         app.tax_points[faction] -= self.upgrade_cost
-        
-        if hasattr(self.piece, 'upgrade_piece'):
-            self.piece.upgrade_piece(path)
-            
+        if hasattr(self.piece, 'upgrade_piece'): self.piece.upgrade_piece(path)
         self.draw_tree()
-        if self.update_callback:
-            self.update_callback()
+        if self.update_callback: self.update_callback()

@@ -6,6 +6,7 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.button import Button
 from kivy.uix.label import Label
+from kivy.uix.image import Image
 from kivy.graphics import Color, Line, RoundedRectangle
 from kivy.metrics import dp
 from kivy.app import App
@@ -34,8 +35,9 @@ class CampaignArmyPanel(FloatLayout):
 
         self.header_box = BoxLayout(orientation='horizontal', size_hint=(1, 0.2), pos_hint={'top': 1, 'x': 0}, padding=[dp(10), dp(5)])
         
-        self.header_lbl = Label(text="ARMY HQ", bold=True, font_size='18sp', size_hint_x=0.3, halign='left', markup=True)
-        self.status_lbl = Label(text="", markup=True, size_hint_x=0.2, font_size='14sp')
+        # เปลี่ยนจากการใช้ Label เดียวๆ ให้เป็น BoxLayout ย่อยสำหรับแสดงชื่อ Node คู่กับ Loyalty Icon
+        self.title_box = BoxLayout(orientation='horizontal', size_hint_x=0.3, spacing=dp(5))
+        self.status_lbl = Label(text="", markup=True, size_hint_x=0.2, font_size='14sp') # สำหรับแสดงความเหนื่อยล้า
         
         self.btn_tab_army = Button(text="[b]ARMY[/b]", markup=True, size_hint_x=0.12, background_color=(0.3, 0.5, 0.8, 1))
         self.btn_tab_army.bind(on_release=lambda x: self.switch_tab('army'))
@@ -49,7 +51,7 @@ class CampaignArmyPanel(FloatLayout):
         btn_close = Button(text="CLOSE", size_hint_x=0.1, background_color=(0.5, 0.2, 0.2, 1))
         btn_close.bind(on_release=self.close_panel)
         
-        self.header_box.add_widget(self.header_lbl)
+        self.header_box.add_widget(self.title_box)
         self.header_box.add_widget(self.status_lbl)
         self.header_box.add_widget(self.btn_tab_army)
         self.header_box.add_widget(self.btn_tab_recruit)
@@ -86,13 +88,26 @@ class CampaignArmyPanel(FloatLayout):
         self.border_line.rounded_rectangle = (instance.x, instance.y, instance.width, instance.height, dp(12))
 
     def open_for_node(self, node):
-        from kivy.animation import Animation
         self.current_node = node
         self.active_sub_village = None 
         
         loyalty = getattr(node, 'loyalty', 100)
-        loyal_color = "00ff00" if loyalty >= 80 else ("ffff00" if loyalty >= 50 else "ff0000")
-        self.header_lbl.text = f"{node.faction.upper()} {node.node_type.upper()} [color={loyal_color}](Loyalty: {loyalty}%)[/color]"
+        loyal_color = (0, 1, 0, 1) if loyalty >= 80 else ((1, 1, 0, 1) if loyalty >= 50 else (1, 0, 0, 1))
+        loyalty_icon = 'loyalty_white.png' if node.faction.lower() == 'white' else 'loyalty_black.png'
+        
+        self.title_box.clear_widgets()
+        
+        # ใส่ชื่อโหนด
+        lbl_node = Label(text=f"[b]{node.faction.upper()} {node.node_type.upper()}[/b]", markup=True, font_size='18sp', halign='left')
+        self.title_box.add_widget(lbl_node)
+        
+        # ใส่ไอคอน Loyalty
+        img_loyalty = Image(source=f"assets/icon_effect/{loyalty_icon}", size_hint_x=None, width=dp(24))
+        self.title_box.add_widget(img_loyalty)
+        
+        # ใส่ค่าพลัง Loyalty
+        lbl_val = Label(text=f"{loyalty}%", font_size='16sp', color=loyal_color, halign='left')
+        self.title_box.add_widget(lbl_val)
         
         self.is_upgrade_mode = False
         
@@ -111,7 +126,6 @@ class CampaignArmyPanel(FloatLayout):
         return getattr(self.current_node, 'addons', {'farm': 1, 'tavern': 1, 'special': None, 'special_lvl': 0})
 
     def close_panel(self, *args):
-        from kivy.animation import Animation
         self.app.play_click_sound()
         for n in self.map_screen.nodes_list:
             n.is_selected_node = False
@@ -141,15 +155,12 @@ class CampaignArmyPanel(FloatLayout):
         if addons.get('special') == 'statue':
             lvl = addons.get('special_lvl', 1)
             discount = 0
-            
             if lvl == 1: discount = 1
             elif lvl == 2: discount = 2
             elif lvl >= 3: discount = math.ceil(base_cost / 2)
-            
             max_discount = math.ceil(base_cost / 2)
             actual_discount = min(discount, max_discount)
             return max(1, base_cost - actual_discount)
-            
         return base_cost
 
     def switch_tab(self, tab_name):
@@ -200,7 +211,6 @@ class CampaignArmyPanel(FloatLayout):
     def buy_piece(self, piece_name, cost, row_key, idx):
         self.app.play_click_sound()
         faction = self.current_node.faction
-            
         if self.app.tax_points.get(faction, 0) < cost: return False
         
         headers = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False))
