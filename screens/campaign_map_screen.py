@@ -14,6 +14,7 @@ from kivy.uix.modalview import ModalView
 
 from logic.campaign_helpers import get_distance, generate_piece, ensure_header, resolve_map_battle
 from logic.campaign_map_generator import MapGenerator
+from logic.campaign_ai import CampaignAI
 from components.campaign_panel import CampaignArmyPanel
 from components.map_node import MapNode
 
@@ -52,13 +53,16 @@ class CampaignMapScreen(Screen):
         
         self.nodes_list = []
         self.marching_from_node = None
+        self.campaign_ai = CampaignAI()
+        self.ai_turn_active = False
 
     def _update_top_bg(self, instance, value):
         self.top_bg.pos, self.top_bg.size = instance.pos, instance.size
 
     def jump_to_base(self, instance):
         app = App.get_running_app()
-        if hasattr(app, 'play_click_sound'): app.play_click_sound()
+        if hasattr(app, 'play_click_sound') and not self.ai_turn_active:
+            app.play_click_sound()
                 
         target_node = next((n for n in self.nodes_list if n.faction == app.current_map_turn and n.is_main_base), None)
         if target_node:
@@ -120,9 +124,17 @@ class CampaignMapScreen(Screen):
             self.marching_from_node = None
             if getattr(app, 'battle_finished', False):
                 resolve_map_battle(app, self)
+                # If the AI was mid-turn when combat started, auto-end
+                # its turn now that the battle has resolved.
+                if self.ai_turn_active:
+                    Clock.schedule_once(
+                        lambda dt: self.end_turn(None), 1.0
+                    )
 
     def go_back(self, instance):
         app = App.get_running_app()
+        self.campaign_ai.cancel()
+        self.ai_turn_active = False
         app.campaign_initialized = False 
         self.manager.current = 'setup'
 
@@ -183,12 +195,20 @@ class CampaignMapScreen(Screen):
             app.turn_number += 1
             self.status_lbl.text = f"DIVINE ORDER (WHITE) - TURN {app.turn_number}"
             self.status_lbl.color = (1, 0.8, 0.2, 1)
+            # AI turn just finished — unlock inputs
+            self.ai_turn_active = False
             
         for node in self.nodes_list:
             if node.faction == app.current_map_turn:
                 node.fatigue = max(0, getattr(node, 'fatigue', 0) - 3)
                 
         self.jump_to_base(None)
+        
+        # If Black's turn in a PVE match, hand control to the Campaign AI
+        if (app.current_map_turn == 'black'
+                and getattr(app, 'match_type', '') == 'PVE'):
+            self.ai_turn_active = True
+            self.campaign_ai.execute_turn(self, 'black')
 
     def trigger_rebellion(self, node):
         app = App.get_running_app()
@@ -215,7 +235,11 @@ class CampaignMapScreen(Screen):
 
     def end_turn(self, instance):
         app = App.get_running_app()
-        app.play_click_sound()
+        # Block the human player from pressing END TURN during the AI's turn
+        if self.ai_turn_active and instance is not None:
+            return
+        if instance is not None:
+            app.play_click_sound()
         if hasattr(self, 'army_panel'): self.army_panel.close_panel()
                 
         if self.marching_from_node:

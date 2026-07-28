@@ -237,8 +237,11 @@ class MapNode(Button):
 
     def on_release(self):
         app = App.get_running_app()
-        if hasattr(app, 'play_click_sound'): app.play_click_sound()
         map_screen = app.root.get_screen('campaign_map')
+        # Block all node interaction while the Campaign AI is taking its turn
+        if getattr(map_screen, 'ai_turn_active', False):
+            return
+        if hasattr(app, 'play_click_sound'): app.play_click_sound()
         
         if map_screen.marching_from_node:
             if self in map_screen.marching_from_node.neighbors:

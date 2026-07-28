@@ -21,7 +21,7 @@ class ChessAI:
         return ChessAI.PIECE_VALUES.get(piece_name, 10)
 
     @staticmethod
-    def get_best_move(board_obj, ai_color='black'):
+    def get_best_move(board_obj, ai_color='black', game_mode='PVP'):
         try:
             app = App.get_running_app()
             difficulty = getattr(app, 'ai_difficulty', 'normal')
@@ -44,6 +44,17 @@ class ChessAI:
 
         if not all_legal_moves:
             return None
+
+        fatigue = 0
+        if game_mode == 'Divide_Conquer':
+            try:
+                app = App.get_running_app()
+                if ai_color == 'white':
+                    fatigue = getattr(app, 'combat_marching_fatigue', 0)
+                else:
+                    fatigue = getattr(app.combat_target, 'fatigue', 0) if hasattr(app, 'combat_target') else 0
+            except:
+                pass
 
         # 🟢 ระดับ EASY: มีโอกาส 50% ที่จะเดินมั่วๆ (เพื่อจำลองการเดินพลาด/ไม่ได้คิด)
         if difficulty == 'easy':
@@ -104,6 +115,44 @@ class ChessAI:
                     score -= ChessAI.get_piece_value(our_piece) * 15 # หักคะแนนหนักมาก ห้ามเดินไปแจกฟรี
                 else:
                     score += 10 # โบนัสเลือกตาเดินที่ปลอดภัย
+                    
+            if game_mode == 'Divide_Conquer':
+                # Simulate the move to check commander safety
+                board_obj.board[sr][sc] = None
+                board_obj.board[er][ec] = our_piece
+                
+                commander_pos = None
+                for rr in range(8):
+                    for cc in range(8):
+                        p = board_obj.board[rr][cc]
+                        if p and p.color == ai_color and (p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False)):
+                            commander_pos = (rr, cc)
+                            break
+                    if commander_pos: break
+                    
+                if commander_pos:
+                    is_commander_safe = True
+                    for rr in range(8):
+                        for cc in range(8):
+                            epiece = board_obj.board[rr][cc]
+                            if epiece and epiece.color == enemy_color:
+                                if epiece.is_valid_move((rr, cc), commander_pos, board_obj.board):
+                                    is_commander_safe = False
+                                    break
+                        if not is_commander_safe: break
+                        
+                    if not is_commander_safe:
+                        score -= 9999
+                        
+                board_obj.board[er][ec] = target_piece
+                board_obj.board[sr][sc] = our_piece
+
+                # Fatigue Awareness
+                if fatigue >= 4:
+                    # White moves 'up' the board (er < sr), Black moves 'down' (er > sr)
+                    is_forward = (er < sr) if ai_color == 'white' else (er > sr)
+                    if is_forward:
+                        score -= 15
 
             # 🟢 ระดับ EASY (ในกรณีที่ไม่สุ่มในตอนแรก): สุ่มแกว่งคะแนนให้รวนๆ (เพื่อให้บางทีเมินตัวกินฟรี)
             if difficulty == 'easy':

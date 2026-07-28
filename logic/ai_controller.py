@@ -57,7 +57,7 @@ class AIController:
                     
         # 2. การตัดสินใจเดินหมาก (เหลือเฉพาะ PVE ธรรมดา)
         from logic.ai_logic import ChessAI
-        move = ChessAI.get_best_move(self.screen.game, ai_color=ai_color)
+        move = ChessAI.get_best_move(self.screen.game, ai_color=ai_color, game_mode=game_mode)
 
         # 3. จัดการขยับหมากและ Crash
         if move:

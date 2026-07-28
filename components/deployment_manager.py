@@ -55,24 +55,40 @@ class DeploymentManager:
             size=(dp(400), dp(60)), pos_hint={'center_x': 0.5, 'y': 0.1}, spacing=dp(20)
         )
         
-        btn_retreat = Button(text="[b]RETREAT[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1), font_size='18sp')
-        btn_retreat.bind(on_release=self.deployment_retreat) 
+        app = App.get_running_app()
+        attacker_faction = getattr(app.combat_source, 'faction', 'red') if hasattr(app, 'combat_source') else 'white'
+        is_ai_attacker = attacker_faction in ['black', 'red']
         
-        btn_confirm = Button(text="[b]CONFIRM SETUP[/b]", markup=True, background_color=(0.2, 0.6, 0.8, 1), font_size='18sp')
-        btn_confirm.bind(on_release=self.check_next_deployment_phase)
-        
-        self.deployment_btn_box.add_widget(btn_retreat)
-        self.deployment_btn_box.add_widget(btn_confirm)
+        if not is_ai_attacker:
+            btn_retreat = Button(text="[b]RETREAT[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1), font_size='18sp')
+            btn_retreat.bind(on_release=self.deployment_retreat) 
+            
+            btn_confirm = Button(text="[b]CONFIRM SETUP[/b]", markup=True, background_color=(0.2, 0.6, 0.8, 1), font_size='18sp')
+            btn_confirm.bind(on_release=self.check_next_deployment_phase)
+            
+            self.deployment_btn_box.add_widget(btn_retreat)
+            self.deployment_btn_box.add_widget(btn_confirm)
+            
         self.deployment_layer.add_widget(self.deployment_btn_box)
         
         self.screen.refresh_ui()
+
+        if is_ai_attacker:
+            self.deploy_lbl.text = "[color=ffaa00]PHASE 1: AI IS DEPLOYING...[/color]"
+            from logic.deployment_ai import arrange_army
+            from kivy.clock import Clock
+            arrange_army(self.screen.game.board, app.combat_marching_army, is_attacker=True)
+            self.screen.init_board_ui()
+            Clock.schedule_once(lambda dt: self.check_next_deployment_phase(None), 1.0)
 
     def check_next_deployment_phase(self, instance):
         app = App.get_running_app()
         if hasattr(app, 'play_click_sound'): app.play_click_sound()
         target_faction = getattr(app.combat_target, 'faction', 'black') if hasattr(app, 'combat_target') else 'black'
         
-        if target_faction in ['white', 'black'] and getattr(self.screen, 'game_mode', '') == 'Divide_Conquer':
+        is_ai_defender = target_faction in ['black', 'red']
+        
+        if target_faction in ['white', 'black', 'red'] and getattr(self.screen, 'game_mode', '') == 'Divide_Conquer':
             self.screen.battle_phase = 'deployment_arrange_def'
             self.screen.selected = None
             if self.black_mask in self.deployment_layer.children:
@@ -81,11 +97,23 @@ class DeploymentManager:
             self.deploy_lbl.color = (1, 0.4, 0.4, 1)
             self.deployment_btn_box.clear_widgets()
             
-            btn_confirm = Button(text="[b]CONFIRM DEFENSE[/b]", markup=True, background_color=(0.2, 0.6, 0.8, 1), font_size='18sp')
-            btn_confirm.bind(on_release=self.start_battle_phase)
-            self.deployment_btn_box.add_widget(btn_confirm)
+            if not is_ai_defender:
+                btn_confirm = Button(text="[b]CONFIRM DEFENSE[/b]", markup=True, background_color=(0.2, 0.6, 0.8, 1), font_size='18sp')
+                btn_confirm.bind(on_release=self.start_battle_phase)
+                self.deployment_btn_box.add_widget(btn_confirm)
+                
             self.screen.init_board_ui() 
             self.screen.refresh_ui()
+
+            if is_ai_defender:
+                self.deploy_lbl.text = "[color=ffaa00]PHASE 2: AI IS DEPLOYING...[/color]"
+                from logic.deployment_ai import arrange_army
+                from kivy.clock import Clock
+                arrange_army(self.screen.game.board, app.combat_target_army, is_attacker=False)
+                self.screen.init_board_ui()
+                # Next phase after AI deploys its defense is the Reveal phase,
+                # so the human attacker can see the AI's formulation before starting.
+                Clock.schedule_once(lambda dt: self.show_reveal_phase(None), 1.0)
         else:
             self.show_reveal_phase(instance)
 
