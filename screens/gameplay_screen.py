@@ -817,7 +817,7 @@ class GameplayScreen(Screen):
         if not self.crash_popup: self.info_zone.clear_widgets(); self.status_popup = None
             
     def show_crash_overlay(self, attacker, defender, start, end):
-        self.info_zone.clear_widgets()
+        self.info_zone.clear_widgets() # เคลียร์ขยะเผื่อค้าง
         App.get_running_app().play_coin_sound()
         atk_tribe = getattr(attacker, 'tribe', self.get_tribe_name(attacker.color))
         def_tribe = getattr(defender, 'tribe', self.get_tribe_name(defender.color))
@@ -827,6 +827,12 @@ class GameplayScreen(Screen):
             self.get_piece_image_path, self.execute_board_move, self.cancel_crash, 
             game_mode=getattr(self, 'game_mode', 'PVP')
         )
-        self.info_zone.add_widget(self.crash_popup)
-            
-    def cancel_crash(self): self.info_zone.clear_widgets(); self.crash_popup = None; self.refresh_ui()
+        # แก้ตรงนี้: นำไปใส่ใน root_layout เพื่อให้เต็มหน้าจอเกม
+        self.root_layout.add_widget(self.crash_popup)
+        
+    def cancel_crash(self):
+        # ลบหน้าต่างออกเมื่อ Crash จบ
+        if self.crash_popup and self.crash_popup in self.root_layout.children:
+            self.root_layout.remove_widget(self.crash_popup)
+        self.crash_popup = None
+        self.refresh_ui()
