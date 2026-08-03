@@ -1,5 +1,7 @@
 # screens/gameplay_screen.py
+import os
 import random
+from logic.image_utils import safe_piece_path
 from kivy.app import App
 from kivy.graphics import Rectangle, Color, Line
 from kivy.uix.screenmanager import Screen
@@ -114,6 +116,15 @@ class GameplayScreen(Screen):
         self.controller = LocalGameController(self.game)
         
         if mode == 'Divide_Conquer':
+            # is_pve_auto_battle is determined SOLELY by the match type the
+            # player chose in the setup screen — NOT by faction colour.
+            #
+            # match_type == 'PVE'       → Full auto-battle (AI vs AI) for
+            #                             every combat, regardless of whether
+            #                             the target is a Bandit, Village, or Castle.
+            # match_type == 'LOCAL_PVP' → Human controls their faction;
+            #                             only red-faction (AI) nodes are bot-driven.
+            self.is_pve_auto_battle = (getattr(app, 'match_type', 'PVE') == 'PVE')
             self.setup_divide_conquer_board(app)
             
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
@@ -389,29 +400,13 @@ class GameplayScreen(Screen):
 
     def get_piece_image_path(self, piece):
         if not piece: return None
-        p_c, p_n = piece.color, piece.__class__.__name__.lower()
+        p_n = piece.__class__.__name__.lower()
         if p_n == 'obstacle':
-            ot = piece.name.lower(); return f"assets/pieces/event/event{'1' if ot=='thorn' else '2' if ot=='sandstorm' else '3'}.png"
-            
-        tf = getattr(piece, 'tribe', 'the knight company')
-        
-        stage_folder = "1base"
-        lvl = getattr(piece, 'upgrade_level', 0)
-        path = getattr(piece, 'upgrade_path', 'standard')
-        
-        if lvl > 0:
-            if path == 'standard':
-                stage_folder = "2upATK" if lvl == 1 else "3upDEF"
-            elif path == 'special':
-                stage_folder = "4up_rehidden" if lvl == 1 else "5up_reroll_ATK_DEF"
-                
-        if p_n in ['pawn', 'hastati', 'levies']:
-            num = getattr(piece, 'variant', 1) 
-            filename = f"{p_n}{num}.png"
-        else:
-            filename = f"{p_n}.png"
-            
-        return f"assets/pieces/{tf}/{p_c}/{stage_folder}/{filename}"
+            ot = piece.name.lower()
+            return f"assets/pieces/event/event{'1' if ot=='thorn' else '2' if ot=='sandstorm' else '3'}.png"
+        tf  = getattr(piece, 'tribe', 'the knight company')
+        p_c = piece.color
+        return safe_piece_path(piece, tf, p_c)
 
     def on_square_tap(self, instance):
         App.get_running_app().play_click_sound()
@@ -458,6 +453,9 @@ class GameplayScreen(Screen):
         elif phase == 'deployment_reveal':
             return 
             
+        # Spectator mode: block ALL human board taps during a PVE auto-battle.
+        if getattr(self, 'is_pve_auto_battle', False): return
+
         if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return
         
@@ -618,6 +616,9 @@ class GameplayScreen(Screen):
 
     def on_item_click(self, item):
         App.get_running_app().play_click_sound()
+        # Spectator mode: block item interaction during PVE auto-battle.
+        if getattr(self, 'is_pve_auto_battle', False): return
+
         if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return
             
@@ -750,7 +751,11 @@ class GameplayScreen(Screen):
 
             app.play_click_sound()
             if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel()
+            # Cancel both halves of the AI turn loop so no move fires after retreat.
             if getattr(self, 'ai_event', None): self.ai_event.cancel()
+            Clock.unschedule(self.ai_controller._schedule_next_ai_turn)
+            Clock.unschedule(self.ai_controller.trigger_ai_move)
+            self.is_input_locked = False
             self.hide_item_tooltip()
             
             retreating_color = self.game.current_turn
@@ -816,9 +821,37 @@ class GameplayScreen(Screen):
     def hide_piece_status(self):
         if not self.crash_popup: self.info_zone.clear_widgets(); self.status_popup = None
             
+    def snap_piece_ui(self, attacker, start, end):
+        """Visually teleport the attacker icon from start → end.
+
+        NOTE: Do NOT call this on crash/capture moves.  move_piece() returns
+        ("crash", ...) without touching the board array, meaning both pieces
+        still exist in self.game.board.  If we overwrite the destination
+        square here, the defender's icon disappears before the crash animation
+        plays — which is exactly the bug we want to avoid.
+
+        This helper is only appropriate for non-capture moves where you want
+        an instant visual repositioning without a full init_board_ui() rebuild.
+        """
+        if not hasattr(self, 'squares'):
+            return
+        sq_start = self.squares.get(start)
+        sq_end   = self.squares.get(end)
+        if sq_start and sq_end:
+            atk_path = self.get_piece_image_path(attacker)
+            sq_end.set_piece_icon(atk_path, piece=attacker)
+            sq_start.set_piece_icon(None, piece=None)
+
     def show_crash_overlay(self, attacker, defender, start, end):
         self.info_zone.clear_widgets() # เคลียร์ขยะเผื่อค้าง
         App.get_running_app().play_coin_sound()
+
+        # Both piece icons are intentionally left untouched on the board.
+        # move_piece() returned ("crash", ...) without modifying self.game.board,
+        # so both attacker and defender are still visible at their original squares.
+        # The crash overlay will reveal the outcome; only after execute_board_move()
+        # calls init_board_ui() will the losing piece finally be removed from view.
+
         atk_tribe = getattr(attacker, 'tribe', self.get_tribe_name(attacker.color))
         def_tribe = getattr(defender, 'tribe', self.get_tribe_name(defender.color))
         

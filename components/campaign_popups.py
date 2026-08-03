@@ -14,6 +14,8 @@ from kivy.clock import Clock
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.modalview import ModalView
 from components.campaign_cards import RecruitCard
+from logic.image_utils import safe_piece_path
+import os
 
 def get_addon_img(addon, lvl):
     folder = "base1" if lvl <= 1 else ("up1" if lvl == 2 else "up2")
@@ -311,7 +313,7 @@ class ArmyStatusPopup(ModalView):
             else: filename = f"{p_cls_name}.png"
             if getattr(p, 'name', '') == 'Prince': filename = 'prince.png'
             
-            img = Image(source=f"assets/pieces/{tribe}/{color}/{stage_folder}/{filename}", size_hint=(1, 0.55), allow_stretch=True, keep_ratio=True)
+            img = Image(source=safe_piece_path(p, tribe, color), size_hint=(1, 0.55), allow_stretch=True, keep_ratio=True)
             box.add_widget(img)
             
             p_name = getattr(p, 'name', p.__class__.__name__.capitalize())
@@ -479,13 +481,18 @@ class UpgradeTreePopup(ModalView):
         else: filename = f"{c_name}.png"
         if getattr(p, 'name', '') == 'Prince': filename = 'prince.png'
             
-        base_img = f"assets/pieces/{tribe}/{color}/1base/{filename}"
-        atk1_img = f"assets/pieces/{tribe}/{color}/2upATK/{filename}"
-        def2_img = f"assets/pieces/{tribe}/{color}/3upDEF/{filename}"
-        
+        def _safe(folder):
+            """Return the path for this folder, falling back to 1base if the file is absent."""
+            p_path = f"assets/pieces/{tribe}/{color}/{folder}/{filename}"
+            return p_path if os.path.isfile(p_path) else base_img
+
+        base_img  = f"assets/pieces/{tribe}/{color}/1base/{filename}"
+        atk1_img  = _safe('2upATK')
+        def2_img  = _safe('3upDEF')
+
         has_special = c_name in ['praetorian', 'menatarm']
-        spec1_img = f"assets/pieces/{tribe}/{color}/4up_rehidden/{filename}" if has_special else None
-        spec2_img = f"assets/pieces/{tribe}/{color}/5up_reroll_ATK_DEF/{filename}" if has_special else None
+        spec1_img = _safe('4up_rehidden')      if has_special else None
+        spec2_img = _safe('5up_reroll_ATK_DEF') if has_special else None
 
         def draw_line(p1, p2, is_active):
             with self.tree_layout.canvas.before:

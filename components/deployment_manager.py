@@ -139,11 +139,20 @@ class DeploymentManager:
         self.deploy_lbl.text = "[b]PHASE 2: ENEMY REVEALED[/b]\nObserve the enemy Commander's position!"
         self.deploy_lbl.color = (1, 0.4, 0.4, 1)
         self.deployment_btn_box.clear_widgets()
-        
+        self.screen.refresh_ui()
+
+        # PVE auto-battle: skip the human "READY TO BATTLE" prompt and
+        # automatically advance to the playing phase after a short reveal window.
+        if getattr(self.screen, 'is_pve_auto_battle', False):
+            from kivy.clock import Clock
+            self.deploy_lbl.text = "[b]BATTLE BEGINS AUTOMATICALLY...[/b]\nGet ready!"
+            self.deploy_lbl.color = (0.4, 1, 0.4, 1)
+            Clock.schedule_once(lambda dt: self.start_battle_phase(None), 2.0)
+            return
+
         btn_ready = Button(text="[b]READY TO BATTLE[/b]", markup=True, background_color=(0.2, 0.8, 0.2, 1), font_size='18sp')
         btn_ready.bind(on_release=self.start_battle_phase)
         self.deployment_btn_box.add_widget(btn_ready)
-        self.screen.refresh_ui()
 
     def start_battle_phase(self, instance):
         app = App.get_running_app()
@@ -155,7 +164,10 @@ class DeploymentManager:
             self.screen.sidebar.show_buttons()
         self.screen.init_board_ui()
         self.screen.refresh_ui()
-        self.screen.ai_controller.check_ai_turn()
+        # Delay the first AI turn slightly so the board is fully rendered
+        # before any piece moves.  1.0s gives a clean visual transition.
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self.screen.ai_controller.check_ai_turn(), 1.0)
 
     def remove_layer(self):
         if self.deployment_layer and self.deployment_layer in self.screen.root_layout.children:

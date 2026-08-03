@@ -8,6 +8,7 @@ from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.app import App
 from kivy.metrics import dp
+from logic.image_utils import safe_char_crash_path
 from logic.crash_logic import calculate_total_points
 from kivy.animation import Animation
 
@@ -181,14 +182,15 @@ class CrashOverlay(FloatLayout):
         self.ids.left_total.color = (1, 1, 1, 1)
         self.ids.right_total.color = (1, 1, 1, 1)
 
-        # ตั้งค่าภาพตัวละครหน้า UI จาก assets/char_crash
+        # Portrait images — use safe helper so missing upgrade folders
+        # never produce an "[ERROR] [Image] Not found" log line.
         a_folder = self._get_level_folder(self.attacker)
         a_name = self._get_piece_filename(self.attacker)
-        self.ids.left_char.source = f"assets/char_crash/{self.a_faction}/{a_folder}/{a_name}.png"
+        self.ids.left_char.source = safe_char_crash_path(self.attacker, self.a_faction)
 
         d_folder = self._get_level_folder(self.defender)
         d_name = self._get_piece_filename(self.defender)
-        self.ids.right_char.source = f"assets/char_crash/{self.d_faction}/{d_folder}/{d_name}.png"
+        self.ids.right_char.source = safe_char_crash_path(self.defender, self.d_faction)
 
         # ข้ามปุ่มและเริ่มทำงานทันทีหลังจากโหลด UI เสร็จเล็กน้อย
         Clock.schedule_once(self.start_crash_sequence, 0.4)

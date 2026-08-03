@@ -5,6 +5,7 @@ from kivy.uix.image import Image
 from kivy.graphics import Color, Line, Ellipse, RoundedRectangle
 from kivy.metrics import dp
 from kivy.app import App
+from logic.image_utils import safe_piece_path
 from kivy.uix.behaviors import ButtonBehavior
 
 class PieceCard(ButtonBehavior, FloatLayout):
@@ -24,33 +25,19 @@ class PieceCard(ButtonBehavior, FloatLayout):
         p_name = piece_obj.__class__.__name__.lower()
         tribe = getattr(piece_obj, 'tribe', 'the knight company')
         color = piece_obj.color
-        
-        lvl = getattr(piece_obj, 'upgrade_level', 0)
-        path = getattr(piece_obj, 'upgrade_path', 'standard')
-        
-        stage_folder = "1base"
-        if lvl > 0:
-            if path == 'standard': stage_folder = "2upATK" if lvl == 1 else "3upDEF"
-            elif path == 'special': stage_folder = "4up_rehidden" if lvl == 1 else "5up_reroll_ATK_DEF"
-            
-        if p_name in ['pawn', 'hastati', 'levies']:
-            num = getattr(piece_obj, 'variant', 1)
-            filename = f"{p_name}{num}.png"
-        else:
-            filename = f"{p_name}.png"
-            
-        if getattr(piece_obj, 'name', '') == 'Prince': filename = 'prince.png'
+        lvl   = getattr(piece_obj, 'upgrade_level', 0)
 
         if getattr(piece_obj, 'is_header', False):
             with self.canvas.before:
                 Color(1, 0.8, 0, 0.3)
                 Ellipse(pos=(self.center_x - dp(25), self.top - dp(55)), size=(dp(50), dp(50)))
                 
-        img_path = f"assets/pieces/{tribe}/{color}/{stage_folder}/{filename}"
+        img_path = safe_piece_path(piece_obj, tribe, color)
         self.add_widget(Image(source=img_path, size_hint=(0.85, 0.65), pos_hint={'center_x': 0.5, 'top': 0.98}))
 
         display_name = getattr(piece_obj, 'name', p_name.capitalize())
         lvl_str = f" [color=ffff00]+{lvl}[/color]" if lvl > 0 else ""
+
         
         name_lbl = Label(text=f"[b]{display_name}{lvl_str}[/b]", markup=True, font_size='12sp', pos_hint={'center_x': 0.5, 'y': 0.18}, size_hint=(1, 0.2), halign='center', valign='middle')
         name_lbl.bind(size=name_lbl.setter('text_size'))
