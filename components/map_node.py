@@ -71,9 +71,9 @@ class MapNode(Button):
                 for pt in pieces_to_gen: self.army_pieces.append(generate_piece(pt, faction, app))
             elif faction == 'red':
                 if node_type == 'castle':
-                    # 30% chance to spawn an upgraded bandit castle with higher-tier units
+                    # 30% chance to spawn an upgraded bandit castle with higher-tier standard units
                     if random.random() < 0.30:
-                        pieces_to_gen = ['king', 'queen', 'royalguard', 'praetorian', 'menatarm', 'menatarm', 'knight', 'knight'] + ['hastati']*4 + ['pawn']*4
+                        pieces_to_gen = ['king', 'queen', 'queen', 'rook', 'rook', 'rook', 'knight', 'knight', 'knight', 'bishop', 'bishop'] + ['pawn']*5
                     else:
                         pieces_to_gen = ['king', 'queen', 'rook', 'rook', 'bishop', 'bishop', 'knight', 'knight'] + ['pawn']*8
                 else:
