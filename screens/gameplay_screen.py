@@ -417,6 +417,8 @@ class GameplayScreen(Screen):
         return safe_piece_path(piece, tf, p_c)
 
     def on_square_tap(self, instance):
+        if getattr(self.game, 'game_result', None): return
+        
         App.get_running_app().play_click_sound()
         r, c = instance.row, instance.col
         
@@ -622,6 +624,7 @@ class GameplayScreen(Screen):
             else: self.inventory_layout.add_widget(InventorySlot())
 
     def on_item_click(self, item):
+        if getattr(self.game, 'game_result', None): return
         App.get_running_app().play_click_sound()
         if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return
@@ -672,13 +675,21 @@ class GameplayScreen(Screen):
             self.turn_timer_event = Clock.schedule_interval(self._tick_turn_timer, 1.0)
 
     def on_touch_down(self, touch):
-        # Ignore input if game is over or in deployment phase or it's bot's turn
-        if self.game.game_result: return
-        if getattr(self, 'battle_phase', 'playing') != 'playing':
-            return super(GameplayScreen, self).on_touch_down(touch)
-
+        # We must ALWAYS allow super().on_touch_down to run so UI buttons (like Retreat, Skip) 
+        # get the touch events since they are on higher Z-indexes.
+        res = super(GameplayScreen, self).on_touch_down(touch)
+        
+        if res: 
+            return True # Touch was absorbed by a UI button/widget
             
-        return super(GameplayScreen, self).on_touch_down(touch)
+        # Stop propagating to other background handlers if game is over
+        if getattr(self.game, 'game_result', None): 
+            return True
+            
+        if getattr(self, 'battle_phase', 'playing') != 'playing':
+            return False # Let deployment logic handle it
+            
+        return False
 
     def _tick_turn_timer(self, dt):
         """Called every second to decrement the turn timer."""

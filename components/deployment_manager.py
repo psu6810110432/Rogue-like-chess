@@ -124,6 +124,9 @@ class DeploymentManager:
         app.battle_winner = 'draw'
         app.survivors_atk = app.combat_marching_army
         app.survivors_def = app.combat_target_army
+        self.remove_layer()
+        if hasattr(self.screen, 'battle_phase'):
+            self.screen.battle_phase = 'playing'
         self.screen.manager.current = 'campaign_map'
 
     def show_reveal_phase(self, instance):
