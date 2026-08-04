@@ -70,6 +70,9 @@ def safe_piece_path(piece, tribe: str, colour: str) -> str:
     tribe:   tribe folder name (e.g. 'bandit', 'the knight company').
     colour:  'white' | 'black'.
     """
+    if getattr(piece, 'macro_faction', None) == 'red' or tribe == 'bandit':
+        colour = 'red'
+
     stage = _stage_folder_for_piece(piece)
     filename = _piece_filename(piece)
 

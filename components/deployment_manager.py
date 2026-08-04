@@ -141,11 +141,13 @@ class DeploymentManager:
         self.deployment_btn_box.clear_widgets()
         self.screen.refresh_ui()
 
-        # PVE auto-battle: skip the human "READY TO BATTLE" prompt and
-        # automatically advance to the playing phase after a short reveal window.
-        if getattr(self.screen, 'is_pve_auto_battle', False):
+        attacker_faction = getattr(app.combat_source, 'faction', 'red') if hasattr(app, 'combat_source') else 'white'
+        defender_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
+        player_involved = (attacker_faction == 'white' or defender_faction == 'white')
+        
+        if not player_involved:
             from kivy.clock import Clock
-            self.deploy_lbl.text = "[b]BATTLE BEGINS AUTOMATICALLY...[/b]\nGet ready!"
+            self.deploy_lbl.text = "[b]AI SPECTATOR MATCH BEGINS...[/b]"
             self.deploy_lbl.color = (0.4, 1, 0.4, 1)
             Clock.schedule_once(lambda dt: self.start_battle_phase(None), 2.0)
             return

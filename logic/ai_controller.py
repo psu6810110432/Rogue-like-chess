@@ -7,46 +7,32 @@ class AIController:
     def __init__(self, screen):
         self.screen = screen
 
-    # ------------------------------------------------------------------
-    # Helper: is this a DnC PVE auto-battle (AI vs AI)?
-    # ------------------------------------------------------------------
-    def _is_dnc_pve(self):
-        """Return True when both sides are driven by AI in DnC mode."""
-        return (
-            getattr(self.screen, 'game_mode', '') == 'Divide_Conquer'
-            and getattr(self.screen, 'is_pve_auto_battle', False)
-        )
-
-    # ------------------------------------------------------------------
-    # Turn gating
-    # ------------------------------------------------------------------
     def check_ai_turn(self):
         app = App.get_running_app()
         is_bot_turn = False
         game_mode = getattr(self.screen, 'game_mode', 'PVP')
+        match_type = getattr(app, 'match_type', 'PVE')
 
-        # ── Branch 1: DnC PVE (match_type == 'PVE') ─────────────────────
-        # is_pve_auto_battle is True → every turn is an AI turn.
-        # The human player is a spectator; no human controller is ever given.
-        if self._is_dnc_pve():
-            is_bot_turn = True
-
-        # ── Branch 2: Standard non-DnC PVE ──────────────────────────────
-        # AI controls black; human controls white.
-        elif game_mode == 'PVE' and self.screen.game.current_turn == 'black':
-            is_bot_turn = True
-
-        # ── Branch 3: DnC LOCAL_PVP (match_type == 'LOCAL_PVP') ─────────
-        # Human plays their own faction (white/black based on which node
-        # they own). Only red-faction (bandit) nodes are bot-driven.
-        # is_pve_auto_battle is False in this branch so _is_dnc_pve() above
-        # did NOT match — this branch only fires for LOCAL_PVP DnC combats.
-        elif game_mode == 'Divide_Conquer':
-            attacker_faction = getattr(app.combat_source, 'faction', 'red') if hasattr(app, 'combat_source') else 'white'
+        # Player involvement check for D&C spectator matches
+        if game_mode == 'Divide_Conquer':
+            attacker_faction = getattr(app.combat_source, 'faction', 'white') if hasattr(app, 'combat_source') else 'white'
             defender_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
-            if self.screen.game.current_turn == 'white' and attacker_faction == 'red':
-                is_bot_turn = True
-            elif self.screen.game.current_turn == 'black' and defender_faction == 'red':
+            
+            # Identify the macro faction for the current turn
+            current_faction = attacker_faction if self.screen.game.current_turn == 'white' else defender_faction
+            
+            if match_type == 'PVE':
+                player_involved = (attacker_faction == 'white' or defender_faction == 'white')
+                if not player_involved:
+                    # Both sides are AI (e.g., black vs red)
+                    is_bot_turn = True
+                elif current_faction != 'white':
+                    is_bot_turn = True
+            elif match_type == 'LOCAL_PVP':
+                if current_faction == 'red':
+                    is_bot_turn = True
+        else:
+            if match_type == 'PVE' and self.screen.game.current_turn == 'black':
                 is_bot_turn = True
 
         if is_bot_turn and not self.screen.game.game_result:

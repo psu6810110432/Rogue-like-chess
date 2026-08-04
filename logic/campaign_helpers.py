@@ -37,6 +37,7 @@ def generate_piece(piece_name, faction, app):
     
     p = classes[piece_name](color, tribe)
     if piece_name == 'prince': p.name = "Prince"
+    p.macro_faction = faction
     
     if not hasattr(p, 'hidden_passive') or p.hidden_passive is None:
         p.hidden_passive = HiddenPassive()

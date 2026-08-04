@@ -116,15 +116,6 @@ class GameplayScreen(Screen):
         self.controller = LocalGameController(self.game)
         
         if mode == 'Divide_Conquer':
-            # is_pve_auto_battle is determined SOLELY by the match type the
-            # player chose in the setup screen — NOT by faction colour.
-            #
-            # match_type == 'PVE'       → Full auto-battle (AI vs AI) for
-            #                             every combat, regardless of whether
-            #                             the target is a Bandit, Village, or Castle.
-            # match_type == 'LOCAL_PVP' → Human controls their faction;
-            #                             only red-faction (AI) nodes are bot-driven.
-            self.is_pve_auto_battle = (getattr(app, 'match_type', 'PVE') == 'PVE')
             self.setup_divide_conquer_board(app)
             
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
@@ -196,17 +187,21 @@ class GameplayScreen(Screen):
     def setup_divide_conquer_board(self, app):
         self.game.board = [[None for _ in range(8)] for _ in range(8)]
         
+        # Defender spawns at TOP (ranks 0, 1, 2)
         enemy_army_list = app.combat_target_army
         valid_coords = [(r, c) for r in range(3) for c in range(8)]
         random.shuffle(valid_coords)
         for p, (r, c) in zip(enemy_army_list, valid_coords):
             p.color = 'black'
+            p.forward_dir = 1
             self.game.board[r][c] = p
             
+        # Attacker spawns at BOTTOM (ranks 7, 6, 5)
         player_army_list = app.combat_marching_army
         coords = [(r, c) for r in range(7, 4, -1) for c in range(8)] 
         for p, (r, c) in zip(player_army_list, coords):
             p.color = 'white'
+            p.forward_dir = -1
             self.game.board[r][c] = p
             
         self.game.current_turn = 'white'
@@ -224,15 +219,28 @@ class GameplayScreen(Screen):
         
         is_bot = False
         app = App.get_running_app()
-        if gm == 'PVE' and self.game.current_turn == 'black': 
-            is_bot = True
-        elif gm == 'Divide_Conquer':
-            attacker_faction = getattr(app.combat_source, 'faction', 'red') if hasattr(app, 'combat_source') else 'white'
+        
+        match_type = getattr(app, 'match_type', 'PVE')
+        
+        # Simply bind the bot view exclusively to the bot factions
+        if gm == 'Divide_Conquer':
+            attacker_faction = getattr(app.combat_source, 'faction', 'white') if hasattr(app, 'combat_source') else 'white'
             defender_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
             
-            if self.game.current_turn == 'white' and attacker_faction == 'red':
-                is_bot = True
-            elif self.game.current_turn == 'black' and defender_faction == 'red':
+            # Map the micro board turn (white/black) to the macro faction
+            current_faction = attacker_faction if self.game.current_turn == 'white' else defender_faction
+            
+            if match_type == 'PVE':
+                player_involved = (attacker_faction == 'white' or defender_faction == 'white')
+                if not player_involved:
+                    is_bot = True
+                elif current_faction != 'white':
+                    is_bot = True
+            elif match_type == 'LOCAL_PVP':
+                if current_faction == 'red':
+                    is_bot = True
+        else:
+            if match_type == 'PVE' and self.game.current_turn == 'black':
                 is_bot = True
                 
         phase = getattr(self, 'battle_phase', 'playing')
@@ -413,6 +421,8 @@ class GameplayScreen(Screen):
         r, c = instance.row, instance.col
         
         phase = getattr(self, 'battle_phase', 'playing')
+        piece = self.game.board[r][c]
+        print(f"[DEBUG] Click Event - current_turn: {self.game.current_turn}, clicked_piece_color: {getattr(piece, 'color', None)}, is_input_locked: {getattr(self, 'is_input_locked', False)}, phase: {phase}")
         
         if phase == 'deployment_arrange_atk':
             if r < 5: return 
@@ -453,19 +463,16 @@ class GameplayScreen(Screen):
         elif phase == 'deployment_reveal':
             return 
             
-        # Spectator mode: block ALL human board taps during a PVE auto-battle.
-        if getattr(self, 'is_pve_auto_battle', False): return
-
         if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return
         
         piece = self.game.board[r][c]
+        if piece and getattr(piece, 'macro_faction', None) == 'red': return
         
         if getattr(self.game, 'game_result', None): 
             if not self.selected_item: return
             
-        if getattr(self.game, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer'] and getattr(self.game, 'current_turn', 'white') == 'black' and not getattr(self.game, 'game_result', None): 
-            return
+
         
         if self.selected_item:
             if piece and piece.color == self.game.current_turn:
@@ -616,9 +623,6 @@ class GameplayScreen(Screen):
 
     def on_item_click(self, item):
         App.get_running_app().play_click_sound()
-        # Spectator mode: block item interaction during PVE auto-battle.
-        if getattr(self, 'is_pve_auto_battle', False): return
-
         if getattr(self, 'is_input_locked', False): return 
         if getattr(self, 'crash_popup', None): return
             
@@ -666,6 +670,15 @@ class GameplayScreen(Screen):
         # Restart the interval if it was stopped
         if not self.turn_timer_event:
             self.turn_timer_event = Clock.schedule_interval(self._tick_turn_timer, 1.0)
+
+    def on_touch_down(self, touch):
+        # Ignore input if game is over or in deployment phase or it's bot's turn
+        if self.game.game_result: return
+        if getattr(self, 'battle_phase', 'playing') != 'playing':
+            return super(GameplayScreen, self).on_touch_down(touch)
+
+            
+        return super(GameplayScreen, self).on_touch_down(touch)
 
     def _tick_turn_timer(self, dt):
         """Called every second to decrement the turn timer."""
@@ -724,8 +737,7 @@ class GameplayScreen(Screen):
 
     def on_quit(self):
         app = App.get_running_app()
-        if getattr(self, 'is_input_locked', False): return
-        
+        # Bypass input locks so the player can retreat at any time
         if getattr(self.game, 'game_result', None):
             if hasattr(self, 'countdown_event') and self.countdown_event:
                 self.countdown_event.cancel()
