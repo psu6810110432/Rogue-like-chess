@@ -11,7 +11,8 @@ from kivy.metrics import dp
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.modalview import ModalView
-
+from logic.environment_generator import EnvironmentGenerator, EnvTile, EnvProp
+from kivy.uix.widget import Widget
 from logic.campaign_helpers import get_distance, generate_piece, ensure_header, resolve_map_battle
 from logic.campaign_map_generator import MapGenerator
 from logic.campaign_ai import CampaignAI
@@ -55,6 +56,30 @@ class CampaignMapScreen(Screen):
         self.marching_from_node = None
         self.campaign_ai = CampaignAI()
         self.ai_turn_active = False
+        # --- ส่วนที่เพิ่มใหม่: หน้า Loading Screen สไตล์ Minimalist ---
+        self.loading_overlay = FloatLayout(opacity=0)
+        with self.loading_overlay.canvas.before:
+            Color(0.05, 0.05, 0.08, 0.95) # พื้นหลังสีดำโปร่งแสงนิดๆ
+            self.loading_bg = Rectangle(pos=self.pos, size=self.size)
+            
+        self.loading_label = Label(
+            text="[b]GENERATING WORLD...[/b]", 
+            markup=True, 
+            font_size='26sp', 
+            color=(0.83, 0.68, 0.21, 1), # ตัวหนังสือสีทอง
+            pos_hint={'center_x': 0.5, 'center_y': 0.5}
+        )
+        self.loading_overlay.add_widget(self.loading_label)
+        self.ui_layer.add_widget(self.loading_overlay)
+        
+        self.bind(pos=self._update_loading_bg, size=self._update_loading_bg)
+
+    # Helper สำหรับอัปเดตขนาดฉากโหลด
+    def _update_loading_bg(self, instance, value):
+        if hasattr(self, 'loading_bg'):
+            self.loading_bg.pos = instance.pos
+            self.loading_bg.size = instance.size
+
 
     def _update_top_bg(self, instance, value):
         self.top_bg.pos, self.top_bg.size = instance.pos, instance.size
@@ -288,22 +313,60 @@ class CampaignMapScreen(Screen):
         map_w, map_h = 9600, 5400
         
         map_data = MapGenerator.generate_data(size_val, map_w, map_h)
-        
-        with self.map_content.canvas.before:
-            Color(0.12, 0.18, 0.12, 1)
-            Rectangle(pos=(0, 0), size=(map_w, map_h))
-            
-            Color(0.1, 0.4, 0.6, 0.6)
-            for i, rect in enumerate(map_data['water_rects']):
-                if i >= 150: break
-                Rectangle(pos=(rect[0], rect[1]), size=(rect[2], rect[3]))
-            
-            Color(0.08, 0.35, 0.15, 0.7)
-            for i, rect in enumerate(map_data['water_rects']):
-                if i < 150: continue
-                Rectangle(pos=(rect[0], rect[1]), size=(rect[2], rect[3]))
-                
         nodes_data = map_data['w_nodes'] + map_data['b_nodes']
+        all_edges = map_data['white_edges'] + map_data['black_edges']
+        if map_data['cross_edge']:
+            all_edges.append(map_data['cross_edge'])
+
+        # --- 1. คำนวณสภาพแวดล้อม ---
+        tiles, props = EnvironmentGenerator.generate_environment(map_w, map_h, nodes_data, all_edges)
+
+        # --- 2. สร้าง Layer เพื่อแก้ปัญหาการทับซ้อน (Z-Index) ---
+        # แยกชิ้นส่วนให้ชัดเจนเพื่อบังคับลำดับการเรนเดอร์ (ล่างสุดไปบนสุด)
+        bg_layer = FloatLayout(size=(map_w, map_h), size_hint=(None, None))
+        line_layer = FloatLayout(size=(map_w, map_h), size_hint=(None, None))
+        prop_layer = FloatLayout(size=(map_w, map_h), size_hint=(None, None))
+
+        # --- 3. วาง Background Tiles ลงใน bg_layer ---
+        for t_data in tiles:
+            tile = EnvTile(
+                source=f"assets/environment/{t_data['biome']}.png",
+                pos=(t_data['x'], t_data['y']),
+                size=(t_data['w'], t_data['h']),
+                size_hint=(None, None)
+            )
+            bg_layer.add_widget(tile)
+
+        # --- 4. วาดเส้นทาง (Edges) ลงบน line_layer ---
+        # ต้องใช้ line_layer.canvas เพื่อให้เส้นวาดติดบนแผ่นใสชั้นที่ 2
+        with line_layer.canvas:
+            Color(0.85, 0.75, 0.3, 0.8)
+            for u, v in map_data['white_edges'] + map_data['black_edges']:
+                Line(points=[u['pos'][0], u['pos'][1], v['pos'][0], v['pos'][1]], width=4)
+                
+            if map_data['cross_edge']:
+                u, v = map_data['cross_edge']
+                Color(0.9, 0.4, 0.2, 0.9)
+                Line(points=[u['pos'][0], u['pos'][1], v['pos'][0], v['pos'][1]], width=8)
+
+        # --- 5. วาง Props ลงใน prop_layer ---
+        for p_data in props:
+            px = p_data['x'] - (p_data['size'] / 2)
+            py = p_data['y'] - (p_data['size'] / 2)
+            prop = EnvProp(
+                source=f"assets/environment/{p_data['type']}.png",
+                pos=(px, py),
+                size=(p_data['size'], p_data['size']),
+                size_hint=(None, None)
+            )
+            prop_layer.add_widget(prop)
+
+        # --- นำ Layer ทั้ง 3 มาซ้อนกันบน map_content ตามลำดับ ---
+        self.map_content.add_widget(bg_layer)
+        self.map_content.add_widget(line_layer)
+        self.map_content.add_widget(prop_layer)
+
+        # --- 6. วาง Nodes ให้อยู่บนสุด (เพราะ Add ทีหลังสุด) ---
         nodes_dict = {}
         for data in nodes_data:
             node = MapNode(node_type=data['type'], faction=data['faction'], node_id=data['id'], is_main_base=data['main'], app=app)
@@ -312,22 +375,59 @@ class CampaignMapScreen(Screen):
             self.nodes_list.append(node)
             nodes_dict[data['id']] = node
 
-        with self.map_content.canvas.before:
-            Color(0.85, 0.75, 0.3, 0.8)
-            for u, v in map_data['white_edges'] + map_data['black_edges']:
-                Line(points=[u['pos'][0], u['pos'][1], v['pos'][0], v['pos'][1]], width=4)
-                nodes_dict[u['id']].neighbors.append(nodes_dict[v['id']])
-                nodes_dict[v['id']].neighbors.append(nodes_dict[u['id']])
-                
-            if map_data['cross_edge']:
-                u, v = map_data['cross_edge']
-                Color(0.9, 0.4, 0.2, 0.9)
-                Line(points=[u['pos'][0], u['pos'][1], v['pos'][0], v['pos'][1]], width=8)
-                nodes_dict[u['id']].neighbors.append(nodes_dict[v['id']])
-                nodes_dict[v['id']].neighbors.append(nodes_dict[u['id']])
+        for u, v in map_data['white_edges'] + map_data['black_edges']:
+            nodes_dict[u['id']].neighbors.append(nodes_dict[v['id']])
+            nodes_dict[v['id']].neighbors.append(nodes_dict[u['id']])
+            
+        if map_data['cross_edge']:
+            u, v = map_data['cross_edge']
+            nodes_dict[u['id']].neighbors.append(nodes_dict[v['id']])
+            nodes_dict[v['id']].neighbors.append(nodes_dict[u['id']])
                 
         for node in self.nodes_list: 
             self.map_content.add_widget(node)
             
         self.scroll_view.scroll_x, self.scroll_view.scroll_y = 0.5, 0.5
         self.jump_to_base(None)
+        self.hide_loading()
+
+    def show_loading(self):
+        self.loading_overlay.opacity = 1
+        # ป้องกันไม่ให้ผู้เล่นกดปุ่มอื่นขณะโหลด
+        self.disabled = True 
+
+    def hide_loading(self):
+        self.loading_overlay.opacity = 0
+        self.disabled = False
+    def on_enter(self):
+        app = App.get_running_app()
+        if not hasattr(self, 'army_panel'):
+            self.army_panel = CampaignArmyPanel(self, app)
+            self.ui_layer.add_widget(self.army_panel)
+
+        if not getattr(app, 'campaign_initialized', False):
+            app.current_map_turn = 'white'
+            app.turn_number = 1
+            app.tax_points = {'white': 0, 'black': 0}
+            app.prince_rewards = {'white': 0, 'black': 0}
+            
+            app.unlocked_units = {
+                'white': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'},
+                'black': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'}
+            }
+            self.marching_from_node = None
+            
+            # --- แก้ไขตรงนี้ ---
+            self.show_loading()
+            # หน่วงเวลา 0.1 วินาที เพื่อให้ Kivy วาดหน้า Loading Screen ก่อนที่โค้ดคำนวณจะทำงาน
+            Clock.schedule_once(lambda dt: self.generate_procedural_map(), 0.1)
+            
+            app.campaign_initialized = True
+        else:
+            self.marching_from_node = None
+            if getattr(app, 'battle_finished', False):
+                resolve_map_battle(app, self)
+                if self.ai_turn_active:
+                    Clock.schedule_once(
+                        lambda dt: self.end_turn(None), 1.0
+                    )
