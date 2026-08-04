@@ -9,12 +9,12 @@ class MedievalTribe:
             "bishop_classic": {"starting_points": 2, "coin_tosses": 1, "description": "Priest: Consistent diagonal attack power."},
             "rook_classic":   {"starting_points": 2, "coin_tosses": 1, "description": "Fortress: Reliable defense and impact."},
             "queen_classic":  {"starting_points": 3, "coin_tosses": 1, "description": "Iron Queen: Highest starting points in the tribe."},
-            "king_classic":   {"starting_points": 2, "coin_tosses": 1, "description": "King: Ultimate defense when cornered."},
+            "king_classic":   {"starting_points": 5, "coin_tosses": 1, "description": "King: Ultimate defense when cornered."},
 
             # --- Divide and Conquer (DNC) Mode ---
             "praetorian_dnc": {"coin_tosses": 2, "base_ATK": 2, "base_DEF": 1, "description": "Veteran Elite: Disciplined and highly consistent in offense."},
             "royalguard_dnc": {"coin_tosses": 2, "base_ATK": 0, "base_DEF": 2, "description": "Tower Guard: Heavily armored, prioritizing reliable defense."},
-            "menatarm_dnc":   {"coin_tosses": 1, "base_ATK": 3, "base_DEF": 3, "description": "Seasoned Fighter: Perfectly balanced and completely dependable."},
+            "menatarm_dnc":   {"coin_tosses": 1, "base_ATK": 5, "base_DEF": 3, "description": "Seasoned Fighter: Perfectly balanced and completely dependable."},
             "prince_dnc":     {"coin_tosses": 1, "base_ATK": 2, "base_DEF": 2, "description": "Noble Commander: Leads with calculated and stable tactics."},
             "king_dnc":       {"coin_tosses": 1, "base_ATK": 2, "base_DEF": 2, "description": "Liege Lord: A steadfast ruler anchoring the company's morale."},
             "princess_dnc":   {"coin_tosses": 1, "base_ATK": 3, "base_DEF": 3, "description": "Warrior Princess: Highly trained, delivering precise strikes."},

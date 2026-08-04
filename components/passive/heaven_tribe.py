@@ -4,12 +4,12 @@ class HeavenTribe:
         self.tribe_name = "the ancient runes"
         self.piece_passives = {
             # --- Classic Mode ---
-            "pawn_classic":   {"starting_points": 3, "coin_tosses": 6, "description": "Messenger: Relies on faith for coin tosses."},
+            "pawn_classic":   {"starting_points": 4, "coin_tosses": 6, "description": "Messenger: Relies on faith for coin tosses."},
             "knight_classic": {"starting_points": 1, "coin_tosses": 8, "description": "Heavenly Guardian: Highly variable fate (6 tosses)."},
-            "bishop_classic": {"starting_points": 0, "coin_tosses": 11, "description": "Saint: Up to 8 coin tosses for miracle power."},
-            "rook_classic":   {"starting_points": 1, "coin_tosses": 8, "description": "Heavenly Pillar: Stable with high coin count."},
-            "queen_classic":  {"starting_points": 3, "coin_tosses": 6, "description": "Goddess: Focuses on precision over destruction."},
-            "king_classic":   {"starting_points": 3, "coin_tosses": 6, "description": "God King: Fate rests entirely on faith."},
+            "bishop_classic": {"starting_points": 1, "coin_tosses": 11, "description": "Saint: Up to 8 coin tosses for miracle power."},
+            "rook_classic":   {"starting_points": 2, "coin_tosses": 8, "description": "Heavenly Pillar: Stable with high coin count."},
+            "queen_classic":  {"starting_points": 5, "coin_tosses": 6, "description": "Goddess: Focuses on precision over destruction."},
+            "king_classic":   {"starting_points": 5, "coin_tosses": 6, "description": "God King: Fate rests entirely on faith."},
 
             # --- Divide and Conquer (DNC) Mode ---
             "praetorian_dnc": {"coin_tosses": 11, "base_ATK": 3, "base_DEF": 1, "description": "Runic Champion: Unleashes massive divine energy (11 tosses)."},

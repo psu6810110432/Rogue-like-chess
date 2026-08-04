@@ -8,9 +8,9 @@ class AyothayaTribe:
             "pawn_classic":   {"starting_points": 5, "coin_tosses": 4, "description": "Brave Soldier: Strong base power and determination."},
             "knight_classic": {"starting_points": 5, "coin_tosses": 4, "description": "Atamat Corps: Agile with high impact power."},
             "bishop_classic": {"starting_points": 6, "coin_tosses": 3, "description": "Royal Astrologer: Consistent mystical power."},
-            "rook_classic":   {"starting_points": 6, "coin_tosses": 3, "description": "Siam Fortress: Reliable defensive certainty."},
+            "rook_classic":   {"starting_points": 6, "coin_tosses": 4, "description": "Siam Fortress: Reliable defensive certainty."},
             "queen_classic":  {"starting_points": 4, "coin_tosses": 7, "description": "Female General: Deadly slashes with 7 tosses."},
-            "king_classic":   {"starting_points": 4, "coin_tosses": 5, "description": "Lord King: Absolute power and charisma."},
+            "king_classic":   {"starting_points": 4, "coin_tosses": 6, "description": "Lord King: Absolute power and charisma."},
 
             # --- Divide and Conquer (DNC) Mode ---
             "praetorian_dnc": {"coin_tosses": 7, "base_ATK": 4, "base_DEF": 3, "description": "Elite Guard: Aggressive onslaught with overwhelming strikes."},
