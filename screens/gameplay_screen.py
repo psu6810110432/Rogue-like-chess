@@ -492,7 +492,7 @@ class GameplayScreen(Screen):
         if getattr(self, 'crash_popup', None): return
         
         piece = self.game.board[r][c]
-        if piece and getattr(piece, 'macro_faction', None) == 'red': return
+        #if piece and getattr(piece, 'macro_faction', None) == 'red': return
         
         if getattr(self.game, 'game_result', None): 
             if not self.selected_item: return
@@ -781,20 +781,21 @@ class GameplayScreen(Screen):
 
         if getattr(self, 'game_mode', '') == 'Divide_Conquer':
             target_node = getattr(app, 'combat_target', None)
-            target_faction = getattr(target_node, 'faction', 'black') if target_node else 'black'
             
-            is_defender_turn = (self.game.current_turn == target_faction)
+            # ✔️ แก้ไขตรงนี้: ระบบหลังบ้าน (Backend) ฝ่ายป้องกันคือ 'black' เสมอ
+            is_defender_turn = (self.game.current_turn == 'black')
+            
             if is_defender_turn and target_node and getattr(target_node, 'is_main_base', False):
-                if not (target_faction == 'red' and self.game.current_turn == 'black'):
-                    self.info_label.text = "[color=ff0000]CANNOT RETREAT FROM MAIN BASE![/color]"
+                self.info_label.text = "[color=ff0000]CANNOT RETREAT FROM MAIN BASE![/color]"
                 return
             
-            if target_faction == 'red' and self.game.current_turn == 'black':
-                return
+            # ไม่จำเป็นต้องดัก target_faction == 'red' อีกต่อไปแล้ว ลบทิ้งได้เลย
 
             if getattr(self, 'battle_phase', '') == 'deployment_arrange_def' or (getattr(self, 'battle_phase', '') != 'playing' and is_defender_turn):
                 return
 
+            app.play_click_sound()
+            if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel()
             app.play_click_sound()
             if getattr(self, 'crash_popup', None): self.crash_popup.force_cancel()
             # Cancel both halves of the AI turn loop so no move fires after retreat.
