@@ -412,9 +412,32 @@ class GameplayScreen(Screen):
         if p_n == 'obstacle':
             ot = piece.name.lower()
             return f"assets/pieces/event/event{'1' if ot=='thorn' else '2' if ot=='sandstorm' else '3'}.png"
-        tf  = getattr(piece, 'tribe', 'the knight company')
-        p_c = piece.color
-        return safe_piece_path(piece, tf, p_c)
+            
+        # 1. ดึงสีและเผ่าดั้งเดิมของ Backend (ระบบจะมองเป็น white/black เสมอ)
+        display_color = piece.color
+        tf = getattr(piece, 'tribe', self.get_tribe_name(display_color))
+        
+        # 2. ภาพลวงตา: สับเปลี่ยนสีเฉพาะการแสดงผลในโหมด Divide & Conquer
+        if getattr(self, 'game_mode', '') == 'Divide_Conquer':
+            app = App.get_running_app()
+            
+            # ถ้าหมากเป็นสีขาว (หมายถึงฝ่ายบุก) ให้ดึงสีและเผ่าจริงจาก combat_source
+            if piece.color == 'white':
+                real_faction = getattr(app.combat_source, 'faction', 'white') if hasattr(app, 'combat_source') else 'white'
+                display_color = real_faction
+                tf = getattr(piece, 'tribe', self.get_tribe_name(real_faction))
+                
+            # ถ้าหมากเป็นสีดำ (หมายถึงฝ่ายกัน) ให้ดึงสีและเผ่าจริงจาก combat_target
+            elif piece.color == 'black':
+                real_faction = getattr(app.combat_target, 'faction', 'black') if hasattr(app, 'combat_target') else 'black'
+                display_color = real_faction
+                # จัดการกรณีสีแดง (หมู่บ้าน/Rebel)
+                if display_color == 'red':
+                    tf = getattr(piece, 'tribe', 'bandit')
+                else:
+                    tf = getattr(piece, 'tribe', self.get_tribe_name(real_faction))
+
+        return safe_piece_path(piece, tf, display_color)
 
     def on_square_tap(self, instance):
         if getattr(self.game, 'game_result', None): return
