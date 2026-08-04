@@ -171,7 +171,7 @@ class EncyclopediaPopup(ModalView):
         # ✨ FIX: อัปเดตชื่อเผ่าในส่วนนี้
         crash_box.add_widget(CrashLogicCard("The Knight Company", [("assets/coin/coin2.png", "50%"), ("assets/coin/coin8.png", "49.995%"), ("assets/coin/coin9.png", "0.005%")]))
         crash_box.add_widget(CrashLogicCard("The Chaos Mankind", [("assets/coin/coin2.png", "30%"), ("assets/coin/coin3.png", "57.2%"), ("assets/coin/coin4.png", "11.76%"), ("assets/coin/coin5.png", "1.04%")]))
-        crash_box.add_widget(CrashLogicCard("The Deep Anomaly", [("assets/coin/coin1.png", "40%"), ("assets/coin/coin6.png", "57.6%"), ("assets/coin/coin7.png", "2.4%")], special_rule="If Tails (-3) > 1 coin, convert -3 to +3 points."))
+        crash_box.add_widget(CrashLogicCard("The Deep Anomaly", [("assets/coin/coin1.png", "40%"), ("assets/coin/coin6.png", "57.6%"), ("assets/coin/coin7.png", "2.4%")], special_rule="If the number of Tails is even, convert negative points to positive (+3). If odd, keep them negative (-3)."))
         crash_box.add_widget(CrashLogicCard("The Ancient Runes", [("assets/coin/coin2.png", "50%"), ("assets/coin/coin3.png", "50%")], special_rule="If 3 Heads: +3 | 6 Heads: +3 | 9 Heads: +3 points."))
         content.add_widget(crash_box)
         

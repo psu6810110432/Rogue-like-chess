@@ -343,8 +343,17 @@ class CrashOverlay(FloatLayout):
                         elif s[heads_key] == 6: s[key] += 3
                 elif "Tails" in res[s['coin_idx']] and fac == "the deep anomaly":
                     s[demon_key] += 1
-                    if s[demon_key] == 2: s[key] += 12
-                    elif s[demon_key] > 2: s[key] += 6
+                    demon_count = s[demon_key]
+                    
+                    # ลอจิกใหม่ของ Demon: คู่ = บวก / คี่ = ติดลบ
+                    if demon_count % 2 == 0:
+                        # ออกก้อยเลขคู่ (2, 4, 6, ...) พลิกผลลัพธ์จากลบให้กลายเป็นบวก
+                        # ชดเชยค่าที่ติดลบไปในตาก่อนหน้า และบวกค่าของตาปัจจุบัน
+                        s[key] += (demon_count * 6)
+                    else:
+                        # ออกก้อยเลขคี่ตั้งแต่ 3 ขึ้นไป (3, 5, 7, ...) ดึงผลลัพธ์กลับไปติดลบตามเดิม
+                        if demon_count > 1:
+                            s[key] -= ((demon_count - 1) * 6)
                             
                 lbl.text = f"{s[key]}"
                 s['coin_idx'] += 1
