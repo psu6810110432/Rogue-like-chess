@@ -245,6 +245,7 @@ class GameplayScreen(Screen):
     def _update_bg(self, *args):
         if hasattr(self, 'bg_rect') and hasattr(self, 'grid'):
             self.bg_rect.pos, self.bg_rect.size = self.grid.pos, self.grid.size
+
     def init_board_ui(self):
         self.board_anchor.clear_widgets()
         gm = getattr(self, 'game_mode', 'PVP')
@@ -284,6 +285,16 @@ class GameplayScreen(Screen):
         
         # ดึงค่า Dimension จาก Options (ค่าเริ่มต้นคือ 2D เพื่อกันพัง)
         self.current_dimension = getattr(App.get_running_app(), 'selected_dimension', '2D')
+        # --- เพิ่มโค้ดชุดสีตรงนี้ (ดักจับตามชื่อด่าน) ---
+        # ✨ เช็คสีตารางจาก Type ของ Class แทนการใช้ String (ชัวร์กว่า)
+        if ForestMap and isinstance(self.game, ForestMap):
+            t_light, t_dark = (0.55, 0.65, 0.55, 1), (0.35, 0.45, 0.35, 1)  # ป่า
+        elif DesertMap and isinstance(self.game, DesertMap):
+            t_light, t_dark = (0.9, 0.65, 0.2, 1), (0.7, 0.45, 0.1, 1)      # ทะเลทราย
+        elif TundraMap and isinstance(self.game, TundraMap):
+            t_light, t_dark = (0.5, 0.8, 0.95, 1), (0.15, 0.4, 0.75, 1)     # หิมะ
+        else:
+            t_light, t_dark = (0.8, 0.8, 0.8, 1), (0.4, 0.4, 0.4, 1)        # คลาสสิก
         
         # ----------------------------------------------------
         # การจัดกระดานรูปแบบ 2D CLASSIC (ใช้โค้ดเดิมเป๊ะๆ)
@@ -313,10 +324,12 @@ class GameplayScreen(Screen):
         # การจัดกระดานรูปแบบ 2.5D ISOMETRIC 
         # ----------------------------------------------------
         else:
-            tile_w = dp(200)
-            tile_h = dp(100)
+            tile_w = dp(160)
+            tile_h = dp(80)
             board_width = tile_w * 8
             board_height = tile_h * 8
+
+            
             
             self.grid = CameraBoard(size_hint=(None, None), size=(board_width, board_height))
             self.board_layer = FloatLayout(size_hint=(1, 1))
@@ -329,7 +342,7 @@ class GameplayScreen(Screen):
                 
             self.squares = {}
             offset_x = self.grid.width / 2
-            offset_y = dp(100) 
+            offset_y = dp(50) 
             
             def get_render_rc(r, c):
                 return (r, c) if vp == 'white' else (7 - r, 7 - c)
@@ -338,7 +351,7 @@ class GameplayScreen(Screen):
             coords.sort(key=lambda coord: get_render_rc(coord[0], coord[1])[0] + get_render_rc(coord[0], coord[1])[1])
             
             for r, c in coords:
-                sq = ChessSquare(row=r, col=c, is_2d=False, piece_layer=self.piece_layer)
+                sq = ChessSquare(row=r, col=c, is_2d=False, piece_layer=self.piece_layer, tile_color_light=t_light, tile_color_dark=t_dark)
                 sq.bind(on_release=self.on_square_tap)
                 
                 rr, rc = get_render_rc(r, c)

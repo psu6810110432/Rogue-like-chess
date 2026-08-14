@@ -7,16 +7,19 @@ from kivy.core.image import Image as CoreImage
 from kivy.metrics import dp 
 
 class ChessSquare(ButtonBehavior, FloatLayout):
-    def __init__(self, row, col, is_2d=True, piece_layer=None, **kwargs):
+    def __init__(self, row, col, is_2d=True, piece_layer=None, tile_color_light=(0.8, 0.8, 0.8, 1), tile_color_dark=(0.4, 0.4, 0.4, 1), **kwargs):
         super().__init__(**kwargs)
         self.row, self.col = row, col
         self.is_2d = is_2d
+        self.tile_color_light = tile_color_light
+        self.tile_color_dark = tile_color_dark
         self.current_event = None
         self.current_event_path = None
         
         # 1. วาดพื้นกระดาน (แยกตาม 2D หรือ 2.5D)
         with self.canvas.before:
-            self.bg_color = Color(0, 0, 0, 0) # เริ่มต้นโปร่งใส
+            # ประกาศ Kivy Color object เปล่าๆ แล้วค่อย assign .rgba ในตอน sync_layout
+            self.bg_color = Color(1, 1, 1, 1) 
             if not self.is_2d:
                 self.quad = Quad(points=[0]*8)
                 Color(0.1, 0.1, 0.1, 0.5)
@@ -64,7 +67,7 @@ class ChessSquare(ButtonBehavior, FloatLayout):
     def sync_layout(self, *args):
         x, y, w, h = self.x, self.y, self.width, self.height
         
-        # จัดการสีกระดานไฮไลต์
+        # จัดการสีกระดานและไฮไลต์
         if self.is_check: 
             self.bg_color.rgba = (1, 0.2, 0.2, 0.8)
         elif self.highlight: 
@@ -73,8 +76,11 @@ class ChessSquare(ButtonBehavior, FloatLayout):
             if self.is_2d:
                 self.bg_color.rgba = (0, 0, 0, 0)
             else:
-                if (self.row + self.col) % 2 == 0: self.bg_color.rgba = (0.8, 0.8, 0.8, 1)
-                else: self.bg_color.rgba = (0.4, 0.4, 0.4, 1)
+                # แก้ไข: ดึงสีที่กำหนดมาจาก init มาใช้ตรงนี้ (ต้องเป็น Tuple rgba)
+                if (self.row + self.col) % 2 == 0: 
+                    self.bg_color.rgba = self.tile_color_light
+                else: 
+                    self.bg_color.rgba = self.tile_color_dark
 
         # -------------------------------------
         # ระบบวาดผลลัพธ์ดั้งเดิม (2D Classic)
