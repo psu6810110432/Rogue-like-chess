@@ -14,6 +14,7 @@ from kivy.uix.widget import Widget
 from kivy.clock import Clock
 from kivy.uix.floatlayout import FloatLayout
 from kivy.metrics import dp
+from kivy.animation import Animation
 
 from logic.board import ChessBoard
 from components.chess_square import ChessSquare
@@ -41,6 +42,38 @@ try:
     from logic.maps.tundra_map import TundraMap
 except ImportError:
     TundraMap = None
+
+class CameraBoard(FloatLayout):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.drag_start = None
+        self.start_pos = None
+
+    def on_touch_down(self, touch):
+        # ฟีเจอร์ที่ 1: ตรวจสอบการคลิกขวา (right click)
+        if touch.button == 'right':
+            touch.grab(self)
+            self.drag_start = touch.pos
+            self.start_pos = self.pos
+            return True
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        # คำนวณระยะที่เลื่อนและเปลี่ยนตำแหน่งกระดาน
+        if touch.grab_current is self and self.drag_start and self.start_pos:
+            dx = touch.x - self.drag_start[0]
+            dy = touch.y - self.drag_start[1]
+            self.pos = (self.start_pos[0] + dx, self.start_pos[1] + dy)
+            return True
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        if touch.grab_current is self:
+            touch.ungrab(self)
+            self.drag_start = None
+            self.start_pos = None
+            return True
+        return super().on_touch_up(touch)
 
 class GameplayScreen(Screen):
     def __init__(self, **kwargs):
@@ -212,33 +245,25 @@ class GameplayScreen(Screen):
     def _update_bg(self, *args):
         if hasattr(self, 'bg_rect') and hasattr(self, 'grid'):
             self.bg_rect.pos, self.bg_rect.size = self.grid.pos, self.grid.size
-
     def init_board_ui(self):
         self.board_anchor.clear_widgets()
         gm = getattr(self, 'game_mode', 'PVP')
         
         is_bot = False
         app = App.get_running_app()
-        
         match_type = getattr(app, 'match_type', 'PVE')
         
-        # Simply bind the bot view exclusively to the bot factions
         if gm == 'Divide_Conquer':
             attacker_faction = getattr(app.combat_source, 'faction', 'white') if hasattr(app, 'combat_source') else 'white'
             defender_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
-            
-            # Map the micro board turn (white/black) to the macro faction
             current_faction = attacker_faction if self.game.current_turn == 'white' else defender_faction
             
             if match_type == 'PVE':
                 player_involved = (attacker_faction == 'white' or defender_faction == 'white')
-                if not player_involved:
-                    is_bot = True
-                elif current_faction != 'white':
-                    is_bot = True
+                if not player_involved: is_bot = True
+                elif current_faction != 'white': is_bot = True
             elif match_type == 'LOCAL_PVP':
-                if current_faction == 'red':
-                    is_bot = True
+                if current_faction == 'red': is_bot = True
         else:
             if match_type == 'PVE' and self.game.current_turn == 'black':
                 is_bot = True
@@ -246,10 +271,7 @@ class GameplayScreen(Screen):
         phase = getattr(self, 'battle_phase', 'playing')
         
         if phase == 'playing':
-            if is_bot:
-                vp = 'white' 
-            else:
-                vp = self.game.current_turn 
+            vp = 'white' if is_bot else self.game.current_turn 
         elif phase == 'deployment_arrange_def':
             vp = 'black'
         else:
@@ -259,21 +281,140 @@ class GameplayScreen(Screen):
             self.refresh_ui(); return
             
         self.current_vp = vp
-        self.grid = GridLayout(cols=8, rows=8, size_hint=(None, None), spacing=0, padding=0)
-        self.board_anchor.add_widget(self.grid); self.board_anchor.bind(size=self._keep_grid_square)
-        if self.board_anchor.width > 0: self._keep_grid_square(self.board_anchor, self.board_anchor.size)
         
-        if hasattr(self.game, 'bg_image') and self.game.bg_image != '':
-            with self.grid.canvas.before:
-                Color(1, 1, 1, 1); self.bg_rect = Rectangle(source=self.game.bg_image, pos=self.grid.pos, size=self.grid.size)
-            self.grid.bind(pos=self._update_bg, size=self._update_bg)
+        # ดึงค่า Dimension จาก Options (ค่าเริ่มต้นคือ 2D เพื่อกันพัง)
+        self.current_dimension = getattr(App.get_running_app(), 'selected_dimension', '2D')
+        
+        # ----------------------------------------------------
+        # การจัดกระดานรูปแบบ 2D CLASSIC (ใช้โค้ดเดิมเป๊ะๆ)
+        # ----------------------------------------------------
+        if self.current_dimension == '2D':
+            self.grid = GridLayout(cols=8, rows=8, size_hint=(None, None), spacing=0, padding=0)
+            self.board_anchor.add_widget(self.grid)
+            self.board_anchor.bind(size=self._keep_grid_square)
+            if self.board_anchor.width > 0: self._keep_grid_square(self.board_anchor, self.board_anchor.size)
             
-        self.squares = {}
-        for r in (range(8) if vp == 'white' else range(7, -1, -1)):
-            for c in (range(8) if vp == 'white' else range(7, -1, -1)):
-                sq = ChessSquare(row=r, col=c); sq.bind(on_release=self.on_square_tap)
-                self.grid.add_widget(sq); self.squares[(r, c)] = sq
+            if hasattr(self.game, 'bg_image') and self.game.bg_image != '':
+                with self.grid.canvas.before:
+                    Color(1, 1, 1, 1)
+                    self.bg_rect = Rectangle(source=self.game.bg_image, pos=self.grid.pos, size=self.grid.size)
+                self.grid.bind(pos=self._update_bg, size=self._update_bg)
+                
+            self.squares = {}
+            for r in (range(8) if vp == 'white' else range(7, -1, -1)):
+                for c in (range(8) if vp == 'white' else range(7, -1, -1)):
+                    # สังเกตว่าเราส่ง is_2d=True เข้าไป
+                    sq = ChessSquare(row=r, col=c, is_2d=True)
+                    sq.bind(on_release=self.on_square_tap)
+                    self.grid.add_widget(sq)
+                    self.squares[(r, c)] = sq
+                    
+        # ----------------------------------------------------
+        # การจัดกระดานรูปแบบ 2.5D ISOMETRIC 
+        # ----------------------------------------------------
+        else:
+            tile_w = dp(200)
+            tile_h = dp(100)
+            board_width = tile_w * 8
+            board_height = tile_h * 8
+            
+            self.grid = CameraBoard(size_hint=(None, None), size=(board_width, board_height))
+            self.board_layer = FloatLayout(size_hint=(1, 1))
+            self.piece_layer = FloatLayout(size_hint=(1, 1))
+            self.grid.add_widget(self.board_layer)
+            self.grid.add_widget(self.piece_layer)
+            
+            self.board_anchor.add_widget(self.grid)
+            
+                
+            self.squares = {}
+            offset_x = self.grid.width / 2
+            offset_y = dp(100) 
+            
+            def get_render_rc(r, c):
+                return (r, c) if vp == 'white' else (7 - r, 7 - c)
+                
+            coords = [(r, c) for r in range(8) for c in range(8)]
+            coords.sort(key=lambda coord: get_render_rc(coord[0], coord[1])[0] + get_render_rc(coord[0], coord[1])[1])
+            
+            for r, c in coords:
+                sq = ChessSquare(row=r, col=c, is_2d=False, piece_layer=self.piece_layer)
+                sq.bind(on_release=self.on_square_tap)
+                
+                rr, rc = get_render_rc(r, c)
+                iso_x = (rr - rc) * (tile_w / 2)
+                iso_y = (14 - (rr + rc)) * (tile_h / 2)
+                
+                sq.size_hint = (None, None)
+                sq.size = (tile_w, tile_h)
+                sq.pos = (iso_x + offset_x - (tile_w / 2), iso_y + offset_y)
+                
+                self.board_layer.add_widget(sq)
+                self.squares[(r, c)] = sq
+                
+        # --- ส่วนที่ 1: ปุ่มเปิด/ปิด Sidebar ---
+        self.sidebar_is_open = True
+        self.sidebar_toggle_btn = Button(
+            text=">", font_size='24sp', bold=True,
+            size_hint=(None, None), size=(dp(30), dp(60)),
+            pos_hint={'right': 1, 'center_y': 0.5},
+            background_color=(0.1, 0.1, 0.1, 0.8) # สีคลีนๆ เข้มๆ
+        )
+        self.sidebar_toggle_btn.bind(on_release=self.toggle_sidebar)
+        self.root_layout.add_widget(self.sidebar_toggle_btn)
+
+        # --- ส่วนที่ 2: ปุ่มเปิด/ปิด Inventory ---
+        self.inv_is_open = True
+        self.inv_toggle_btn = Button(
+            text="v", font_size='24sp', bold=True,
+            size_hint=(None, None), size=(dp(60), dp(30)),
+            pos_hint={'center_x': 0.5, 'y': 0.18}, # ปรับ y ให้เหนือ Inventory[cite: 10]
+            background_color=(0.1, 0.1, 0.1, 0.8)
+        )
+        self.inv_toggle_btn.bind(on_release=self.toggle_inventory)
+        self.root_layout.add_widget(self.inv_toggle_btn)
         self.refresh_ui()
+
+    # ฟังก์ชันสไลด์ Sidebar[cite: 9]
+    def toggle_sidebar(self, instance):
+        if self.sidebar_is_open:
+            # เลื่อนออกไปทางขวาจนพ้นจอ
+            anim = Animation(x=self.width, duration=0.3, transition='out_expo')
+            anim.start(self.sidebar_panel)
+            instance.text = "<"
+            # ขยับปุ่มลูกศรตามไปด้วย
+            anim_btn = Animation(x=self.width - instance.width, duration=0.3, transition='out_expo')
+            anim_btn.start(instance)
+        else:
+            # เลื่อนกลับมาตำแหน่งเดิม
+            anim = Animation(x=self.width - self.sidebar_panel.width, duration=0.3, transition='out_expo')
+            anim.start(self.sidebar_panel)
+            instance.text = ">"
+            # ขยับปุ่มลูกศรกลับมา
+            anim_btn = Animation(x=self.width - self.sidebar_panel.width - instance.width, duration=0.3, transition='out_expo')
+            anim_btn.start(instance)
+            
+        self.sidebar_is_open = not self.sidebar_is_open
+
+    # ฟังก์ชันสไลด์ Inventory[cite: 10]
+    def toggle_inventory(self, instance):
+        if self.inv_is_open:
+            # เลื่อนลงล่างให้ซ่อนไป
+            anim = Animation(y=-self.inventory_layout.height, duration=0.3, transition='out_expo')
+            anim.start(self.inventory_layout)
+            instance.text = "^"
+            anim_btn = Animation(y=0, duration=0.3, transition='out_expo')
+            anim_btn.start(instance)
+        else:
+            # เลื่อนกลับขึ้นมา
+            anim = Animation(y=0, duration=0.3, transition='out_expo') 
+            anim.start(self.inventory_layout)
+            instance.text = "v"
+            # ขยับปุ่มลูกศรให้อยู่เหนือกล่อง Inventory เล็กน้อย
+            anim_btn = Animation(y=self.inventory_layout.height, duration=0.3, transition='out_expo')
+            anim_btn.start(instance)
+            
+        self.inv_is_open = not self.inv_is_open
 
     def _keep_grid_square(self, instance, value):
         side = (int(min(instance.width, instance.height)) // 8) * 8
@@ -395,6 +536,10 @@ class GameplayScreen(Screen):
                 is_last=il
             )
             p = self.game.board[r][c]; sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+            # พลิกหมากตัวที่ไม่ใช่ตาของฝั่งตัวเอง (หันหน้าเข้ากระดาน)
+            flip_piece = False if p and p.color != self.current_vp else True
+            sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p, flip=flip_piece)
+            
         self.sidebar.update_history_text(self.game.history.move_text_history)
         
         if getattr(self, 'battle_phase', 'playing') == 'playing':

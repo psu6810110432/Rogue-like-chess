@@ -6,6 +6,8 @@ from kivy.uix.label import Label
 from kivy.uix.slider import Slider
 from kivy.app import App
 from kivy.graphics import Rectangle, Color
+from kivy.clock import Clock
+
 # ✨ ดึงคลาสที่เราทำไว้มาใช้เพื่อความคุมโทน
 from screens.main_menu import RoundedButton
 from screens.match_setup.setup_section import SelectionCard
@@ -55,7 +57,23 @@ class OptionsScreen(Screen):
         diff_box.add_widget(self.diff_layout)
         main_layout.add_widget(diff_box)
 
-        # ✨ 4. MUSIC VOLUME
+        # ✨ 4. DIMENSION (ใช้ SelectionCard ขอบทอง) - ส่วนที่เพิ่มใหม่
+        dim_box = BoxLayout(orientation='vertical', spacing=10, size_hint_y=0.25)
+        self.add_gold_label(dim_box, "DIMENSION")
+        
+        self.dim_layout = BoxLayout(orientation='horizontal', spacing=20)
+        self.dim_btns = {}
+        for level in ['2D', '2.5D']:
+            btn = SelectionCard(text=f"[b]{level}[/b]")
+            btn.val = level
+            btn.bind(on_release=self.set_dimension)
+            self.dim_btns[level] = btn
+            self.dim_layout.add_widget(btn)
+        
+        dim_box.add_widget(self.dim_layout)
+        main_layout.add_widget(dim_box)
+
+        # ✨ 5. MUSIC VOLUME
         vol_box = BoxLayout(orientation='vertical', spacing=10, size_hint_y=0.25)
         self.add_gold_label(vol_box, "MUSIC VOLUME")
         
@@ -72,7 +90,7 @@ class OptionsScreen(Screen):
         vol_box.add_widget(vol_controls)
         main_layout.add_widget(vol_box)
 
-        # ✨ 5. ปุ่มกลับหน้าเมนู (3D สีเลือดหมูเข้ม)
+        # ✨ 6. ปุ่มกลับหน้าเมนู (3D สีเลือดหมูเข้ม)
         self.back_btn = RoundedButton(
             text="BACK TO MENU", normal_color=(0.4, 0.1, 0.1, 1),
             size_hint=(0.4, 0.15), pos_hint={'center_x': 0.5}, bold=True
@@ -82,10 +100,9 @@ class OptionsScreen(Screen):
         
         self.add_widget(main_layout)
         
-        # ตั้งค่าเริ่มต้นให้ Normal ถูกเลือก
-        Clock_once = lambda dt: self.refresh_difficulty_ui("Normal")
-        from kivy.clock import Clock
-        Clock.schedule_once(Clock_once)
+        # ตั้งค่าเริ่มต้น
+        Clock.schedule_once(lambda dt: self.refresh_difficulty_ui("Normal"))
+        Clock.schedule_once(lambda dt: self.refresh_dimension_ui("2D")) # ค่าเริ่มต้นตั้งเป็น 2.5D
 
     def add_gold_label(self, parent, text):
         lbl = Label(text=f"[color=d4af37][b]{text}[/b][/color]", markup=True, 
@@ -99,6 +116,7 @@ class OptionsScreen(Screen):
         self.bg_overlay.pos = self.pos
         self.bg_overlay.size = self.size
 
+    # --- ฟังก์ชัน AI DIFFICULTY ---
     def set_difficulty(self, instance):
         App.get_running_app().play_click_sound()
         self.refresh_difficulty_ui(instance.val)
@@ -107,8 +125,19 @@ class OptionsScreen(Screen):
         for val, btn in self.diff_btns.items():
             btn.set_selected(val == selected_val)
 
+    # --- ฟังก์ชัน DIMENSION (ส่วนที่เพิ่มใหม่) ---
+    def set_dimension(self, instance):
+        App.get_running_app().play_click_sound()
+        self.refresh_dimension_ui(instance.val)
+
+    def refresh_dimension_ui(self, selected_val):
+        for val, btn in self.dim_btns.items():
+            btn.set_selected(val == selected_val)
+        # บันทึกค่าลงใน App เพื่อให้ gameplay_screen.py ดึงไปใช้งาน
+        App.get_running_app().selected_dimension = selected_val
+
+    # --- ฟังก์ชัน VOLUME ---
     def on_volume_change(self, instance, value):
-        # ปรับระดับเสียง BGM ของแอป
         App.get_running_app().set_bgm_volume(value)
 
     def toggle_mute(self, instance):
