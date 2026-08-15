@@ -13,7 +13,7 @@ uniform mat4 projection_mat;
 varying vec4 frag_color;
 varying vec2 tex_coord0;
 
-void main (void) {
+void main(void) {
     frag_color = v_color;
     tex_coord0 = v_tc0;
     gl_Position = projection_mat * modelview_mat * vec4(v_pos, 1.0);
@@ -28,20 +28,19 @@ varying vec4 frag_color;
 varying vec2 tex_coord0;
 uniform sampler2D texture0;
 
-void main (void) {
-    // ถ้าพิกัด Texture ติดลบ แปลว่าเป็นพื้นกระดาน ให้ใช้สี Vertex (สีช่องตาราง)
-    if (tex_coord0.x < -0.9) {
+void main(void) {
+    // กรณีเป็นพื้นกระดาน (เรากำหนด UV ไว้ที่ -1.0)
+    if (tex_coord0.x < -0.5) {
         gl_FragColor = frag_color;
     } else {
-        // ดึงสีจากภาพ Texture ตัวหมากโดยตรง
+        // กรณีเป็นตัวหมาก ให้ดึงสีจาก Texture โดยตรง
         vec4 tex_col = texture2D(texture0, tex_coord0);
         
-        // ตัดพิกเซลโปร่งใสทิ้ง
+        // ตัดพื้นหลังที่โปร่งใสทิ้งไป
         if (tex_col.a < 0.1) {
-            discard; 
+            discard;
         }
         
-        // แสดงสีจากภาพจริง 100% ป้องกันปัญหาภาพกลายเป็นสีขาว
         gl_FragColor = tex_col;
     }
 }

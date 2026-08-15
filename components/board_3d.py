@@ -1,6 +1,6 @@
 # components/board_3d.py
 from kivy.uix.widget import Widget
-from kivy.graphics import RenderContext, Mesh, PushMatrix, PopMatrix, Callback, InstructionGroup, Translate, Rotate, BindTexture, Color
+from kivy.graphics import RenderContext, Mesh, PushMatrix, PopMatrix, Callback, InstructionGroup, Translate, Rotate, BindTexture, Color, Rectangle
 from kivy.graphics.transformation import Matrix
 from kivy.core.image import Image as CoreImage
 from kivy.clock import Clock
@@ -35,6 +35,7 @@ class Board3D(Widget):
         self.touch_start = None
         self.piece_rotations = []
         self.on_square_click = on_square_click
+        self._debug_rect_shown = False
 
         with self.canvas:
             PushMatrix()
@@ -88,50 +89,57 @@ class Board3D(Widget):
         for row in range(8):
             for col in range(8):
                 piece = board_data[row][col]
-                if piece:
-                    # img_path = image_path_resolver(piece)
-                    img_path = r"E:\game\Rogue-like-chess\assets\pieces\the knight company\white\1base\pawn1.png"
-                    if not img_path or not os.path.exists(img_path): continue
+                if not piece:
+                    continue
 
-                    # สร้างกลุ่มคำสั่งใหม่แยกสำหรับหมากตัวนี้
-                    group = InstructionGroup()
-                    try:
-                        core_img = CoreImage(img_path)
-                        tex = core_img.texture
-                        if tex:
-                            tex.mag_filter = 'nearest'
-                            tex.min_filter = 'nearest'
-                            
-                            # ✨ แก้ไขจุดนี้: ผูก Texture เข้ากับ Index 0 และระบุ Canvas สำหรับส่งค่า Uniform
-                            group.add(BindTexture(texture=tex, index=0))
-                    except Exception as e:
-                        print(f"Error loading texture: {e}")
+                img_path = image_path_resolver(piece)
+                if not img_path or not os.path.exists(img_path):
+                    continue
+
+                try:
+                    tex = CoreImage(img_path).texture
+                    if not tex: 
                         continue
+                    tex.mag_filter = 'nearest'
+                    tex.min_filter = 'nearest'
+                except Exception as e:
+                    print(f"Load error: {e}")
+                    continue
 
-                    group.add(PushMatrix())
-                    group.add(Translate(col * tile_size - offset + 0.5, 0, row * tile_size - offset + 0.5))
-                    
-                    rot = Rotate(angle=math.degrees(self.rot_y), axis=(0, 1, 0))
-                    self.piece_rotations.append(rot)
-                    group.add(rot)
-                    
-                    w, h = 1.0, 1.5
-                    v_piece = [
-                        -w/2, h, 0,  1,1,1,1,  0, 0, 
-                        -w/2, 0, 0,  1,1,1,1,  0, 1, 
-                         w/2, 0, 0,  1,1,1,1,  1, 1, 
-                         w/2, h, 0,  1,1,1,1,  1, 0  
-                    ]
-                    i_piece = [0, 1, 2, 0, 2, 3]
-                    
-                    group.add(Mesh(fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
-                                   mode='triangles', vertices=v_piece, indices=i_piece))
-                    group.add(PopMatrix())
-                    
-                    # ✨ สำคัญมาก: ต้องสั่งให้ Canvas หลักของ Board3D รู้ว่า texture0 ผูกอยู่กับ slot 0
-                    self.canvas['texture0'] = 0
-                    
-                    self.pieces_group.add(group)
+                group = InstructionGroup()
+                group.add(PushMatrix())
+                group.add(Translate(col * tile_size - offset + 0.5, 0, row * tile_size - offset + 0.5))
+                
+                # ให้หมากหันหน้าเข้าหากล้องเสมอ
+                rot = Rotate(angle=math.degrees(self.rot_y), axis=(0, 1, 0))
+                self.piece_rotations.append(rot)
+                group.add(rot)
+                
+                # ขนาดตัวหมาก
+                w, h = 1.0, 1.5
+                
+                # พิกัด Vertex และ UV แบบพลิกแกน Y ด้วยตัวเอง (0=บน, 1=ล่าง)
+                v_piece = [
+                    -w/2, h, 0,  1,1,1,1,  0, 0, # มุมซ้ายบน
+                    -w/2, 0, 0,  1,1,1,1,  0, 1, # มุมซ้ายล่าง
+                     w/2, 0, 0,  1,1,1,1,  1, 1, # มุมขวาล่าง
+                     w/2, h, 0,  1,1,1,1,  1, 0  # มุมขวาบน
+                ]
+                i_piece = [0, 1, 2, 0, 2, 3]
+                
+                # ✨ หัวใจหลักของความคลีน: ส่ง texture เข้า Mesh โดยตรง
+                group.add(Mesh(
+                    fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
+                    mode='triangles',
+                    vertices=v_piece,
+                    indices=i_piece,
+                    texture=tex
+                ))
+                
+                group.add(PopMatrix())
+                self.pieces_group.add(group)
+
+
     def on_touch_down(self, touch):
         if not self.collide_point(touch.x, touch.y):
             return super().on_touch_down(touch)
