@@ -279,8 +279,12 @@ class GameplayScreen(Screen):
         else:
             vp = 'white'
             
-        if hasattr(self, 'current_vp') and self.current_vp == vp and hasattr(self, 'grid') and self.grid in self.board_anchor.children:
-            self.refresh_ui(); return
+        if hasattr(self, 'current_vp') and self.current_vp == vp:
+            # ✨ แก้ไข: เช็คว่าถ้ามีกระดาน 3D อยู่แล้ว ก็ให้ข้ามการสร้างใหม่ไปเลย กล้องจะได้ไม่รีเซ็ต
+            if (hasattr(self, 'grid') and self.grid in self.board_anchor.children) or \
+               (hasattr(self, 'board_3d') and self.board_3d in self.board_anchor.children):
+                self.refresh_ui()
+                return
             
         self.current_vp = vp
         
@@ -420,62 +424,10 @@ class GameplayScreen(Screen):
         self.update_inventory_ui()
         
         phase = getattr(self, 'battle_phase', 'playing')
-        if hasattr(self, 'board_3d') and self.board_3d in self.board_anchor.children:
-            # ห่อหุ้มฟังก์ชันดึงภาพให้ส่งค่าเข้า board_3d ได้อย่างถูกต้อง
-            self.board_3d.draw_pieces(
-                self.game.board, 
-                lambda piece: self.get_piece_image_path(piece)
-            )
-            return
         
-        if phase == 'deployment_arrange_atk':
-            self.info_label.text = "[color=00ffff]PHASE 1: Arrange your units (Bottom 3 rows)[/color]"
-            for (r, c), sq in self.squares.items():
-                is_deploy_zone = (r >= 5)
-                is_legal_deploy = (is_deploy_zone and self.selected is not None and (r, c) != self.selected)
-                sq.update_square_style(highlight=(self.selected == (r, c)), is_legal=('move' if is_legal_deploy else False), is_check=False, is_last=False)
-                
-                p = self.game.board[r][c]
-                if not is_deploy_zone:
-                    sq.set_piece_icon(None, piece=None)
-                else:
-                    sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
-            return
-            
-        elif phase == 'deployment_arrange_def':
-            self.info_label.text = "[color=ffaa00]PHASE 2: Defender Arrange (Top 3 rows)[/color]"
-            for (r, c), sq in self.squares.items():
-                is_deploy_zone = (r <= 2)
-                is_legal_deploy = (is_deploy_zone and self.selected is not None and (r, c) != self.selected)
-                sq.update_square_style(highlight=(self.selected == (r, c)), is_legal=('move' if is_legal_deploy else False), is_check=False, is_last=False)
-                p = self.game.board[r][c]
-                sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
-            return
-            
-        elif phase == 'deployment_reveal':
-            self.info_label.text = "[color=ffaa00]PHASE 2: Enemy Revealed! Observe their position.[/color]"
-            
-            enemy_header_pos = None
-            for r in range(8):
-                for c in range(8):
-                    p = self.game.board[r][c]
-                    if p and p.color == 'black':
-                        if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False):
-                            enemy_header_pos = (r, c)
-                            break
-                if enemy_header_pos: break
-
-            for (r, c), sq in self.squares.items():
-                is_king = ((r, c) == enemy_header_pos)
-                sq.update_square_style(highlight=False, is_legal=False, is_check=is_king, is_last=False)
-                p = self.game.board[r][c]
-                sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
-            return
-
+        # 1. จัดการเรื่อง UI ข้อความและสถานะเกม
         if self.game.game_result:
-            # Stop the turn timer when the game is over
             self.stop_turn_timer()
-            
             if not getattr(self, '_end_played', False):
                 if "WHITE WINS" in self.game.game_result.upper() and getattr(self, 'game_mode', 'PVP') in ['PVE', 'Divide_Conquer']:
                     App.get_running_app().play_victory_sound()
@@ -492,49 +444,98 @@ class GameplayScreen(Screen):
                         if isinstance(child, Button) and ("Quit" in child.text or "Retreat" in child.text):
                             child.text = "Skip Countdown"
                             child.background_color = (0.2, 0.6, 0.2, 1)
-                            
+            
             if getattr(self, 'countdown_time', 0) > 0:
                 self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]\n[color=ffff00][size=16sp]Returning to map in {self.countdown_time}s...[/size][/color]"
             else:
                 self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
         else: 
-            turn_text = f"{self.game.current_turn.upper()}'S TURN"
-            if self.turn_timer_limit > 0 and self.turn_timer_remaining > 0:
-                t = max(0, self.turn_timer_remaining)
-                mins, secs = divmod(t, 60)
-                turn_text += f"   [color=aaaaaa]|[/color]   [color=ffdd55]{mins:02d}:{secs:02d}[/color]"
-            self.info_label.text = turn_text
+            if phase == 'deployment_arrange_atk':
+                self.info_label.text = "[color=00ffff]PHASE 1: Arrange your units (Bottom 3 rows)[/color]"
+            elif phase == 'deployment_arrange_def':
+                self.info_label.text = "[color=ffaa00]PHASE 2: Defender Arrange (Top 3 rows)[/color]"
+            elif phase == 'deployment_reveal':
+                self.info_label.text = "[color=ffaa00]PHASE 2: Enemy Revealed! Observe their position.[/color]"
+            else:
+                turn_text = f"{self.game.current_turn.upper()}'S TURN"
+                if self.turn_timer_limit > 0 and self.turn_timer_remaining > 0:
+                    t = max(0, self.turn_timer_remaining)
+                    mins, secs = divmod(t, 60)
+                    turn_text += f"   [color=aaaaaa]|[/color]   [color=ffdd55]{mins:02d}:{secs:02d}[/color]"
+                self.info_label.text = turn_text
             self._end_played = False 
 
-        cp = self.game.find_king(self.game.current_turn) if self.game.is_in_check(self.game.current_turn) else None
-        for (r, c), sq in self.squares.items():
-            il = (r, c) in (self.game.last_move or [])
-            is_legal = (r, c) in legal_moves
-            is_attack = False
-            
-            if is_legal and self.selected:
-                target_piece = self.game.board[r][c]
-                selected_piece = self.game.board[self.selected[0]][self.selected[1]]
-                if target_piece and target_piece.color != selected_piece.color:
-                    is_attack = True
-                elif not target_piece and hasattr(selected_piece, 'type') and selected_piece.type == 'pawn':
-                    sr, sc = self.selected
-                    if sc != c: is_attack = True
-            sq.update_square_style(
-                highlight=(self.selected == (r, c)), 
-                is_legal=('attack' if is_attack else is_legal), 
-                is_check=((r,c) == cp), 
-                is_last=il
-            )
-            p = self.game.board[r][c]; sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
-            # พลิกหมากตัวที่ไม่ใช่ตาของฝั่งตัวเอง (หันหน้าเข้ากระดาน)
-            flip_piece = False if p and p.color != self.current_vp else True
-            sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p, flip=flip_piece)
-            
+        # 2. อัปเดต Sidebar History
         self.sidebar.update_history_text(self.game.history.move_text_history)
-        
-        if getattr(self, 'battle_phase', 'playing') == 'playing':
-            self.highlight_headers()
+
+        # 3. แยกการทำงานระหว่าง 2D และ 3D (ตัด return ออกเพื่อให้ UI ทำงานครบถ้วน)
+        if hasattr(self, 'board_3d') and self.board_3d in self.board_anchor.children:
+            # อัปเดตตัวหมากในโหมด 3D
+            self.board_3d.draw_pieces(
+                self.game.board, 
+                lambda piece: self.get_piece_image_path(piece),
+                selected=self.selected,
+                legal_moves=legal_moves
+            )
+            
+        elif hasattr(self, 'squares'):
+            # อัปเดตกระดานและตัวหมากในโหมด 2D
+            cp = self.game.find_king(self.game.current_turn) if self.game.is_in_check(self.game.current_turn) else None
+            
+            if phase == 'deployment_arrange_atk':
+                for (r, c), sq in self.squares.items():
+                    is_deploy_zone = (r >= 5)
+                    is_legal_deploy = (is_deploy_zone and self.selected is not None and (r, c) != self.selected)
+                    sq.update_square_style(highlight=(self.selected == (r, c)), is_legal=('move' if is_legal_deploy else False), is_check=False, is_last=False)
+                    p = self.game.board[r][c]
+                    if not is_deploy_zone: sq.set_piece_icon(None, piece=None)
+                    else: sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+            elif phase == 'deployment_arrange_def':
+                for (r, c), sq in self.squares.items():
+                    is_deploy_zone = (r <= 2)
+                    is_legal_deploy = (is_deploy_zone and self.selected is not None and (r, c) != self.selected)
+                    sq.update_square_style(highlight=(self.selected == (r, c)), is_legal=('move' if is_legal_deploy else False), is_check=False, is_last=False)
+                    p = self.game.board[r][c]
+                    sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+            elif phase == 'deployment_reveal':
+                enemy_header_pos = None
+                for r in range(8):
+                    for c in range(8):
+                        p = self.game.board[r][c]
+                        if p and p.color == 'black':
+                            if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False):
+                                enemy_header_pos = (r, c); break
+                    if enemy_header_pos: break
+                for (r, c), sq in self.squares.items():
+                    is_king = ((r, c) == enemy_header_pos)
+                    sq.update_square_style(highlight=False, is_legal=False, is_check=is_king, is_last=False)
+                    p = self.game.board[r][c]
+                    sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+            else:
+                for (r, c), sq in self.squares.items():
+                    il = (r, c) in (self.game.last_move or [])
+                    is_legal = (r, c) in legal_moves
+                    is_attack = False
+                    
+                    if is_legal and self.selected:
+                        target_piece = self.game.board[r][c]
+                        selected_piece = self.game.board[self.selected[0]][self.selected[1]]
+                        if target_piece and target_piece.color != selected_piece.color:
+                            is_attack = True
+                        elif not target_piece and hasattr(selected_piece, 'type') and selected_piece.type == 'pawn':
+                            sr, sc = self.selected
+                            if sc != c: is_attack = True
+                    sq.update_square_style(
+                        highlight=(self.selected == (r, c)), 
+                        is_legal=('attack' if is_attack else is_legal), 
+                        is_check=((r,c) == cp), 
+                        is_last=il
+                    )
+                    p = self.game.board[r][c]
+                    flip_piece = False if p and p.color != self.current_vp else True
+                    sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p, flip=flip_piece)
+                
+                self.highlight_headers()
 
     def show_item_tooltip(self, item):
         self.hide_item_tooltip(); self.item_tooltip = ItemTooltip(item); self.root_layout.add_widget(self.item_tooltip)
@@ -766,7 +767,7 @@ class GameplayScreen(Screen):
 
     def update_inventory_ui(self):
         self.inventory_layout.clear_widgets()
-        info_box = BoxLayout(orientation='vertical', size_hint_x=None, width=dp(120))
+        info_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(50))
         info_box.add_widget(Label(text="INVENTORY", bold=True, font_size='14sp', color=(0.8, 0.8, 0.8, 1)))
         
         display_color = self.game.current_turn

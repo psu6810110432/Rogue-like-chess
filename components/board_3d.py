@@ -22,7 +22,6 @@ class Board3D(Widget):
             self.canvas.shader.fs = parts[1].strip()
         except Exception as e:
             print(f"Error loading shader: {e}")
-        
         self.proj_mat = Matrix()
         self.model_mat = Matrix()
         self.camera_mat = Matrix()
@@ -57,6 +56,7 @@ class Board3D(Widget):
 
         tile_size = 1.0
         offset = 4.0 
+        
 
         idx = 0
         for row in range(8):
@@ -79,12 +79,44 @@ class Board3D(Widget):
                 
         self.board_mesh = Mesh(fmt=vertex_format, mode='triangles', vertices=vertices, indices=indices)
 
-    def draw_pieces(self, board_data, image_path_resolver):
+    
+    def draw_pieces(self, board_data, image_path_resolver, selected=None, legal_moves=None):
         self.pieces_group.clear()
         self.piece_rotations.clear()
 
         tile_size = 1.0
         offset = 4.0
+
+        for row in range(8):
+            for col in range(8):
+                is_selected = (selected == (row, col))
+                is_legal = ((row, col) in legal_moves)
+                
+                if is_selected or is_legal:
+                    # สีเขียวสำหรับตัวที่เลือก, สีฟ้าสำหรับช่องที่เดินได้ (RGBA)
+                    color = (0.2, 0.8, 0.2, 0.6) if is_selected else (0.2, 0.5, 0.8, 0.6)
+                    
+                    group = InstructionGroup()
+                    group.add(PushMatrix())
+                    # ยกแผ่นสีขึ้นมาจากพื้นเล็กน้อย (y=0.01) เพื่อไม่ให้สีจมหรือกระพริบสลับกับพื้นกระดาน
+                    group.add(Translate(col * tile_size - offset, 0.01, row * tile_size - offset))
+                    
+                    # สร้างแผ่นสี่เหลี่ยมขนาดเท่า 1 ช่องตาราง
+                    # ส่ง UV เป็น -1.0 เพื่อบอก Shader ให้ใช้สีทึบ ไม่ใช้รูปภาพ
+                    v_highlight = [
+                        0, 0, 0,  *color,  -1.0, -1.0,
+                        0, 0, 1,  *color,  -1.0, -1.0,
+                        1, 0, 1,  *color,  -1.0, -1.0,
+                        1, 0, 0,  *color,  -1.0, -1.0
+                    ]
+                    i_highlight = [0, 1, 2, 0, 2, 3]
+                    
+                    group.add(Mesh(
+                        fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
+                        mode='triangles', vertices=v_highlight, indices=i_highlight
+                    ))
+                    group.add(PopMatrix())
+                    self.pieces_group.add(group)
 
         for row in range(8):
             for col in range(8):
@@ -144,7 +176,7 @@ class Board3D(Widget):
         if not self.collide_point(touch.x, touch.y):
             return super().on_touch_down(touch)
 
-        # ✨ แก้ไขสลับทิศทางซูม: เปลี่ยน scrollup เป็นบวก (ถอยออก) และ scrolldown เป็นลบ (ซูมเข้า) ให้สมูทขึ้น
+        # ระบบซูมเข้า-ออก (Scroll)
         if touch.button == 'scrollup':
             self.cam_dist = min(22.0, self.cam_dist + 0.8)
             return True
@@ -152,43 +184,14 @@ class Board3D(Widget):
             self.cam_dist = max(6.0, self.cam_dist - 0.8)
             return True
 
+        # ระบบหมุนมุมกล้อง (คลิกขวา)
         if touch.button == 'right':
             touch.grab(self)
             self.touch_start = touch.pos
             return True
             
-        if touch.button == 'left' and self.on_square_click:
-            local_x = touch.x - self.x
-            local_y = touch.y - self.y
-            nx = (2.0 * local_x) / self.width - 1.0
-            ny = (2.0 * local_y) / self.height - 1.0
-            
-            cam_y = self.cam_dist * math.sin(self.rot_x)
-            cam_x = self.cam_dist * math.cos(self.rot_x) * math.sin(self.rot_y)
-            cam_z = self.cam_dist * math.cos(self.rot_x) * math.cos(self.rot_y)
-            
-            try:
-                inv_mat = self.proj_mat.multiply(self.camera_mat).inverse()
-                far_pt = inv_mat.transform_point(nx, ny, 1.0)
-                
-                ray_dir = (far_pt[0] - cam_x, far_pt[1] - cam_y, far_pt[2] - cam_z)
-                
-                if ray_dir[1] != 0:
-                    t = -cam_y / ray_dir[1]
-                    hit_x = cam_x + t * ray_dir[0]
-                    hit_z = cam_z + t * ray_dir[2]
-                    
-                    tile_size = 1.0
-                    offset = 4.0
-                    col = int(math.floor((hit_x + offset) / tile_size))
-                    row = int(math.floor((hit_z + offset) / tile_size))
-                    
-                    if 0 <= col < 8 and 0 <= row < 8:
-                        self.on_square_click(row, col)
-                        return True
-            except Exception as e:
-                print(f"Raycast error: {e}")
-
+        # ❌ ลบระบบคลิกซ้าย (Raycast) ออกทั้งหมด ❌
+        
         return super().on_touch_down(touch)
 
     def on_touch_move(self, touch):
@@ -203,6 +206,20 @@ class Board3D(Widget):
             self.rot_x = max(0.1, min(math.pi / 2.2, self.rot_x))
             self.touch_start = touch.pos
             return True
+        if not touch.button == 'right':
+            # ใช้สมการแปลงพิกัดเมาส์แบบเดียวกับตอนคลิกเป๊ะๆ
+            aspect_ratio = float(self.width) / float(self.height) if self.height else 1.0
+            local_x = touch.x - self.x
+            local_y = touch.y - self.y
+            
+            nx = ((2.0 * local_x) / self.width - 1.0)
+            ny = (2.0 * local_y) / self.height - 1.0
+            
+            # คำนวณรังสี (Ray) ...
+            cam_y = self.cam_dist * math.sin(self.rot_x)
+            cam_x = self.cam_dist * math.cos(self.rot_x) * math.sin(self.rot_y)
+            cam_z = self.cam_dist * math.cos(self.rot_x) * math.cos(self.rot_y)
+
         return super().on_touch_move(touch)
 
     def on_touch_up(self, touch):
@@ -219,7 +236,6 @@ class Board3D(Widget):
         cam_y = self.cam_dist * math.sin(self.rot_x)
         cam_x = self.cam_dist * math.cos(self.rot_x) * math.sin(self.rot_y)
         cam_z = self.cam_dist * math.cos(self.rot_x) * math.cos(self.rot_y)
-        
         self.camera_mat = Matrix().look_at(cam_x, cam_y, cam_z, 0, 0, 0, 0, 1, 0)
         self.canvas['projection_mat'] = self.proj_mat
         self.canvas['modelview_mat'] = self.camera_mat.multiply(self.model_mat)
