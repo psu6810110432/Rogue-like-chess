@@ -8,7 +8,8 @@ from screens.tutorial_screen import TutorialScreen
 from kivy.properties import StringProperty
 from kivy.core.audio import SoundLoader
 from screens.campaign_map_screen import CampaignMapScreen
-
+from kivy.config import Config
+Config.set('input', 'mouse', 'mouse,disable_multitouch')
 class RogueChessApp(App):
     ai_difficulty = 'normal'
     selected_board = StringProperty('Classic Board')

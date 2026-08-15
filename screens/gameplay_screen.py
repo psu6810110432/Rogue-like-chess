@@ -15,6 +15,7 @@ from kivy.clock import Clock
 from kivy.uix.floatlayout import FloatLayout
 from kivy.metrics import dp
 from kivy.animation import Animation
+from components.board_3d import Board3D
 
 from logic.board import ChessBoard
 from components.chess_square import ChessSquare
@@ -285,6 +286,7 @@ class GameplayScreen(Screen):
         
         # ดึงค่า Dimension จาก Options (ค่าเริ่มต้นคือ 2D เพื่อกันพัง)
         self.current_dimension = getattr(App.get_running_app(), 'selected_dimension', '2D')
+        map_name = getattr(self.game, 'map_name', 'Classic Board')
         # --- เพิ่มโค้ดชุดสีตรงนี้ (ดักจับตามชื่อด่าน) ---
         # ✨ เช็คสีตารางจาก Type ของ Class แทนการใช้ String (ชัวร์กว่า)
         if ForestMap and isinstance(self.game, ForestMap):
@@ -295,7 +297,6 @@ class GameplayScreen(Screen):
             t_light, t_dark = (0.5, 0.8, 0.95, 1), (0.15, 0.4, 0.75, 1)     # หิมะ
         else:
             t_light, t_dark = (0.8, 0.8, 0.8, 1), (0.4, 0.4, 0.4, 1)        # คลาสสิก
-        
         # ----------------------------------------------------
         # การจัดกระดานรูปแบบ 2D CLASSIC (ใช้โค้ดเดิมเป๊ะๆ)
         # ----------------------------------------------------
@@ -324,46 +325,8 @@ class GameplayScreen(Screen):
         # การจัดกระดานรูปแบบ 2.5D ISOMETRIC 
         # ----------------------------------------------------
         else:
-            tile_w = dp(160)
-            tile_h = dp(80)
-            board_width = tile_w * 8
-            board_height = tile_h * 8
-
-            
-            
-            self.grid = CameraBoard(size_hint=(None, None), size=(board_width, board_height))
-            self.board_layer = FloatLayout(size_hint=(1, 1))
-            self.piece_layer = FloatLayout(size_hint=(1, 1))
-            self.grid.add_widget(self.board_layer)
-            self.grid.add_widget(self.piece_layer)
-            
-            self.board_anchor.add_widget(self.grid)
-            
-                
-            self.squares = {}
-            offset_x = self.grid.width / 2
-            offset_y = dp(50) 
-            
-            def get_render_rc(r, c):
-                return (r, c) if vp == 'white' else (7 - r, 7 - c)
-                
-            coords = [(r, c) for r in range(8) for c in range(8)]
-            coords.sort(key=lambda coord: get_render_rc(coord[0], coord[1])[0] + get_render_rc(coord[0], coord[1])[1])
-            
-            for r, c in coords:
-                sq = ChessSquare(row=r, col=c, is_2d=False, piece_layer=self.piece_layer, tile_color_light=t_light, tile_color_dark=t_dark)
-                sq.bind(on_release=self.on_square_tap)
-                
-                rr, rc = get_render_rc(r, c)
-                iso_x = (rr - rc) * (tile_w / 2)
-                iso_y = (14 - (rr + rc)) * (tile_h / 2)
-                
-                sq.size_hint = (None, None)
-                sq.size = (tile_w, tile_h)
-                sq.pos = (iso_x + offset_x - (tile_w / 2), iso_y + offset_y)
-                
-                self.board_layer.add_widget(sq)
-                self.squares[(r, c)] = sq
+            self.board_3d = Board3D(map_name=map_name, on_square_click=self.handle_3d_click, size_hint=(1, 1))
+            self.board_anchor.add_widget(self.board_3d)
                 
         # --- ส่วนที่ 1: ปุ่มเปิด/ปิด Sidebar ---
         self.sidebar_is_open = True
@@ -387,6 +350,14 @@ class GameplayScreen(Screen):
         self.inv_toggle_btn.bind(on_release=self.toggle_inventory)
         self.root_layout.add_widget(self.inv_toggle_btn)
         self.refresh_ui()
+
+    def handle_3d_click(self, row, col):
+        # ปั้นโครงสร้างพารามิเตอร์หลอกเพื่อโยนให้ฟังก์ชัน on_square_tap เดิมของคุณประมวลผลต่อ
+        class DummyInstance:
+            def __init__(self, r, c):
+                self.row = r
+                self.col = c
+        self.on_square_tap(DummyInstance(row, col))
 
     # ฟังก์ชันสไลด์ Sidebar[cite: 9]
     def toggle_sidebar(self, instance):
@@ -449,6 +420,13 @@ class GameplayScreen(Screen):
         self.update_inventory_ui()
         
         phase = getattr(self, 'battle_phase', 'playing')
+        if hasattr(self, 'board_3d') and self.board_3d in self.board_anchor.children:
+            # ห่อหุ้มฟังก์ชันดึงภาพให้ส่งค่าเข้า board_3d ได้อย่างถูกต้อง
+            self.board_3d.draw_pieces(
+                self.game.board, 
+                lambda piece: self.get_piece_image_path(piece)
+            )
+            return
         
         if phase == 'deployment_arrange_atk':
             self.info_label.text = "[color=00ffff]PHASE 1: Arrange your units (Bottom 3 rows)[/color]"
