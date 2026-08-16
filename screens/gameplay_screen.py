@@ -15,7 +15,11 @@ from kivy.clock import Clock
 from kivy.uix.floatlayout import FloatLayout
 from kivy.metrics import dp
 from kivy.animation import Animation
+from components.piece_card import PieceCard
 from components.board_3d import Board3D
+from kivy.uix.popup import Popup
+from kivy.uix.image import Image
+from components.bottom_ui_manager import BottomUIManager
 
 from logic.board import ChessBoard
 from components.chess_square import ChessSquare
@@ -134,7 +138,6 @@ class GameplayScreen(Screen):
             self.countdown_event = None
         self.countdown_time = 0
         
-        # Stop any previous turn timer
         self.stop_turn_timer()
 
         app = App.get_running_app()
@@ -146,15 +149,16 @@ class GameplayScreen(Screen):
         elif chosen_map == 'Frozen Tundra' and TundraMap: self.game = TundraMap(self.get_tribe_name('white'), self.get_tribe_name('black'))
         else: self.game = ChessBoard(self.get_tribe_name('white'), self.get_tribe_name('black'), map_name=chosen_map)
         
-        # Initialize the game controller (LocalGameController for offline modes)
         self.controller = LocalGameController(self.game)
+        
+        # ✨ ประกาศใช้ BottomUIManager
+        self.bottom_ui = BottomUIManager(self)
         
         if mode == 'Divide_Conquer':
             self.setup_divide_conquer_board(app)
             
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
         
-        # ---- Top Header Bar: single centered label ----
         app_timer = getattr(app, 'selected_time_limit', 0) or 0
         self.turn_timer_limit = app_timer
         self.turn_timer_remaining = app_timer
@@ -164,22 +168,26 @@ class GameplayScreen(Screen):
             bold=True, font_size='22sp', markup=True, size_hint_y=0.08
         )
         self.board_area.add_widget(self.info_label)
+        
         self.play_area = BoxLayout(orientation='vertical', size_hint_y=0.92)
-        self.board_anchor = AnchorLayout(anchor_x='center', anchor_y='center', size_hint_y=0.82)
+        
+        # ส่วนพื้นที่กระดานหลัก
+        self.board_anchor = AnchorLayout(anchor_x='center', anchor_y='center', size_hint_y=0.75)
         self.play_area.add_widget(self.board_anchor)
-        self.inv_anchor = AnchorLayout(anchor_x='center', anchor_y='top', size_hint_y=0.18, padding=[0, dp(10), 0, dp(20)])
-        self.inventory_layout = BoxLayout(orientation='horizontal', size_hint_x=0.85, spacing=dp(10), padding=dp(10))
-        with self.inventory_layout.canvas.before:
-            Color(0.05, 0.05, 0.07, 0.6); self.inv_bg = Rectangle(pos=self.inventory_layout.pos, size=self.inventory_layout.size)
-        self.inventory_layout.bind(pos=self._update_inv_bg, size=self._update_inv_bg)
-        self.inv_anchor.add_widget(self.inventory_layout)
-        self.play_area.add_widget(self.inv_anchor); self.board_area.add_widget(self.play_area)
+
+        # ✨ พื้นที่สำหรับ UI ด้านล่าง (สลับ 2D / 3D ทีหลัง)
+        self.bottom_area = BoxLayout(orientation='vertical', size_hint_y=0.25)
+        self.play_area.add_widget(self.bottom_area)
+        
+        # ✨ แอด play_area ลงใน board_area แค่รอบเดียวเท่านั้น (แก้บั๊ก Add ซ้ำ)
+        self.board_area.add_widget(self.play_area)
         self.main_layout.add_widget(self.board_area)
         
         self.sidebar_panel = BoxLayout(orientation='vertical', size_hint_x=0.25, padding=10, spacing=10)
         with self.sidebar_panel.canvas.before:
             Color(0.03, 0.03, 0.05, 0.85); self.sb_bg = Rectangle(pos=self.sidebar_panel.pos, size=self.sidebar_panel.size)
         self.sidebar_panel.bind(pos=self._update_sb_bg, size=self._update_sb_bg)
+        
         self.info_zone = BoxLayout(orientation='vertical', size_hint_y=0.45); self.sidebar_panel.add_widget(self.info_zone)
         self.divider = Widget(size_hint_y=None, height=dp(2))
         with self.divider.canvas.before:
@@ -187,7 +195,6 @@ class GameplayScreen(Screen):
         self.divider.bind(pos=self._update_div_bg, size=self._update_div_bg)
         
         def on_quit_action():
-            # รวบลอจิกทั้งหมดไปไว้ที่ self.on_quit() เพื่อความสะอาด
             self.on_quit()
                 
         self.sidebar = SidebarUI(on_undo_callback=self.on_undo_click, on_quit_callback=on_quit_action, game_mode=mode)
@@ -197,7 +204,6 @@ class GameplayScreen(Screen):
         if mode == 'Divide_Conquer':
             self.deployment_manager.setup_deployment_ui()
         
-        # Start turn timer if a limit was selected
         if self.turn_timer_limit > 0:
             self.start_turn_timer()
 
@@ -288,23 +294,27 @@ class GameplayScreen(Screen):
             
         self.current_vp = vp
         
-        # ดึงค่า Dimension จาก Options (ค่าเริ่มต้นคือ 2D เพื่อกันพัง)
+        # ดึงค่า Dimension จาก Options
         self.current_dimension = getattr(App.get_running_app(), 'selected_dimension', '2D')
         map_name = getattr(self.game, 'map_name', 'Classic Board')
-        # --- เพิ่มโค้ดชุดสีตรงนี้ (ดักจับตามชื่อด่าน) ---
-        # ✨ เช็คสีตารางจาก Type ของ Class แทนการใช้ String (ชัวร์กว่า)
-        if ForestMap and isinstance(self.game, ForestMap):
-            t_light, t_dark = (0.55, 0.65, 0.55, 1), (0.35, 0.45, 0.35, 1)  # ป่า
-        elif DesertMap and isinstance(self.game, DesertMap):
-            t_light, t_dark = (0.9, 0.65, 0.2, 1), (0.7, 0.45, 0.1, 1)      # ทะเลทราย
-        elif TundraMap and isinstance(self.game, TundraMap):
-            t_light, t_dark = (0.5, 0.8, 0.95, 1), (0.15, 0.4, 0.75, 1)     # หิมะ
-        else:
-            t_light, t_dark = (0.8, 0.8, 0.8, 1), (0.4, 0.4, 0.4, 1)        # คลาสสิก
-        # ----------------------------------------------------
-        # การจัดกระดานรูปแบบ 2D CLASSIC (ใช้โค้ดเดิมเป๊ะๆ)
-        # ----------------------------------------------------
+
+        # สีพื้นตาราง
+        if ForestMap and isinstance(self.game, ForestMap): t_light, t_dark = (0.55, 0.65, 0.55, 1), (0.35, 0.45, 0.35, 1)
+        elif DesertMap and isinstance(self.game, DesertMap): t_light, t_dark = (0.9, 0.65, 0.2, 1), (0.7, 0.45, 0.1, 1)
+        elif TundraMap and isinstance(self.game, TundraMap): t_light, t_dark = (0.5, 0.8, 0.95, 1), (0.15, 0.4, 0.75, 1)
+        else: t_light, t_dark = (0.8, 0.8, 0.8, 1), (0.4, 0.4, 0.4, 1)
+
+        # ✨ เคลียร์ UI ด้านล่างเก่าทิ้งก่อน
+        self.bottom_area.clear_widgets()
+
+        # ====================================================
+        # 🟢 กรณีเป็นโหมด 2D CLASSIC
+        # ====================================================
         if self.current_dimension == '2D':
+            self.board_anchor.size_hint_y = 0.82
+            self.bottom_area.size_hint_y = 0.18
+            
+            # 1. วาดกระดาน 2D
             self.grid = GridLayout(cols=8, rows=8, size_hint=(None, None), spacing=0, padding=0)
             self.board_anchor.add_widget(self.grid)
             self.board_anchor.bind(size=self._keep_grid_square)
@@ -319,18 +329,61 @@ class GameplayScreen(Screen):
             self.squares = {}
             for r in (range(8) if vp == 'white' else range(7, -1, -1)):
                 for c in (range(8) if vp == 'white' else range(7, -1, -1)):
-                    # สังเกตว่าเราส่ง is_2d=True เข้าไป
                     sq = ChessSquare(row=r, col=c, is_2d=True)
                     sq.bind(on_release=self.on_square_tap)
                     self.grid.add_widget(sq)
                     self.squares[(r, c)] = sq
-                    
-        # ----------------------------------------------------
-        # การจัดกระดานรูปแบบ 2.5D ISOMETRIC 
-        # ----------------------------------------------------
+
+            # 2. วาด Inventory แบบเก่า (2D)
+            self.inv_anchor = AnchorLayout(anchor_x='center', anchor_y='top', padding=[0, dp(10), 0, dp(20)])
+            self.inventory_layout = BoxLayout(orientation='horizontal', size_hint_x=0.85, spacing=dp(10), padding=dp(10))
+            with self.inventory_layout.canvas.before:
+                Color(0.05, 0.05, 0.07, 0.6)
+                self.inv_bg = Rectangle(pos=self.inventory_layout.pos, size=self.inventory_layout.size)
+            self.inventory_layout.bind(pos=self._update_inv_bg, size=self._update_inv_bg)
+            self.inv_anchor.add_widget(self.inventory_layout)
+            self.bottom_area.add_widget(self.inv_anchor)
+
+        # ====================================================
+        # 🔴 กรณีเป็นโหมด 2.5D (3D)
+        # ====================================================
         else:
+            # ✨ 1. แก้ปัญหาการ์ดแหว่ง โดยใช้ Fixed Height แทน %
+            self.bottom_area.size_hint_y = None
+            self.bottom_area.height = dp(270) # ล็อกความสูงให้พอดีกับการ์ด + เมนู
+            self.board_anchor.size_hint_y = 1 # ให้กระดาน 3D ยืดใช้พื้นที่ที่เหลือทั้งหมด
+            
+            # วาดกระดาน 3D
             self.board_3d = Board3D(map_name=map_name, on_square_click=self.handle_3d_click, size_hint=(1, 1))
             self.board_anchor.add_widget(self.board_3d)
+
+            from kivy.uix.scrollview import ScrollView
+            
+            # ✨ 2. เพิ่มโซน Action Menu (โผล่มาเหนือไพ่เวลาจะเดิน)
+            self.action_menu_container = ScrollView(size_hint=(1, 0.25), do_scroll_y=False, do_scroll_x=True)
+            self.action_menu_layout = BoxLayout(orientation='horizontal', size_hint_x=None, spacing=dp(10), padding=[dp(10), 0])
+            self.action_menu_layout.bind(minimum_width=self.action_menu_layout.setter('width'))
+            self.action_menu_container.add_widget(self.action_menu_layout)
+            self.bottom_area.add_widget(self.action_menu_container)
+
+            # 3. โซนไพ่ในมือและปุ่มกระเป๋า
+            hand_container = FloatLayout(size_hint=(1, 0.75))
+            
+            self.hand_scroll = ScrollView(size_hint=(0.85, 1), pos_hint={'right': 1, 'y': 0}, do_scroll_y=False, do_scroll_x=True)
+            self.hand_layout = BoxLayout(orientation='horizontal', size_hint_x=None, spacing=dp(10), padding=dp(10))
+            self.hand_layout.bind(minimum_width=self.hand_layout.setter('width'))
+            self.hand_scroll.add_widget(self.hand_layout)
+            hand_container.add_widget(self.hand_scroll)
+            
+            self.bag_btn = Button(
+                text="BAG\n(Items)", font_size='12sp', bold=True, halign='center',
+                size_hint=(0.12, 0.8), pos_hint={'x': 0.02, 'center_y': 0.5},
+                background_color=(0.15, 0.15, 0.2, 0.9)
+            )
+            self.bag_btn.bind(on_release=self.bottom_ui.open_bag_popup) 
+            hand_container.add_widget(self.bag_btn)
+            
+            self.bottom_area.add_widget(hand_container)
                 
         # --- ส่วนที่ 1: ปุ่มเปิด/ปิด Sidebar ---
         self.sidebar_is_open = True
@@ -342,8 +395,7 @@ class GameplayScreen(Screen):
         )
         self.sidebar_toggle_btn.bind(on_release=self.toggle_sidebar)
         self.root_layout.add_widget(self.sidebar_toggle_btn)
-
-        # --- ส่วนที่ 2: ปุ่มเปิด/ปิด Inventory ---
+                # --- ส่วนที่ 2: ปุ่มเปิด/ปิด Inventory ---
         self.inv_is_open = True
         self.inv_toggle_btn = Button(
             text="v", font_size='24sp', bold=True,
@@ -354,6 +406,7 @@ class GameplayScreen(Screen):
         self.inv_toggle_btn.bind(on_release=self.toggle_inventory)
         self.root_layout.add_widget(self.inv_toggle_btn)
         self.refresh_ui()
+
 
     def handle_3d_click(self, row, col):
         # ปั้นโครงสร้างพารามิเตอร์หลอกเพื่อโยนให้ฟังก์ชัน on_square_tap เดิมของคุณประมวลผลต่อ
@@ -421,7 +474,11 @@ class GameplayScreen(Screen):
     def refresh_ui(self, legal_moves=None):
         if legal_moves is None:
             legal_moves = []
-        self.update_inventory_ui()
+
+        if getattr(self, 'current_dimension', '2D') == '2D':
+            self.update_inventory_ui()
+        else:
+            self.update_hand_ui()
         
         phase = getattr(self, 'battle_phase', 'playing')
         
@@ -766,6 +823,8 @@ class GameplayScreen(Screen):
             self.selected = None; self.refresh_ui(); self.trigger_end_turn_logic(old_color)
 
     def update_inventory_ui(self):
+        if not hasattr(self, 'inventory_layout'): 
+            return
         self.inventory_layout.clear_widgets()
         info_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(50))
         info_box.add_widget(Label(text="INVENTORY", bold=True, font_size='14sp', color=(0.8, 0.8, 0.8, 1)))
@@ -782,6 +841,65 @@ class GameplayScreen(Screen):
                 slot.bind(on_release=lambda x, it=inv[i]: self.on_item_click(it))
                 self.inventory_layout.add_widget(slot)
             else: self.inventory_layout.add_widget(InventorySlot())
+
+    def update_hand_ui(self):
+        """ สแกนกระดานและวาดการ์ดตัวละครขึ้นมือ (แทนที่ inventory) """
+        if not hasattr(self, 'hand_layout'): return
+        self.hand_layout.clear_widgets()
+        
+        # ดึงสีของฝ่ายที่กำลังเข้าเทิร์น
+        current_color = self.game.current_turn
+        
+        # สแกนหาตัวหมากของฝ่ายตัวเองบนกระดาน
+        alive_pieces = []
+        for r in range(8):
+            for c in range(8):
+                piece = self.game.board[r][c]
+                if piece and piece.color == current_color:
+                    alive_pieces.append((piece, r, c))
+                    
+        # จัดเรียงไพ่ตามประเภท (King ขึ้นก่อน ตามด้วยตัวโหดๆ และ Pawn)
+        alive_pieces.sort(key=lambda x: self._get_piece_sort_value(x[0]), reverse=True)
+        
+        for piece, r, c in alive_pieces:
+            img_path = self.get_piece_image_path(piece)
+            if img_path:
+                # สร้างการ์ดและผูก Event เมื่อถูกเลือก
+                card = PieceCard(
+                    piece=piece, 
+                    image_path=img_path, 
+                    # ✨ สั่งให้ไปเรียก on_card_selected ในคลาส BottomUIManager แทน
+                    on_select=lambda c_instance, row=r, col=c: self.bottom_ui.on_card_selected(c_instance, row, col) 
+                )
+                self.hand_layout.add_widget(card)
+
+    def _get_piece_sort_value(self, piece):
+        """ ฟังก์ชันย่อยสำหรับจัดเรียงลำดับความสำคัญการ์ดในมือ """
+        name = piece.__class__.__name__.lower()
+        if name == 'king' or getattr(piece, 'name', '') == 'Prince': return 100
+        if name == 'queen': return 90
+        if name == 'rook': return 80
+        if name == 'bishop': return 70
+        if name == 'knight': return 60
+        return 10 # พวก Pawn หรือทหารเลว
+
+    def on_card_selected(self, card_instance, r, c):
+        """ เมื่อผู้เล่นคลิกการ์ดในมือ """
+        App.get_running_app().play_click_sound()
+        
+        # ล้างการเรืองแสงของการ์ดใบอื่นๆ ก่อน
+        for child in self.hand_layout.children:
+            if isinstance(child, PieceCard) and child != card_instance:
+                child.deselect()
+                
+        # อัปเดตพิกัดเป็น "ตัวที่เลือก" ในระบบ (เสมือนคลิกตัวหมาก)
+        self.selected = (r, c)
+        
+        # ส่งต่อให้ระบบเก่าโชว์ Status และไฮไลต์ช่องบนกระดาน
+        self.show_piece_status(card_instance.piece)
+        
+        # ตอนนี้ระบบยังไม่ได้ทำ Action Menu เลยส่งเข้า refresh_ui แบบเดิมไปก่อน
+        self.refresh_ui(self.game.get_legal_moves((r, c)))
 
     def on_item_click(self, item):
         if getattr(self.game, 'game_result', None): return
