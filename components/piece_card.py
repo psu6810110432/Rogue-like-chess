@@ -34,7 +34,8 @@ class PieceCard(ButtonBehavior, FloatLayout):
                 self.text_color = (0.9, 0.9, 0.9, 1)
                 
             self.bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(12)])
-            Color(0.83, 0.68, 0.21, 1)
+            # ✨ เก็บตัวแปรสีขอบเอาไว้ เพื่อให้แก้สีตอนคลิกได้
+            self.border_color = Color(0.83, 0.68, 0.21, 1) 
             self.border = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(12)), width=dp(1.5))
         
         self.bind(pos=self.update_graphics, size=self.update_graphics)
@@ -117,7 +118,7 @@ class PieceCard(ButtonBehavior, FloatLayout):
         if hidden_passive and hidden_passive.passive_type:
             hp_info = hidden_passive.get_passive_info()
             # ใช้สีเขียวสำหรับคำว่า buff และแดงสำหรับคำว่า debuff
-            color_hex = "00ffaa" if "buff" in hidden_passive.passive_type else "ff4444"
+            color_hex = "44FF44" if "buff" in hidden_passive.passive_type else "ff4444"
             modifier = hp_info.get('modifier', '')
             hidden_text = f"\n[color={color_hex}][Hidden] {hp_info['description']} ({modifier})[/color]"
             
@@ -153,6 +154,7 @@ class PieceCard(ButtonBehavior, FloatLayout):
         self.is_selected = True
         Animation(y=self.base_y + dp(30), duration=0.15, transition='out_bounce').start(self)
         self.border.width = dp(3.0)
+        self.border_color.rgba = (0.2, 0.9, 0.2, 1)
         if self.on_select_callback:
             self.on_select_callback(self)
             
@@ -160,3 +162,11 @@ class PieceCard(ButtonBehavior, FloatLayout):
         self.is_selected = False
         Animation(y=self.base_y, duration=0.15).start(self)
         self.border.width = dp(1.5)
+        self.border_color.rgba = (0.83, 0.68, 0.21, 1)
+
+    def set_selected_visuals(self):
+        """ตั้งค่าให้การ์ดเรืองแสงสีเขียวและลอยขึ้นทันทีเมื่อถูกสร้างใหม่"""
+        self.is_selected = True
+        self.border.width = dp(3.0)
+        self.border_color.rgba = (0.2, 0.9, 0.2, 1) # เปลี่ยนเป็นขอบสีเขียว
+        Animation(y=self.base_y + dp(30), duration=0.0).start(self)

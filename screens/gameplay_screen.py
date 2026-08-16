@@ -254,6 +254,9 @@ class GameplayScreen(Screen):
             self.bg_rect.pos, self.bg_rect.size = self.grid.pos, self.grid.size
 
     def init_board_ui(self):
+        saved_camera = None
+        if hasattr(self, 'board_3d') and self.board_3d in self.board_anchor.children:
+            saved_camera = (self.board_3d.rot_x, self.board_3d.rot_y, self.board_3d.cam_dist)
         self.board_anchor.clear_widgets()
         gm = getattr(self, 'game_mode', 'PVP')
         
@@ -350,11 +353,15 @@ class GameplayScreen(Screen):
         else:
             # ✨ 1. แก้ปัญหาการ์ดแหว่ง โดยใช้ Fixed Height แทน %
             self.bottom_area.size_hint_y = None
-            self.bottom_area.height = dp(270) # ล็อกความสูงให้พอดีกับการ์ด + เมนู
+            self.bottom_area.height = dp(320) # ล็อกความสูงให้พอดีกับการ์ด + เมนู
             self.board_anchor.size_hint_y = 1 # ให้กระดาน 3D ยืดใช้พื้นที่ที่เหลือทั้งหมด
             
             # วาดกระดาน 3D
             self.board_3d = Board3D(map_name=map_name, on_square_click=self.handle_3d_click, size_hint=(1, 1))
+            if saved_camera:
+                self.board_3d.rot_x = saved_camera[0]
+                self.board_3d.rot_y = saved_camera[1]
+                self.board_3d.cam_dist = saved_camera[2]
             self.board_anchor.add_widget(self.board_3d)
 
             from kivy.uix.scrollview import ScrollView
@@ -883,6 +890,8 @@ class GameplayScreen(Screen):
                     # ✨ สั่งให้ไปเรียก on_card_selected ในคลาส BottomUIManager แทน
                     on_select=lambda c_instance, row=r, col=c: self.bottom_ui.on_card_selected(c_instance, row, col) 
                 )
+                if self.selected == (r, c):
+                    card.set_selected_visuals()
                 self.hand_layout.add_widget(card)
 
     def _get_piece_sort_value(self, piece):
