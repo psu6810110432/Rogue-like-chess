@@ -18,6 +18,8 @@ from logic.campaign_map_generator import MapGenerator
 from logic.campaign_ai import CampaignAI
 from components.campaign_panel import CampaignArmyPanel
 from components.map_node import MapNode
+# ✨ เพิ่มการ Import แมพ 3D โหมด DNC เข้ามา
+from components.board_3d_macro import MacroBoard3D
 
 class CampaignMapScreen(Screen):
     def __init__(self, **kwargs):
@@ -311,6 +313,9 @@ class CampaignMapScreen(Screen):
         app = App.get_running_app()
         size_val = getattr(app, 'selected_board', 'Size_S')
         map_w, map_h = 9600, 5400
+
+        # ✨ เช็คว่าผู้เล่นเลือกเล่นโหมด 2D หรือ 3D
+        self.current_dimension = getattr(app, 'selected_dimension', '2D')
         
         map_data = MapGenerator.generate_data(size_val, map_w, map_h)
         nodes_data = map_data['w_nodes'] + map_data['b_nodes']
@@ -318,77 +323,115 @@ class CampaignMapScreen(Screen):
         if map_data['cross_edge']:
             all_edges.append(map_data['cross_edge'])
 
-        # --- 1. คำนวณสภาพแวดล้อม ---
-        tiles, props = EnvironmentGenerator.generate_environment(map_w, map_h, nodes_data, all_edges)
+        # เคลียร์กระดาน 3D อันเก่าทิ้ง (ถ้ามี) เพื่อป้องกันการซ้อนทับกัน
+        if hasattr(self, 'macro_3d') and self.macro_3d in self.children:
+            self.remove_widget(self.macro_3d)
 
-        # --- 2. สร้าง Layer เพื่อแก้ปัญหาการทับซ้อน (Z-Index) ---
-        # แยกชิ้นส่วนให้ชัดเจนเพื่อบังคับลำดับการเรนเดอร์ (ล่างสุดไปบนสุด)
-        bg_layer = FloatLayout(size=(map_w, map_h), size_hint=(None, None))
-        line_layer = FloatLayout(size=(map_w, map_h), size_hint=(None, None))
-        prop_layer = FloatLayout(size=(map_w, map_h), size_hint=(None, None))
+        # ====================================================
+        # 🟢 กรณีเป็นโหมด 2D CLASSIC CAMPAIGN
+        # ====================================================
+        if self.current_dimension == '2D':
+            self.scroll_view.opacity = 1
+            self.scroll_view.disabled = False
 
-        # --- 3. วาง Background Tiles ลงใน bg_layer ---
-        for t_data in tiles:
-            tile = EnvTile(
-                source=f"assets/environment/{t_data['biome']}.png",
-                pos=(t_data['x'], t_data['y']),
-                size=(t_data['w'], t_data['h']),
-                size_hint=(None, None)
-            )
-            bg_layer.add_widget(tile)
+            # --- 1. คำนวณสภาพแวดล้อม ---
+            tiles, props = EnvironmentGenerator.generate_environment(map_w, map_h, nodes_data, all_edges)
 
-        # --- 4. วาดเส้นทาง (Edges) ลงบน line_layer ---
-        # ต้องใช้ line_layer.canvas เพื่อให้เส้นวาดติดบนแผ่นใสชั้นที่ 2
-        with line_layer.canvas:
-            Color(0.85, 0.75, 0.3, 0.8)
+            # --- 2. สร้าง Layer เพื่อแก้ปัญหาการทับซ้อน (Z-Index) ---
+            bg_layer = FloatLayout(size=(map_w, map_h), size_hint=(None, None))
+            line_layer = FloatLayout(size=(map_w, map_h), size_hint=(None, None))
+            prop_layer = FloatLayout(size=(map_w, map_h), size_hint=(None, None))
+
+            # --- 3. วาง Background Tiles ลงใน bg_layer ---
+            for t_data in tiles:
+                tile = EnvTile(
+                    source=f"assets/environment/{t_data['biome']}.png",
+                    pos=(t_data['x'], t_data['y']),
+                    size=(t_data['w'], t_data['h']),
+                    size_hint=(None, None)
+                )
+                bg_layer.add_widget(tile)
+
+            # --- 4. วาดเส้นทาง (Edges) ลงบน line_layer ---
+            with line_layer.canvas:
+                Color(0.85, 0.75, 0.3, 0.8)
+                for u, v in map_data['white_edges'] + map_data['black_edges']:
+                    Line(points=[u['pos'][0], u['pos'][1], v['pos'][0], v['pos'][1]], width=4)
+                    
+                if map_data['cross_edge']:
+                    u, v = map_data['cross_edge']
+                    Color(0.9, 0.4, 0.2, 0.9)
+                    Line(points=[u['pos'][0], u['pos'][1], v['pos'][0], v['pos'][1]], width=8)
+
+            # --- 5. วาง Props ลงใน prop_layer ---
+            for p_data in props:
+                px = p_data['x'] - (p_data['size'] / 2)
+                py = p_data['y'] - (p_data['size'] / 2)
+                prop = EnvProp(
+                    source=f"assets/environment/{p_data['type']}.png",
+                    pos=(px, py),
+                    size=(p_data['size'], p_data['size']),
+                    size_hint=(None, None)
+                )
+                prop_layer.add_widget(prop)
+
+            # --- นำ Layer ทั้ง 3 มาซ้อนกันบน map_content ตามลำดับ ---
+            self.map_content.add_widget(bg_layer)
+            self.map_content.add_widget(line_layer)
+            self.map_content.add_widget(prop_layer)
+
+            # --- 6. วาง Nodes ให้อยู่บนสุด ---
+            nodes_dict = {}
+            for data in nodes_data:
+                node = MapNode(node_type=data['type'], faction=data['faction'], node_id=data['id'], is_main_base=data['main'], app=app)
+                node.base_pos = data['pos']
+                node.pos = (data['pos'][0] - node.width/2, data['pos'][1] - node.height/2)
+                self.nodes_list.append(node)
+                nodes_dict[data['id']] = node
+
             for u, v in map_data['white_edges'] + map_data['black_edges']:
-                Line(points=[u['pos'][0], u['pos'][1], v['pos'][0], v['pos'][1]], width=4)
+                nodes_dict[u['id']].neighbors.append(nodes_dict[v['id']])
+                nodes_dict[v['id']].neighbors.append(nodes_dict[u['id']])
                 
             if map_data['cross_edge']:
                 u, v = map_data['cross_edge']
-                Color(0.9, 0.4, 0.2, 0.9)
-                Line(points=[u['pos'][0], u['pos'][1], v['pos'][0], v['pos'][1]], width=8)
-
-        # --- 5. วาง Props ลงใน prop_layer ---
-        for p_data in props:
-            px = p_data['x'] - (p_data['size'] / 2)
-            py = p_data['y'] - (p_data['size'] / 2)
-            prop = EnvProp(
-                source=f"assets/environment/{p_data['type']}.png",
-                pos=(px, py),
-                size=(p_data['size'], p_data['size']),
-                size_hint=(None, None)
-            )
-            prop_layer.add_widget(prop)
-
-        # --- นำ Layer ทั้ง 3 มาซ้อนกันบน map_content ตามลำดับ ---
-        self.map_content.add_widget(bg_layer)
-        self.map_content.add_widget(line_layer)
-        self.map_content.add_widget(prop_layer)
-
-        # --- 6. วาง Nodes ให้อยู่บนสุด (เพราะ Add ทีหลังสุด) ---
-        nodes_dict = {}
-        for data in nodes_data:
-            node = MapNode(node_type=data['type'], faction=data['faction'], node_id=data['id'], is_main_base=data['main'], app=app)
-            node.base_pos = data['pos']
-            node.pos = (data['pos'][0] - node.width/2, data['pos'][1] - node.height/2)
-            self.nodes_list.append(node)
-            nodes_dict[data['id']] = node
-
-        for u, v in map_data['white_edges'] + map_data['black_edges']:
-            nodes_dict[u['id']].neighbors.append(nodes_dict[v['id']])
-            nodes_dict[v['id']].neighbors.append(nodes_dict[u['id']])
-            
-        if map_data['cross_edge']:
-            u, v = map_data['cross_edge']
-            nodes_dict[u['id']].neighbors.append(nodes_dict[v['id']])
-            nodes_dict[v['id']].neighbors.append(nodes_dict[u['id']])
+                nodes_dict[u['id']].neighbors.append(nodes_dict[v['id']])
+                nodes_dict[v['id']].neighbors.append(nodes_dict[u['id']])
+                    
+            for node in self.nodes_list: 
+                self.map_content.add_widget(node)
                 
-        for node in self.nodes_list: 
-            self.map_content.add_widget(node)
-            
-        self.scroll_view.scroll_x, self.scroll_view.scroll_y = 0.5, 0.5
-        self.jump_to_base(None)
+            self.scroll_view.scroll_x, self.scroll_view.scroll_y = 0.5, 0.5
+            self.jump_to_base(None)
+
+        # ====================================================
+        # 🔴 กรณีเป็นโหมด 2.5D (3D) MACRO MAP
+        # ====================================================
+        else:
+            # ซ่อนจอภาพและปิดการเลื่อน 2D ไปก่อน
+            self.scroll_view.opacity = 0
+            self.scroll_view.disabled = True
+
+            # กำหนดขนาดของ Grid 3D อิงตามขนาดแผนที่ (S, M, L)
+            grid_size = 20
+            if size_val == 'Size_S': grid_size = 16
+            elif size_val == 'Size_M': grid_size = 24
+            elif size_val == 'Size_L': grid_size = 32
+
+            # โหลด MacroBoard3D ขึ้นมา
+            self.macro_3d = MacroBoard3D(map_size=(grid_size, grid_size), size_hint=(1, 1))
+
+            # ถอด UI ออกมาแป๊บนึง เพื่อยัดกระดาน 3D เข้าไปข้างล่างให้อยู่หลัง UI เสมอ
+            self.remove_widget(self.ui_layer)
+            self.add_widget(self.macro_3d)
+            self.add_widget(self.ui_layer)
+
+            # เฟสแรก: ยังไม่แสดงปุ่มเมือง แต่ต้องลงทะเบียนเมืองเข้าหลังบ้านไว้ เพื่อไม่ให้ระบบพัง
+            for data in nodes_data:
+                node = MapNode(node_type=data['type'], faction=data['faction'], node_id=data['id'], is_main_base=data['main'], app=app)
+                # เราดรอป node ทิ้งไว้ใน list หลังบ้านเฉยๆ ระบบ AI หรือ Turn จะได้ทำงานรอด
+                self.nodes_list.append(node)
+
         self.hide_loading()
 
     def show_loading(self):

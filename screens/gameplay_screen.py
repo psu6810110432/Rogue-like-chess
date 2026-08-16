@@ -21,6 +21,7 @@ from kivy.uix.popup import Popup
 from kivy.uix.image import Image
 from components.bottom_ui_manager import BottomUIManager
 
+
 from logic.board import ChessBoard
 from components.chess_square import ChessSquare
 from components.sidebar_ui import SidebarUI
