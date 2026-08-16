@@ -5,6 +5,9 @@ from kivy.graphics.transformation import Matrix
 from kivy.core.image import Image as CoreImage
 from kivy.clock import Clock
 from kivy.core.window import Window
+from kivy.core.image import Image as CoreImage
+# ✨ เพิ่มบรรทัดนี้ลงไปใต้ CoreImage
+from kivy.core.text import Label as CoreLabel
 import math
 import os
 
@@ -79,30 +82,41 @@ class Board3D(Widget):
                 
         self.board_mesh = Mesh(fmt=vertex_format, mode='triangles', vertices=vertices, indices=indices)
 
-    
-    def draw_pieces(self, board_data, image_path_resolver, selected=None, legal_moves=None):
+# ✨ 1. เพิ่มพารามิเตอร์ last_move
+    def draw_pieces(self, board_data, image_path_resolver, selected=None, legal_moves=None, last_move=None):
         self.pieces_group.clear()
         self.piece_rotations.clear()
+
+        if legal_moves is None: legal_moves = []
+        if last_move is None: last_move = []
 
         tile_size = 1.0
         offset = 4.0
 
+        # ==========================================
+        # 1. วาดไฮไลต์ช่องบนพื้นกระดาน + ตัวอักษรพิกัด
+        # ==========================================
         for row in range(8):
             for col in range(8):
                 is_selected = (selected == (row, col))
                 is_legal = ((row, col) in legal_moves)
+                is_last = ((row, col) in last_move) # ✨ เช็คว่าเป็นจุดเดินของตาที่แล้วไหม
                 
-                if is_selected or is_legal:
-                    # สีเขียวสำหรับตัวที่เลือก, สีฟ้าสำหรับช่องที่เดินได้ (RGBA)
-                    color = (0.2, 0.8, 0.2, 0.6) if is_selected else (0.2, 0.5, 0.8, 0.6)
+                # ถ้าตรงกับสีใดสีหนึ่ง ให้วาดแผ่นแสงขึ้นมาที่พื้น
+                if is_selected or is_legal or is_last:
+                    # ✨ จัดลำดับความสำคัญของสี: เขียว > ฟ้า > เหลือง
+                    if is_selected:
+                        color = (0.2, 0.8, 0.2, 0.6) # เขียว (หมากที่กำลังเลือก)
+                    elif is_legal:
+                        color = (0.2, 0.5, 0.8, 0.6) # ฟ้า (ทางที่เดินได้)
+                    else:
+                        color = (0.8, 0.8, 0.2, 0.6) # เหลือง (ตาที่แล้ว)
                     
                     group = InstructionGroup()
-                    group.add(PushMatrix())
-                    # ยกแผ่นสีขึ้นมาจากพื้นเล็กน้อย (y=0.01) เพื่อไม่ให้สีจมหรือกระพริบสลับกับพื้นกระดาน
-                    group.add(Translate(col * tile_size - offset, 0.01, row * tile_size - offset))
                     
-                    # สร้างแผ่นสี่เหลี่ยมขนาดเท่า 1 ช่องตาราง
-                    # ส่ง UV เป็น -1.0 เพื่อบอก Shader ให้ใช้สีทึบ ไม่ใช้รูปภาพ
+                    # 🟢 วาดแผ่นสีที่พื้น
+                    group.add(PushMatrix())
+                    group.add(Translate(col * tile_size - offset, 0.01, row * tile_size - offset))
                     v_highlight = [
                         0, 0, 0,  *color,  -1.0, -1.0,
                         0, 0, 1,  *color,  -1.0, -1.0,
@@ -110,14 +124,44 @@ class Board3D(Widget):
                         1, 0, 0,  *color,  -1.0, -1.0
                     ]
                     i_highlight = [0, 1, 2, 0, 2, 3]
-                    
                     group.add(Mesh(
                         fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
                         mode='triangles', vertices=v_highlight, indices=i_highlight
                     ))
                     group.add(PopMatrix())
+                    
+                    # 🔠 แสดงข้อความพิกัด A1, B2 เฉพาะช่องสีฟ้า (is_legal)
+                    if is_legal:
+                        notation = f"{chr(65+col)}{row+1}"
+                        lbl = CoreLabel(text=notation, font_size=40, color=(1, 1, 1, 1), bold=True)
+                        lbl.refresh()
+                        text_tex = lbl.texture
+                        
+                        if text_tex:
+                            group.add(PushMatrix())
+                            group.add(Translate(col * tile_size - offset + 0.5, 0.05, row * tile_size - offset + 0.5))
+                            
+                            rot = Rotate(angle=math.degrees(self.rot_y), axis=(0, 1, 0))
+                            self.piece_rotations.append(rot)
+                            group.add(rot)
+                            
+                            tw, th = 0.6, 0.6
+                            v_text = [
+                                -tw/2, th/2, 0,  1,1,1,1,  0, 0,
+                                -tw/2, -th/2, 0,  1,1,1,1,  0, 1,
+                                 tw/2, -th/2, 0,  1,1,1,1,  1, 1,
+                                 tw/2, th/2, 0,  1,1,1,1,  1, 0 
+                            ]
+                            group.add(Mesh(
+                                fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
+                                mode='triangles', vertices=v_text, indices=[0, 1, 2, 0, 2, 3], texture=text_tex
+                            ))
+                            group.add(PopMatrix())
+                            
                     self.pieces_group.add(group)
-
+        # ==========================================
+        # 2. วาดตัวหมาก + Icon ไอเทม/Passive
+        # ==========================================
         for row in range(8):
             for col in range(8):
                 piece = board_data[row][col]
@@ -142,31 +186,79 @@ class Board3D(Widget):
                 group.add(PushMatrix())
                 group.add(Translate(col * tile_size - offset + 0.5, 0, row * tile_size - offset + 0.5))
                 
-                # ให้หมากหันหน้าเข้าหากล้องเสมอ
                 rot = Rotate(angle=math.degrees(self.rot_y), axis=(0, 1, 0))
                 self.piece_rotations.append(rot)
                 group.add(rot)
                 
-                # ขนาดตัวหมาก
+                # วาดร่างตัวหมากหลัก
                 w, h = 1.0, 1.5
-                
-                # พิกัด Vertex และ UV แบบพลิกแกน Y ด้วยตัวเอง (0=บน, 1=ล่าง)
                 v_piece = [
-                    -w/2, h, 0,  1,1,1,1,  0, 0, # มุมซ้ายบน
-                    -w/2, 0, 0,  1,1,1,1,  0, 1, # มุมซ้ายล่าง
-                     w/2, 0, 0,  1,1,1,1,  1, 1, # มุมขวาล่าง
-                     w/2, h, 0,  1,1,1,1,  1, 0  # มุมขวาบน
+                    -w/2, h, 0,  1,1,1,1,  0, 0,
+                    -w/2, 0, 0,  1,1,1,1,  0, 1,
+                     w/2, 0, 0,  1,1,1,1,  1, 1,
+                     w/2, h, 0,  1,1,1,1,  1, 0 
                 ]
                 i_piece = [0, 1, 2, 0, 2, 3]
                 
-                # ✨ หัวใจหลักของความคลีน: ส่ง texture เข้า Mesh โดยตรง
                 group.add(Mesh(
                     fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
-                    mode='triangles',
-                    vertices=v_piece,
-                    indices=i_piece,
-                    texture=tex
+                    mode='triangles', vertices=v_piece, indices=i_piece, texture=tex
                 ))
+                
+                # ✨ เปลี่ยนเป็นระบบ "วาดไอคอนแบบคอลัมน์ (Stacked Icons)"
+                icons_to_draw = []
+                
+                # 1. ไอคอน Passive ประจำเผ่า (ถ้ามี)
+                if getattr(piece, 'passive_icon', None):
+                    icons_to_draw.append(piece.passive_icon)
+                    
+               # 2. ไอคอน Hidden Passive 
+                hidden_passive = getattr(piece, 'hidden_passive', None)
+                if hidden_passive and getattr(hidden_passive, 'passive_type', None):
+                    # ✨ แปลงคำอธิบาย เช่น "Bonus Coins" ให้เป็น "bonus_coins"
+                    desc = hidden_passive.description.lower().replace(" ", "_")
+                    hp_icon_path = f"assets/icon_effect/{desc}.png"
+                    
+                    if os.path.exists(hp_icon_path):
+                        icons_to_draw.append(hp_icon_path)
+                    
+                # 3. ไอคอน Item ที่สวมใส่
+                item_obj = getattr(piece, 'item', None)
+                if item_obj and hasattr(item_obj, 'image_path'):
+                    icons_to_draw.append(item_obj.image_path)
+                
+                # นำไอคอนทั้งหมดที่ตรวจพบ มาวาดเรียงจากบนลงล่าง
+                start_y = 1.2 # ตำแหน่งตั้งต้น (บนสุดของตัวหมาก)
+                
+                for icon_path in icons_to_draw:
+                    if icon_path and os.path.exists(icon_path):
+                        try:
+                            icon_tex = CoreImage(icon_path).texture
+                            if icon_tex:
+                                icon_tex.mag_filter = 'nearest'
+                                icon_tex.min_filter = 'nearest'
+                                
+                                group.add(PushMatrix())
+                                # จัดตำแหน่ง X ให้อยู่มุมขวา (0.35) ส่วน Y จะลดลงเรื่อยๆ ตามลำดับคิว
+                                group.add(Translate(0.35, start_y, 0)) 
+                                
+                                iw, ih = 0.4, 0.4
+                                v_icon = [
+                                    -iw/2, ih, 0,  1,1,1,1,  0, 0,
+                                    -iw/2, 0, 0,   1,1,1,1,  0, 1,
+                                     iw/2, 0, 0,   1,1,1,1,  1, 1,
+                                     iw/2, ih, 0,  1,1,1,1,  1, 0 
+                                ]
+                                group.add(Mesh(
+                                    fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
+                                    mode='triangles', vertices=v_icon, indices=[0, 1, 2, 0, 2, 3], texture=icon_tex
+                                ))
+                                group.add(PopMatrix())
+                                
+                                # ขยับตำแหน่งลงมา 0.45 เพื่อเตรียมพื้นที่ให้ไอคอนลำดับถัดไป (คิวถัดไปจะอยู่ด้านล่าง)
+                                start_y -= 0.45 
+                        except Exception as e:
+                            pass
                 
                 group.add(PopMatrix())
                 self.pieces_group.add(group)

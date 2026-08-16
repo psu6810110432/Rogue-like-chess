@@ -384,8 +384,16 @@ class GameplayScreen(Screen):
             hand_container.add_widget(self.bag_btn)
             
             self.bottom_area.add_widget(hand_container)
-                
-        # --- ส่วนที่ 1: ปุ่มเปิด/ปิด Sidebar ---
+            
+        # ====================================================
+        # เคลียร์ปุ่ม Toggle เก่าทิ้งก่อน เพื่อป้องกันปุ่มซ้อนกันเวลาสลับ 2D / 3D
+        # ====================================================
+        if hasattr(self, 'sidebar_toggle_btn') and self.sidebar_toggle_btn in self.root_layout.children:
+            self.root_layout.remove_widget(self.sidebar_toggle_btn)
+        if hasattr(self, 'inv_toggle_btn') and self.inv_toggle_btn in self.root_layout.children:
+            self.root_layout.remove_widget(self.inv_toggle_btn)
+
+        # --- ส่วนที่ 1: ปุ่มเปิด/ปิด Sidebar (โชว์ตลอดทั้ง 2D และ 3D) ---
         self.sidebar_is_open = True
         self.sidebar_toggle_btn = Button(
             text=">", font_size='24sp', bold=True,
@@ -395,16 +403,19 @@ class GameplayScreen(Screen):
         )
         self.sidebar_toggle_btn.bind(on_release=self.toggle_sidebar)
         self.root_layout.add_widget(self.sidebar_toggle_btn)
-                # --- ส่วนที่ 2: ปุ่มเปิด/ปิด Inventory ---
-        self.inv_is_open = True
-        self.inv_toggle_btn = Button(
-            text="v", font_size='24sp', bold=True,
-            size_hint=(None, None), size=(dp(60), dp(30)),
-            pos_hint={'center_x': 0.5, 'y': 0.18}, # ปรับ y ให้เหนือ Inventory[cite: 10]
-            background_color=(0.1, 0.1, 0.1, 0.8)
-        )
-        self.inv_toggle_btn.bind(on_release=self.toggle_inventory)
-        self.root_layout.add_widget(self.inv_toggle_btn)
+
+        # --- ส่วนที่ 2: ปุ่มเปิด/ปิด Inventory (✨ แสดงเฉพาะโหมด 2D เท่านั้น) ---
+        if self.current_dimension == '2D':
+            self.inv_is_open = True
+            self.inv_toggle_btn = Button(
+                text="v", font_size='24sp', bold=True,
+                size_hint=(None, None), size=(dp(60), dp(30)),
+                pos_hint={'center_x': 0.5, 'y': 0.18}, # ปรับ y ให้เหนือ Inventory
+                background_color=(0.1, 0.1, 0.1, 0.8)
+            )
+            self.inv_toggle_btn.bind(on_release=self.toggle_inventory)
+            self.root_layout.add_widget(self.inv_toggle_btn)
+            
         self.refresh_ui()
 
 
@@ -532,7 +543,8 @@ class GameplayScreen(Screen):
                 self.game.board, 
                 lambda piece: self.get_piece_image_path(piece),
                 selected=self.selected,
-                legal_moves=legal_moves
+                legal_moves=legal_moves,
+                last_move=getattr(self.game, 'last_move', []) # ✨ ส่งพิกัดการเดินตาที่แล้วเข้าไป
             )
             
         elif hasattr(self, 'squares'):

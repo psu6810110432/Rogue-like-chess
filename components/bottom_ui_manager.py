@@ -22,7 +22,12 @@ class BottomUIManager:
         else:
             for item in inv:
                 ibox = BoxLayout(orientation='vertical', size_hint_x=None, width=dp(100))
-                ibox.add_widget(Image(source=item.image_path))
+                
+                # ✨ เปลี่ยนจากแค่โชว์รูป เป็นปุ่มให้กดเลือกไอเทมได้เลย
+                btn = Button(background_normal=item.image_path, size_hint_y=0.7)
+                btn.bind(on_release=lambda x, i=item: self._select_item_from_bag(i, pop))
+                
+                ibox.add_widget(btn)
                 ibox.add_widget(Label(text=item.name, font_size='12sp', size_hint_y=0.3, halign='center'))
                 content.add_widget(ibox)
                 
@@ -35,6 +40,21 @@ class BottomUIManager:
         pop = Popup(title=f"🎒 {current_color.upper()}'S INVENTORY BAG", content=main_box, size_hint=(0.6, 0.4))
         close_btn.bind(on_release=pop.dismiss)
         pop.open()
+
+    def _select_item_from_bag(self, item, popup):
+        popup.dismiss()
+        App.get_running_app().play_click_sound()
+        
+        # ✨ บันทึกไอเทมที่ผู้เล่นเลือกลงในระบบ
+        self.screen.selected_item = item
+        
+        # เคลียร์เมนูเดินทิ้ง (ถ้าเปิดค้างไว้)
+        if hasattr(self.screen, 'action_menu_layout'):
+            self.screen.action_menu_layout.clear_widgets()
+            
+        # เปลี่ยนข้อความด้านบนเพื่อบอกให้ผู้เล่นรู้ว่าต้องทำอะไรต่อ
+        self.screen.info_label.text = f"[color=00ffff]SELECT A CARD TO EQUIP: {item.name}[/color]"
+
 
     def show_equip_popup(self, piece, card_instance, r, c):
         current_color = self.screen.game.current_turn
@@ -79,30 +99,46 @@ class BottomUIManager:
 
     def on_card_selected(self, card_instance, r, c):
         App.get_running_app().play_click_sound()
+        piece = card_instance.piece
         
-        # เคลียร์เมนูเป้าหมายเก่าทิ้งก่อน
+        # 🟢 1. โหมดสวมใส่ไอเทม (ถ้าผู้เล่นเพิ่งไปกดไอเทมมาจากกระเป๋า)
+        if getattr(self.screen, 'selected_item', None):
+            item = self.screen.selected_item
+            # เช็คว่าตัวนี้รับไอเทมได้ไหม และ ยังไม่มีไอเทมใช่ไหม
+            can_equip = not getattr(piece, 'cannot_get_items', False) and getattr(piece, 'item', None) is None
+            
+            if can_equip:
+                # สวมใส่สำเร็จ!
+                self.screen.controller.submit_item_use(item, piece, self.screen.game.current_turn)
+                self.screen.selected_item = None # ล้างไอเทมในมือทิ้ง
+                self.screen.update_hand_ui() 
+                self.screen.show_piece_status(piece)
+                self.screen.refresh_ui()
+            else:
+                # สวมใส่ไม่ได้ (มีของอยู่แล้ว หรือห้ามใส่) -> ให้ยกเลิกการถือไอเทมไปเลย
+                self.screen.selected_item = None
+                self.screen.refresh_ui()
+                
+            return # จบการทำงาน ไม่ต้องไปเปิดหน้าเดินต่อ
+
+        # 🟢 2. โหมดคลิกเพื่อเดินหมาก (ปกติ)
         if hasattr(self.screen, 'action_menu_layout'):
             self.screen.action_menu_layout.clear_widgets()
         
+        # เคลียร์แสงสว่างของการ์ดใบอื่นที่ไม่ได้เลือก
         for child in self.screen.hand_layout.children:
             if isinstance(child, PieceCard) and child != card_instance:
                 child.deselect()
                 
         self.screen.selected = (r, c)
-        self.screen.show_piece_status(card_instance.piece)
+        self.screen.show_piece_status(piece)
         
-        piece = card_instance.piece
-        current_color = self.screen.game.current_turn
-        inv = getattr(self.screen.game, f'inventory_{current_color}', [])
+        # ✨ เพิ่ม 2 บรรทัดนี้ เพื่อสั่งกระดาน 3D ให้วาดแสงสีเขียวและสีฟ้า!
+        legal_moves = self.screen.game.get_legal_moves((r, c))
+        self.screen.refresh_ui(legal_moves)
         
-        can_equip = not getattr(piece, 'cannot_get_items', False) and getattr(piece, 'item', None) is None
-        
-        if inv and can_equip:
-            self.show_equip_popup(piece, card_instance, r, c)
-        else:
-            self.screen.refresh_ui(self.screen.game.get_legal_moves((r, c)))
-            # ✨ เมื่อคลิกการ์ด (และไม่ต้องใส่ไอเทม) ให้โชว์เมนูเดิน
-            self.show_move_options(piece, r, c)
+        # โชว์เมนูเลือกทิศทางการเดิน
+        self.show_move_options(piece, r, c)
 
     # ==========================================
     # ระบบ Action Menu (ปุ่มแกนเดิน & เป้าหมาย)
@@ -127,7 +163,7 @@ class BottomUIManager:
             return
             
         name = piece.__class__.__name__.lower()
-        # ถ้าเป็นพวกตัวเดินง่าย (Pawn, King) โชว์จุดเป้าหมายเลยไม่ต้องแยกแกน
+        # ถ้าเป็นหมากเดินง่าย (Pawn, King) จะขึ้นพิกัดปลายทางให้เลยไม่ต้องผ่านกลุ่ม
         if name in ['pawn', 'king', 'levies']:
             self.show_targets(r, c, legal_moves)
         else:
