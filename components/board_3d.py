@@ -5,7 +5,6 @@ from kivy.graphics.transformation import Matrix
 from kivy.core.image import Image as CoreImage
 from kivy.clock import Clock
 from kivy.core.window import Window
-from kivy.core.image import Image as CoreImage
 # ✨ เพิ่มบรรทัดนี้ลงไปใต้ CoreImage
 from kivy.core.text import Label as CoreLabel
 import math

@@ -11,6 +11,7 @@ from kivy.metrics import dp
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.modalview import ModalView
+from components.map_banner import MapBanner
 from logic.environment_generator import EnvironmentGenerator, EnvTile, EnvProp
 from kivy.uix.widget import Widget
 from logic.campaign_helpers import get_distance, generate_piece, ensure_header, resolve_map_battle
@@ -314,7 +315,6 @@ class CampaignMapScreen(Screen):
         size_val = getattr(app, 'selected_board', 'Size_S')
         map_w, map_h = 9600, 5400
 
-        # ✨ เช็คว่าผู้เล่นเลือกเล่นโหมด 2D หรือ 3D
         self.current_dimension = getattr(app, 'selected_dimension', '2D')
         
         map_data = MapGenerator.generate_data(size_val, map_w, map_h)
@@ -323,7 +323,6 @@ class CampaignMapScreen(Screen):
         if map_data['cross_edge']:
             all_edges.append(map_data['cross_edge'])
 
-        # เคลียร์กระดาน 3D อันเก่าทิ้ง (ถ้ามี) เพื่อป้องกันการซ้อนทับกัน
         if hasattr(self, 'macro_3d') and self.macro_3d in self.children:
             self.remove_widget(self.macro_3d)
 
@@ -405,32 +404,85 @@ class CampaignMapScreen(Screen):
             self.jump_to_base(None)
 
         # ====================================================
-        # 🔴 กรณีเป็นโหมด 2.5D (3D) MACRO MAP
+        # 🔴 โหมด 2.5D (3D) MACRO MAP
         # ====================================================
         else:
-            # ซ่อนจอภาพและปิดการเลื่อน 2D ไปก่อน
             self.scroll_view.opacity = 0
             self.scroll_view.disabled = True
 
-            # กำหนดขนาดของ Grid 3D อิงตามขนาดแผนที่ (S, M, L)
-            grid_size = 20
-            if size_val == 'Size_S': grid_size = 16
-            elif size_val == 'Size_M': grid_size = 24
-            elif size_val == 'Size_L': grid_size = 32
-
-            # โหลด MacroBoard3D ขึ้นมา
+            grid_size = 16 if size_val == 'Size_S' else (24 if size_val == 'Size_M' else 32)
             self.macro_3d = MacroBoard3D(map_size=(grid_size, grid_size), size_hint=(1, 1))
 
-            # ถอด UI ออกมาแป๊บนึง เพื่อยัดกระดาน 3D เข้าไปข้างล่างให้อยู่หลัง UI เสมอ
+            # ✨ 1. สร้าง Layout UI ซ้ายและขวา ให้เรียงเป็น Column
+            if hasattr(self, 'left_panel') and self.left_panel in self.ui_layer.children:
+                self.ui_layer.remove_widget(self.left_panel)
+            if hasattr(self, 'right_panel') and self.right_panel in self.ui_layer.children:
+                self.ui_layer.remove_widget(self.right_panel)
+
+            self.left_panel = ScrollView(size_hint=(None, 0.8), width=dp(160), pos_hint={'x': 0.02, 'y': 0.1})
+            self.left_box = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(10), padding=dp(5))
+            self.left_box.bind(minimum_height=self.left_box.setter('height'))
+            self.left_panel.add_widget(self.left_box)
+            
+            self.right_panel = ScrollView(size_hint=(None, 0.8), width=dp(160), pos_hint={'right': 0.98, 'y': 0.1})
+            self.right_box = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(10), padding=dp(5))
+            self.right_box.bind(minimum_height=self.right_box.setter('height'))
+            self.right_panel.add_widget(self.right_box)
+
+            self.ui_layer.add_widget(self.left_panel)
+            self.ui_layer.add_widget(self.right_panel)
+
             self.remove_widget(self.ui_layer)
             self.add_widget(self.macro_3d)
             self.add_widget(self.ui_layer)
 
-            # เฟสแรก: ยังไม่แสดงปุ่มเมือง แต่ต้องลงทะเบียนเมืองเข้าหลังบ้านไว้ เพื่อไม่ให้ระบบพัง
+            # ✨ 2. สุ่มชื่อเมือง 14 ชื่อไม่ซ้ำกัน
+            name_pool = [
+                "Avalon", "Lordaeron", "Camelot", "Gondor", "Rohan", "Winterfell", "Rivendell", 
+                "Asgard", "Midgard", "Valhalla", "Olympus", "Elysium", "Troy", "Sparta"
+            ]
+            random_names = random.sample(name_pool, 14)
+            name_idx = 0
+
+            self.active_banners = []
+            self.nodes_3d_pos = {}
+            nodes_dict = {}
+
+            # ลูปที่ 1: สร้าง Node และประทับตราชื่อเมือง
             for data in nodes_data:
                 node = MapNode(node_type=data['type'], faction=data['faction'], node_id=data['id'], is_main_base=data['main'], app=app)
-                # เราดรอป node ทิ้งไว้ใน list หลังบ้านเฉยๆ ระบบ AI หรือ Turn จะได้ทำงานรอด
+                node.base_pos = data['pos']
+                
+                # แปะชื่อเมืองให้ Node ฝังไว้ในออบเจ็กต์เลย
+                node.city_name = random_names[name_idx % len(random_names)]
+                name_idx += 1
+                
                 self.nodes_list.append(node)
+                nodes_dict[data['id']] = node
+                
+                # คำนวณ 3D (เอาไว้วาดปราสาทลงบนแมพ)
+                scale_factor = 2.5 
+                cx = (node.base_pos[0] / 9600.0) * (grid_size * scale_factor)
+                cz = (node.base_pos[1] / 5400.0) * (grid_size * scale_factor)
+                c_play, r_play = cx + 40, cz + 40
+                
+                world_x = c_play - (((grid_size * scale_factor) + 80) / 2.0)
+                world_z = r_play - (((grid_size * scale_factor) + 80) / 2.0)
+                world_y = self.macro_3d.get_height_at(c_play, r_play)
+                
+                self.nodes_3d_pos[node.node_id] = (world_x, world_y, world_z)
+
+            # เชื่อม Edge ให้ระบบรับรู้ Neighbor
+            for u, v in all_edges:
+                nodes_dict[u['id']].neighbors.append(nodes_dict[v['id']])
+                nodes_dict[v['id']].neighbors.append(nodes_dict[u['id']])
+                
+            # วาดแมพ 3D
+            self.macro_3d.draw_paths(all_edges, self.nodes_3d_pos)
+            self.macro_3d.draw_structures(self.nodes_list, self.nodes_3d_pos)
+
+            # ✨ 3. เรียกฟังก์ชันแสดงผลธงลงบนหน้าจอ!
+            self.refresh_banners()
 
         self.hide_loading()
 
@@ -474,3 +526,111 @@ class CampaignMapScreen(Screen):
                     Clock.schedule_once(
                         lambda dt: self.end_turn(None), 1.0
                     )
+
+    def on_banner_click(self, instance):
+        app = App.get_running_app()
+        if hasattr(app, 'play_click_sound'): app.play_click_sound()
+
+        target_node = getattr(instance, 'node', None)
+        if not target_node: return
+
+        # ========================================================
+        # 🟢 โหมด: กำลังสั่งเดินทัพ (กดปุ่ม MARCH / ATTACK มาแล้ว)
+        # ========================================================
+        if self.marching_from_node:
+            # เช็คก่อนว่าเมืองที่คลิก (ธงที่คลิก) มีเส้นทางเชื่อมกับเมืองหลักหรือไม่
+            if target_node in self.marching_from_node.neighbors:
+                if target_node.faction == self.marching_from_node.faction:
+                    # 1. ย้ายทัพเข้าเมืองตัวเอง
+                    target_node.army_pieces.extend(app.combat_marching_army)
+                    self.marching_from_node = None
+                    self.status_lbl.text = "TROOPS RELOCATED SUCCESSFULLY."
+                    self.end_turn(None)
+                else:
+                    # 2. โจมตีเมืองศัตรู
+                    self.initiate_combat(self.marching_from_node, target_node)
+            else:
+                # 3. เมืองไม่ได้เชื่อมกัน
+                self.status_lbl.text = "[color=ff0000]TARGET NOT CONNECTED! SELECT ADJACENT CITY.[/color]"
+                
+        # ========================================================
+        # 🔵 โหมด: ปกติ (คลิกเพื่อดูรายละเอียดเมือง)
+        # ========================================================
+        else:
+            if hasattr(self, 'army_panel'):
+                # เปิด Panel ด้านล่าง เหมือนโหมด 2D
+                self.army_panel.open_for_node(target_node)
+
+    # 1. เพิ่มฟังก์ชันรีเฟรชธงแยกออกมาเพื่อให้เรียกอัปเดตง่ายๆ
+    def refresh_banners(self):
+        app = App.get_running_app()
+        if not hasattr(self, 'left_box'): return
+        
+        # เคลียร์ของเก่าทิ้ง
+        if hasattr(self, 'active_banners'):
+            for banner in self.active_banners: banner.destroy()
+        self.left_box.clear_widgets()
+        self.right_box.clear_widgets()
+        self.active_banners = []
+
+        current_faction = app.current_map_turn
+        
+        # กรองหาเมืองฝ่ายเรา
+        friendly_nodes = [n for n in self.nodes_list if n.faction == current_faction]
+        
+        # กรองหาเมืองฝ่ายศัตรู "ที่เชื่อมต่อกับเมืองฝ่ายเราเท่านั้น"
+        enemy_nodes = set()
+        for fn in friendly_nodes:
+            for neighbor in fn.neighbors:
+                if neighbor.faction != current_faction:
+                    enemy_nodes.add(neighbor)
+
+        # แปะธงซ้าย (เมืองเรา)
+        for fn in friendly_nodes:
+            banner = MapBanner(node=fn, city_name=getattr(fn, 'city_name', 'Unknown'), map_screen_ref=self)
+            self.left_box.add_widget(banner)
+            self.active_banners.append(banner)
+
+        # แปะธงขวา (เป้าหมายศัตรู)
+        for en in enemy_nodes:
+            banner = MapBanner(node=en, city_name=getattr(en, 'city_name', 'Unknown'), map_screen_ref=self)
+            self.right_box.add_widget(banner)
+            self.active_banners.append(banner)
+
+
+    # ----------------------------------------------------
+    # 2. แก้ไข Logic เมื่อธงถูกคลิก ให้เชื่อมกับ Campaign Panel
+    # ----------------------------------------------------
+    def on_banner_click(self, instance):
+        app = App.get_running_app()
+        if hasattr(app, 'play_click_sound'): app.play_click_sound()
+
+        target_node = instance.node
+
+        # ⚔️ ถ้าอยู่ในสถานะกำลัง "เดินทัพ/โจมตี" (กดปุ่มมาจาก Panel แล้ว)
+        if self.marching_from_node:
+            if target_node in self.marching_from_node.neighbors:
+                if target_node.faction == self.marching_from_node.faction:
+                    # เดินเข้าเมืองตัวเอง (Merge Army)
+                    target_node.army_pieces.extend(app.combat_marching_army)
+                    self.marching_from_node = None
+                    self.status_lbl.text = f"MARCHED TO {instance.city_name.upper()}"
+                    self.refresh_banners()
+                    self.end_turn(None) # บังคับจบเทิร์นหลังเดิน หรือจะเอาออกถ้าอยากให้เดินต่อได้
+                else:
+                    # โจมตีศัตรู! (Attack)
+                    self.initiate_combat(self.marching_from_node, target_node)
+            else:
+                self.status_lbl.text = "[color=ff0000]TARGET NOT CONNECTED![/color]"
+                # คืนทหารกลับเข้าเมืองเดิม ถ้ายกเลิก/กดผิด
+                self.marching_from_node.army_pieces.extend(app.combat_marching_army)
+                self.marching_from_node = None
+        else:
+            # 🏠 ถ้าอยู่ในสถานะปกติ (คลิกดูข้อมูล)
+            if target_node.faction == app.current_map_turn:
+                # เมืองเรา -> เปิด Panel ขึ้นมาให้จัดการ (เมื่อกด March จาก Panel มันจะเซ็ต self.marching_from_node)
+                if hasattr(self, 'army_panel'):
+                    self.army_panel.open_for_node(target_node)
+            else:
+                # เมืองศัตรู -> โชว์แค่ชื่อ
+                self.status_lbl.text = f"[color=ff8800]ENEMY BASE: {instance.city_name.upper()}[/color]"

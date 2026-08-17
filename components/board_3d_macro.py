@@ -3,7 +3,8 @@ from kivy.uix.widget import Widget
 from kivy.graphics import RenderContext, Mesh, PushMatrix, PopMatrix, InstructionGroup, Translate, Rotate
 from kivy.graphics.transformation import Matrix
 from kivy.clock import Clock
-from kivy.graphics import RenderContext, Mesh, PushMatrix, PopMatrix, InstructionGroup, Translate, Rotate, ClearBuffers
+from kivy.graphics import RenderContext, Mesh, PushMatrix, PopMatrix, InstructionGroup, Translate, Rotate, ClearBuffers, Color, BindTexture
+from kivy.core.image import Image as CoreImage # ✨ เพิ่มบรรทัดนี้ด้านบนสุด
 import math
 import random
 import os
@@ -48,6 +49,10 @@ class MacroBoard3D(Widget):
         super().__init__(**kwargs)
         self.canvas = RenderContext(compute_normal_mat=True)
         self.canvas['DEPTH_TEST'] = 1 # ✨ 1. เปิดระบบคำนวณความลึกหน้า/หลัง
+        self.map_size = map_size
+        self.seed = seed if seed else random.randint(1, 9999)
+        self.touch_start = None
+        self.sprite_rotations = [] # ✨ 1. เพิ่มลิสต์สำหรับเก็บตัวจัดการการหมุนของเมือง
         
         # ใช้ Shader พื้นฐานเหมือนของเดิม
         shader_path = os.path.join(os.path.dirname(__file__), '..', 'simple3d.glsl')
@@ -375,6 +380,7 @@ class MacroBoard3D(Widget):
         # ถ่ายทอดลงจอรวมเป็น Mesh เดียว
         if foliage_indices:
             self.terrain_group.add(Mesh(fmt=fmt, mode='triangles', vertices=foliage_vertices, indices=foliage_indices))
+            self.smooth_data = smooth_data
 
     # ระบบกล้องใช้พื้นฐานเดียวกับ Board3D Classic
     def on_touch_down(self, touch):
@@ -425,3 +431,184 @@ class MacroBoard3D(Widget):
         self.canvas['projection_mat'] = self.proj_mat
         self.canvas['modelview_mat'] = self.camera_mat.multiply(self.model_mat)
         self.canvas['texture0'] = 0
+
+        # ✨ 3. สั่งให้ภาพสิ่งก่อสร้างทั้งหมดหันตามกล้องตลอดเวลา (60 FPS)
+        if hasattr(self, 'sprite_rotations'):
+            degree_y = math.degrees(self.rot_y)
+            for rot_inst in self.sprite_rotations:
+                rot_inst.angle = degree_y
+
+    def get_height_at(self, c, r):
+        # ฟังก์ชันเช็คความสูงของแผ่นดิน ณ จุดที่ตั้งเมือง
+        ic = max(0, min(int(round(c)), len(self.smooth_data[0]) - 1))
+        ir = max(0, min(int(round(r)), len(self.smooth_data) - 1))
+        
+        data = self.smooth_data[ir][ic]
+        elevation = data['e']
+        river_dist = abs(data['r'] - 0.5)
+        
+        height = elevation * 1.5 + 0.2
+        if river_dist < 0.015: height = 0.2
+        elif river_dist < 0.035: height = 0.2 + (height - 0.2) * max(0, min(1, (river_dist - 0.015) / 0.02))
+            
+        if elevation < 0.12: height = 0.2
+        elif elevation < 0.18: height = 0.2 + (height - 0.2) * max(0, min(1, (elevation - 0.12) / 0.06))
+            
+        return height
+
+    def draw_paths(self, edges, nodes_dict_3d):
+        # ✨ ฟังก์ชันสร้างถนนดิน (Dirt Road) เกาะติด Terrain
+        if hasattr(self, 'path_group'): self.canvas.remove(self.path_group)
+        self.path_group = InstructionGroup()
+        
+        vertices, indices = [], []
+        idx = 0
+        road_width = 0.35 # ความกว้างถนน
+        
+        for edge in edges:
+            if not isinstance(edge, tuple): continue
+            u, v = edge
+            if u['id'] in nodes_dict_3d and v['id'] in nodes_dict_3d:
+                p1 = nodes_dict_3d[u['id']]
+                p2 = nodes_dict_3d[v['id']]
+                
+                # คำนวณความยาวเส้นทางและซอยจุดย่อยๆ เพื่อให้ถนนโค้งตามเนิน
+                dx = p2[0] - p1[0]
+                dz = p2[2] - p1[2]
+                dist = math.hypot(dx, dz)
+                steps = max(2, int(dist * 3)) # ซอยจุดถี่ๆ ตามระยะทาง
+                
+                # หามุมเพื่อตีความกว้างซ้าย-ขวาของถนน
+                angle = math.atan2(dz, dx)
+                px = math.sin(angle) * road_width
+                pz = -math.cos(angle) * road_width
+                
+                # ออฟเซ็ตกลับไปเป็นพิกัด 2D สำหรับดึงความสูง
+                offset_x = (self.map_size[1] + 80) / 2.0
+                offset_z = (self.map_size[0] + 80) / 2.0
+                
+                for i in range(steps):
+                    t1 = i / steps
+                    t2 = (i + 1) / steps
+                    
+                    x1, z1 = p1[0] + dx*t1, p1[2] + dz*t1
+                    x2, z2 = p1[0] + dx*t2, p1[2] + dz*t2
+                    
+                    y1 = self.get_height_at(x1 + offset_x, z1 + offset_z) + 0.05
+                    y2 = self.get_height_at(x2 + offset_x, z2 + offset_z) + 0.05
+                    
+                    # สีถนนดิน (สีน้ำตาลหม่น)
+                    col = [0.45, 0.35, 0.25, 0.9]
+                    
+                    vertices.extend([
+                        x1-px, y1, z1-pz, *col, 0,0,
+                        x1+px, y1, z1+pz, *col, 1,0,
+                        x2+px, y2, z2+pz, *col, 1,1,
+                        x2-px, y2, z2-pz, *col, 0,1
+                    ])
+                    indices.extend([idx, idx+1, idx+2, idx, idx+2, idx+3])
+                    idx += 4
+                    
+        if indices:
+            fmt = [(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')]
+            # เปลี่ยนจาก lines เป็น triangles เพื่อวาดแผ่นถนน
+            self.path_group.add(Mesh(fmt=fmt, mode='triangles', vertices=vertices, indices=indices))
+        self.canvas.add(self.path_group)
+
+    def project_3d_to_2d(self, x, y, z):
+        # ฟังก์ชันแปลงพิกัดโลก 3 มิติ ออกมาเป็นพิกัดหน้าจอ 2 มิติ (ไว้แปะธง)
+        m = self.proj_mat.multiply(self.camera_mat.multiply(self.model_mat)).get()
+        
+        # คำนวณสมการ Matrix (Column-Major)
+        vx = x*m[0] + y*m[4] + z*m[8]  + m[12]
+        vy = x*m[1] + y*m[5] + z*m[9]  + m[13]
+        vz = x*m[2] + y*m[6] + z*m[10] + m[14]
+        vw = x*m[3] + y*m[7] + z*m[11] + m[15]
+        
+        if vw == 0.0: vw = 0.0001
+            
+        ndc_x, ndc_y, ndc_z = vx/vw, vy/vw, vz/vw
+        
+        screen_x = (ndc_x + 1.0) / 2.0 * self.width + self.x
+        screen_y = (ndc_y + 1.0) / 2.0 * self.height + self.y
+        
+        # เช็คว่าเมืองอยู่ด้านหน้ากล้อง และไม่ออกนอกขอบจอไปไกลเกิน
+        is_visible = (vw > 0) and (-1.2 <= ndc_x <= 1.2) and (-1.2 <= ndc_y <= 1.2) and (-1.0 <= ndc_z <= 1.0)
+        return screen_x, screen_y, is_visible
+
+    def draw_structures(self, nodes_list, nodes_3d_pos):
+        # ฟังก์ชันสร้างแผ่น 2D (Billboard) ตั้งขึ้นบนกระดาน 3D
+        if hasattr(self, 'struct_group'): self.canvas.remove(self.struct_group)
+        self.struct_group = InstructionGroup()
+        self.canvas.add(self.struct_group)
+        self.sprite_rotations.clear()
+        
+        def draw_sprite(path, x, y, z, size=1.5):
+            if not os.path.exists(path): return
+            try:
+                tex = CoreImage(path).texture
+                tex.mag_filter = 'nearest'
+                tex.min_filter = 'nearest'
+            except Exception:
+                return
+
+            self.struct_group.add(PushMatrix())
+            self.struct_group.add(Translate(x, y, z))
+            # เอียงภาพให้รับกับมุมกล้อง (หมุนรับกล้อง 45 องศา และแหงนขึ้นนิดๆ)
+            rot = Rotate(angle=math.degrees(self.rot_y), axis=(0, 1, 0))
+            self.sprite_rotations.append(rot)
+            self.struct_group.add(rot)
+            
+            self.struct_group.add(Color(1, 1, 1, 1))
+            
+            w, h = size / 2.0, size
+            # วาดแผ่นสี่เหลี่ยมพร้อมแปะ Texture (UV Mapping)
+            vertices = [
+                -w, 0, 0,  1,1,1,1,  0, 1, # ล่างซ้าย
+                 w, 0, 0,  1,1,1,1,  1, 1, # ล่างขวา
+                 w, h, 0,  1,1,1,1,  1, 0, # บนขวา
+                -w, h, 0,  1,1,1,1,  0, 0  # บนซ้าย
+            ]
+            indices = [0, 1, 2, 0, 2, 3]
+            fmt = [(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')]
+            self.struct_group.add(Mesh(fmt=fmt, mode='triangles', vertices=vertices, indices=indices, texture=tex))
+            self.struct_group.add(PopMatrix())
+            
+        for node in nodes_list:
+            if node.node_id not in nodes_3d_pos: continue
+            wx, wy, wz = nodes_3d_pos[node.node_id]
+
+            if getattr(node, 'is_main_base', False):
+                # กำหนด path สำหรับปราสาทหลักโดยเฉพาะ (แก้ชื่อโฟลเดอร์ให้ตรงกับที่คุณมี)
+                base_path = f"assets/structure/base/main_base/main_base_{node.faction}.png"
+            else:
+                # ถ้าเป็นเมืองธรรมดา ให้ดึงตาม node_type ปกติ
+                base_path = f"assets/structure/base/{node.node_type}/{node.node_type}_{node.faction}.png"
+            
+            # 1. วาด ฐานเมือง (Base Structure)
+            base_path = f"assets/structure/base/{node.node_type}/{node.node_type}_{node.faction}.png"
+            draw_sprite(base_path, wx, wy + 0.1, wz, size=2.5)
+            
+            # 2. จัดการส่วนเสริม (Addons)
+            addons_to_draw = []
+            if node.node_type == 'village':
+                for key in ['farm', 'tavern']:
+                    lvl = getattr(node, 'addons', {}).get(key, 0)
+                    if lvl > 0: addons_to_draw.append((key, lvl))
+                sp = getattr(node, 'addons', {}).get('special', None)
+                if sp: addons_to_draw.append((sp, getattr(node, 'addons', {}).get('special_lvl', 1)))
+            elif node.node_type == 'castle':
+                for sv in getattr(node, 'sub_villages', []):
+                    sv_addons = sv.get('addons', {})
+                    sp = sv_addons.get('special', None)
+                    if sp: addons_to_draw.append((sp, sv_addons.get('special_lvl', 1)))
+                    elif sv_addons.get('farm', 0) > 0: addons_to_draw.append(('farm', sv_addons.get('farm', 1)))
+                    elif sv_addons.get('tavern', 0) > 0: addons_to_draw.append(('tavern', sv_addons.get('tavern', 1)))
+                    
+            # 3. วาง Addons รอบๆ ฐานเมือง (ซ้าย, ขวา, หน้า, หลัง)
+            offsets = [(-2.5, 0.0), (2.5, 0.0), (0.0, -2.5), (0.0, 2.5)]
+            for i, (ad_name, ad_lvl) in enumerate(addons_to_draw[:4]):
+                ox, oz = offsets[i]
+                lvl_str = "base1" if ad_lvl == 1 else ("up1" if ad_lvl == 2 else "up2")
+                ad_path = f"assets/structure/addon/{lvl_str}/{ad_name}.png"
+                draw_sprite(ad_path, wx + ox, wy + 0.1, wz + oz, size=1.5)
