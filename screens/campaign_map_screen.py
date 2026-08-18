@@ -22,6 +22,7 @@ from components.map_node import MapNode
 # ✨ เพิ่มการ Import แมพ 3D โหมด DNC เข้ามา
 from components.board_3d_macro import MacroBoard3D
 
+
 class CampaignMapScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -326,6 +327,16 @@ class CampaignMapScreen(Screen):
         if hasattr(self, 'macro_3d') and self.macro_3d in self.children:
             self.remove_widget(self.macro_3d)
 
+        # ✨ เพิ่มการเคลียร์ UI ของโหมด 3D เก่าทิ้งก่อนสร้างใหม่
+        if hasattr(self, 'left_panel') and self.left_panel in self.ui_layer.children:
+            self.ui_layer.remove_widget(self.left_panel)
+        if hasattr(self, 'right_panel') and self.right_panel in self.ui_layer.children:
+            self.ui_layer.remove_widget(self.right_panel)
+        if hasattr(self, 'banner_layer') and self.banner_layer in self.children:
+            self.remove_widget(self.banner_layer)
+        if hasattr(self, 'army_panel'):
+            self.army_panel.close_panel()
+
         # ====================================================
         # 🟢 กรณีเป็นโหมด 2D CLASSIC CAMPAIGN
         # ====================================================
@@ -461,7 +472,7 @@ class CampaignMapScreen(Screen):
                 nodes_dict[data['id']] = node
                 
                 # คำนวณ 3D (เอาไว้วาดปราสาทลงบนแมพ)
-                scale_factor = 2.5 
+                scale_factor = 4.0 
                 cx = (node.base_pos[0] / 9600.0) * (grid_size * scale_factor)
                 cz = (node.base_pos[1] / 5400.0) * (grid_size * scale_factor)
                 c_play, r_play = cx + 40, cz + 40
@@ -476,10 +487,16 @@ class CampaignMapScreen(Screen):
             for u, v in all_edges:
                 nodes_dict[u['id']].neighbors.append(nodes_dict[v['id']])
                 nodes_dict[v['id']].neighbors.append(nodes_dict[u['id']])
+            
+            # ✨ [เพิ่มใหม่] ดึงข้อมูลเส้นเชื่อมข้าม "ฝั่ง" ของจริงมาจาก map_data
+            cross_edge_ids = None
+            if map_data['cross_edge']:
+                u, v = map_data['cross_edge']
+                cross_edge_ids = (u['id'], v['id'])
                 
-            # วาดแมพ 3D
-            self.macro_3d.draw_paths(all_edges, self.nodes_3d_pos)
-            self.macro_3d.draw_structures(self.nodes_list, self.nodes_3d_pos)
+            # ✨ ส่ง cross_edge_ids เข้าไปวาดเพื่อไม่ให้มันไปเช็คสี Faction มั่วๆ
+            self.macro_3d.draw_paths(all_edges, self.nodes_3d_pos, self.nodes_list, cross_edge_ids)
+            self.macro_3d.draw_structures(self.nodes_list, self.nodes_3d_pos, all_edges)
 
             # ✨ 3. เรียกฟังก์ชันแสดงผลธงลงบนหน้าจอ!
             self.refresh_banners()

@@ -95,24 +95,6 @@ class MacroBoard3D(Widget):
         base_rows, base_cols = self.map_size
         rows = base_rows + (padding * 2)
         cols = base_cols + (padding * 2)
-
-        offset_x = cols / 2.0
-        offset_z = rows / 2.0
-        
-        # สเกลของ Noise (ค่ายิ่งน้อย แผนที่ยิ่งสมูทและเนินเขาใหญ่ขึ้น)
-        scale = 0.15 
-        
-        vertices = []
-        indices = []
-        
-    def generate_terrain(self):
-        self.terrain_group.clear()
-        noise_gen = SimpleNoise(self.seed)
-
-        padding = 40
-        base_rows, base_cols = self.map_size
-        rows = base_rows + (padding * 2)
-        cols = base_cols + (padding * 2)
         
         offset_x = cols / 2.0
         offset_z = rows / 2.0
@@ -129,25 +111,30 @@ class MacroBoard3D(Widget):
         r_snow = math.sqrt((0.18 * total_area) / (2 * math.pi))
         r_desert = math.sqrt((0.18 * total_area) / (3 * math.pi))
         
-        safe_distance = r_snow + r_desert + 15.0 
+        # ✨ แก้ไข: หิมะเกิดเฉพาะที่ขอบแผนที่
+        snow_centers = []
+        for _ in range(2):
+            edge = random.choice(['top', 'bottom', 'left', 'right'])
+            margin = 35 
+            if edge == 'top': pt = (random.uniform(0, cols), random.uniform(rows - margin, rows))
+            elif edge == 'bottom': pt = (random.uniform(0, cols), random.uniform(0, margin))
+            elif edge == 'left': pt = (random.uniform(0, margin), random.uniform(0, rows))
+            else: pt = (random.uniform(cols - margin, cols), random.uniform(0, rows))
+            snow_centers.append(pt)
         
-        snow_centers = [(random.uniform(40, cols - 40), random.uniform(40, rows - 40)) for _ in range(2)]
-        
+        # ✨ แก้ไข: ทะเลทรายเกิดที่ขอบแผนที่ และต้องห่างจากจุดศูนย์กลางหิมะอย่างน้อย 150 หน่วย
         desert_centers = []
         for _ in range(3):
-            for _ in range(100):
+            for _ in range(100): # สุ่มหาตำแหน่งที่ปลอดภัย
                 edge = random.choice(['top', 'bottom', 'left', 'right'])
                 margin = 35 
-                if edge == 'top':
-                    pt = (random.uniform(0, cols), random.uniform(rows - margin, rows))
-                elif edge == 'bottom':
-                    pt = (random.uniform(0, cols), random.uniform(0, margin))
-                elif edge == 'left':
-                    pt = (random.uniform(0, margin), random.uniform(0, rows))
-                else: 
-                    pt = (random.uniform(cols - margin, cols), random.uniform(0, rows))
-                    
-                if all(math.hypot(pt[0] - sx, pt[1] - sy) > safe_distance for sx, sy in snow_centers):
+                if edge == 'top': pt = (random.uniform(0, cols), random.uniform(rows - margin, rows))
+                elif edge == 'bottom': pt = (random.uniform(0, cols), random.uniform(0, margin))
+                elif edge == 'left': pt = (random.uniform(0, margin), random.uniform(0, rows))
+                else: pt = (random.uniform(cols - margin, cols), random.uniform(0, rows))
+                
+                # เช็คระยะห่าง 150 หน่วยจากหิมะทุกลูก
+                if all(math.hypot(pt[0] - sx, pt[1] - sy) > 150.0 for sx, sy in snow_centers):
                     desert_centers.append(pt)
                     break
             else:
@@ -277,7 +264,7 @@ class MacroBoard3D(Widget):
         self.terrain_group.add(Mesh(fmt=fmt, mode='triangles', vertices=terrain_vertices, indices=terrain_indices))
 
         # ===================================================
-        # ✨ 6. สร้างพืชพรรณและต้นไม้ตามสภาพแวดล้อม (Biome Foliage)
+        # 6. สร้างพืชพรรณและต้นไม้ตามสภาพแวดล้อม (Biome Foliage)
         # ===================================================
         foliage_vertices = []
         foliage_indices = []
@@ -287,66 +274,51 @@ class MacroBoard3D(Widget):
             nonlocal foliage_idx
             
             if obj_type == 'cactus':
-                # กระบองเพชร: เป็นทรง 4 เหลี่ยม (Box) สีเขียวอ่อน
                 w = random.uniform(0.06, 0.1) 
                 h = random.uniform(0.4, 0.7)   
                 shade = random.uniform(0.8, 1.1)
-                col = [0.45 * shade, 0.8 * shade, 0.35 * shade, 1.0] # สีเขียวอ่อน
-                
+                col = [0.45 * shade, 0.8 * shade, 0.35 * shade, 1.0]
                 base = foliage_idx
-                # สร้างจุดยอด 8 จุด สำหรับทรงลูกบาศก์
-                # ด้านบน 4 มุม
                 foliage_vertices.extend([tx - w, ty + h, tz - w, *col, -1.0, -1.0]) # 0
                 foliage_vertices.extend([tx + w, ty + h, tz - w, *col, -1.0, -1.0]) # 1
                 foliage_vertices.extend([tx + w, ty + h, tz + w, *col, -1.0, -1.0]) # 2
                 foliage_vertices.extend([tx - w, ty + h, tz + w, *col, -1.0, -1.0]) # 3
-                # ฐานด้านล่าง 4 มุม
                 foliage_vertices.extend([tx - w, ty, tz - w, *col, -1.0, -1.0]) # 4
                 foliage_vertices.extend([tx + w, ty, tz - w, *col, -1.0, -1.0]) # 5
                 foliage_vertices.extend([tx + w, ty, tz + w, *col, -1.0, -1.0]) # 6
                 foliage_vertices.extend([tx - w, ty, tz + w, *col, -1.0, -1.0]) # 7
-                
-                # โยงสามเหลี่ยม 5 ด้าน (บน, หน้า, ขวา, หลัง, ซ้าย)
                 foliage_indices.extend([
-                    base, base+1, base+2, base, base+2, base+3,       # Top
-                    base+3, base+2, base+6, base+3, base+6, base+7,   # Front
-                    base+2, base+1, base+5, base+2, base+5, base+6,   # Right
-                    base+1, base, base+4, base+1, base+4, base+5,     # Back
-                    base, base+3, base+7, base, base+7, base+4        # Left
+                    base, base+1, base+2, base, base+2, base+3,
+                    base+3, base+2, base+6, base+3, base+6, base+7,
+                    base+2, base+1, base+5, base+2, base+5, base+6,
+                    base+1, base, base+4, base+1, base+4, base+5,
+                    base, base+3, base+7, base, base+7, base+4
                 ])
                 foliage_idx += 8
-                return # จบการสร้างกระบองเพชรทรงสี่เหลี่ยม
-                
+                return
             elif obj_type == 'snow_tree':
-                # ต้นไม้หิมะ: พีระมิดสีเทา (ไม่มีสีขาว)
                 w = random.uniform(0.12, 0.25)
                 h = random.uniform(0.6, 1.2)
-                gray_shade = random.uniform(0.4, 0.7) # สุ่มความเข้มสีเทา
+                gray_shade = random.uniform(0.4, 0.7)
                 col = [gray_shade, gray_shade, gray_shade, 1.0] 
             else: 
-                # ต้นไม้ป่า: พีระมิด สีเขียว
                 w = random.uniform(0.12, 0.25)
                 h = random.uniform(0.6, 1.2)
                 shade = random.uniform(0.7, 1.1)
                 col = [0.15 * shade, 0.45 * shade, 0.15 * shade, 1.0]
                 
-            # สร้าง Low-Poly พีระมิด สำหรับต้นไม้ทั่วไปและต้นไม้หิมะ
-            foliage_vertices.extend([tx, ty + h, tz, *col, -1.0, -1.0]) # ยอดบนสุด
+            foliage_vertices.extend([tx, ty + h, tz, *col, -1.0, -1.0])
             foliage_vertices.extend([tx - w, ty, tz - w, *col, -1.0, -1.0])
             foliage_vertices.extend([tx + w, ty, tz - w, *col, -1.0, -1.0])
             foliage_vertices.extend([tx + w, ty, tz + w, *col, -1.0, -1.0])
             foliage_vertices.extend([tx - w, ty, tz + w, *col, -1.0, -1.0])
-            
             base = foliage_idx
             foliage_indices.extend([
-                base, base+1, base+2, 
-                base, base+2, base+3, 
-                base, base+3, base+4, 
-                base, base+4, base+1  
+                base, base+1, base+2, base, base+2, base+3, 
+                base, base+3, base+4, base, base+4, base+1  
             ])
             foliage_idx += 5
 
-        # สแกนพื้นที่เพื่อสุ่มปลูกต้นไม้แยกตาม Biome
         for r in range(rows):
             for c in range(cols):
                 data = smooth_data[r][c]
@@ -354,8 +326,6 @@ class MacroBoard3D(Widget):
                 d_val = data['d']
                 river_dist = abs(data['r'] - 0.5)
                 elevation = data['e']
-                
-                # ปลูกเฉพาะบนบกเท่านั้น
                 is_land = (river_dist > 0.04) and (elevation > 0.2)
                 
                 if is_land:
@@ -364,23 +334,17 @@ class MacroBoard3D(Widget):
                     ry, _ = get_terrain_data(c, r) 
                     
                     if s_val < r_snow:
-                        # โซนหิมะ (40%)
-                        if random.random() < 0.40:
-                            add_foliage(rx, ry, rz, 'snow_tree')
+                        if random.random() < 0.40: add_foliage(rx, ry, rz, 'snow_tree')
                     elif d_val < r_desert:
-                        # โซนทะเลทราย (2%)
-                        if random.random() < 0.02:
-                            add_foliage(rx, ry, rz, 'cactus')
+                        if random.random() < 0.02: add_foliage(rx, ry, rz, 'cactus')
                     else:
-                        # โซนป่า (15%)
                         if s_val > r_snow + 2 and d_val > r_desert + 2:
-                            if random.random() < 0.15:
-                                add_foliage(rx, ry, rz, 'forest_tree')
+                            if random.random() < 0.15: add_foliage(rx, ry, rz, 'forest_tree')
                             
-        # ถ่ายทอดลงจอรวมเป็น Mesh เดียว
         if foliage_indices:
             self.terrain_group.add(Mesh(fmt=fmt, mode='triangles', vertices=foliage_vertices, indices=foliage_indices))
             self.smooth_data = smooth_data
+        
 
     # ระบบกล้องใช้พื้นฐานเดียวกับ Board3D Classic
     def on_touch_down(self, touch):
@@ -456,14 +420,26 @@ class MacroBoard3D(Widget):
             
         return height
 
-    def draw_paths(self, edges, nodes_dict_3d):
-        # ✨ ฟังก์ชันสร้างถนนดิน (Dirt Road) เกาะติด Terrain
+    # ✨ เพิ่มพารามิเตอร์ cross_edge_ids 
+    def draw_paths(self, edges, nodes_dict_3d, nodes_list=None, cross_edge_ids=None):
         if hasattr(self, 'path_group'): self.canvas.remove(self.path_group)
         self.path_group = InstructionGroup()
         
         vertices, indices = [], []
         idx = 0
-        road_width = 0.35 # ความกว้างถนน
+        
+        # ✨ แก้ไข: สีน้ำตาล (ทางปกติ) และ สีน้ำตาลเข้ม (ทางข้ามแดน)
+        normal_road_col = [0.55, 0.35, 0.20, 0.8] 
+        cross_road_col = [0.30, 0.15, 0.05, 0.9] 
+        
+        offset_x = (self.map_size[1] + 80) / 2.0
+        offset_z = (self.map_size[0] + 80) / 2.0
+        
+        # ✨ ใช้เส้นข้ามฝั่งของแท้ที่โยนมาจาก Map Generator โดยตรง (ไม่พึ่งพาสี Faction)
+        cross_edge_set = set()
+        if cross_edge_ids:
+            cross_edge_set.add((cross_edge_ids[0], cross_edge_ids[1]))
+            cross_edge_set.add((cross_edge_ids[1], cross_edge_ids[0]))
         
         for edge in edges:
             if not isinstance(edge, tuple): continue
@@ -472,49 +448,41 @@ class MacroBoard3D(Widget):
                 p1 = nodes_dict_3d[u['id']]
                 p2 = nodes_dict_3d[v['id']]
                 
-                # คำนวณความยาวเส้นทางและซอยจุดย่อยๆ เพื่อให้ถนนโค้งตามเนิน
-                dx = p2[0] - p1[0]
-                dz = p2[2] - p1[2]
-                dist = math.hypot(dx, dz)
-                steps = max(2, int(dist * 3)) # ซอยจุดถี่ๆ ตามระยะทาง
+                # ตรวจสอบว่าเป็นทางเชื่อมข้ามแดน (ฝั่งซ้าย-ฝั่งขวา) ของจริงหรือไม่
+                is_cross = (u['id'], v['id']) in cross_edge_set
+                road_col = cross_road_col if is_cross else normal_road_col
+                road_width = 0.55 if is_cross else 0.35 
                 
-                # หามุมเพื่อตีความกว้างซ้าย-ขวาของถนน
+                dx, dz = p2[0] - p1[0], p2[2] - p1[2]
+                dist = math.hypot(dx, dz)
+                steps = max(2, int(dist * 4)) 
+                
                 angle = math.atan2(dz, dx)
                 px = math.sin(angle) * road_width
                 pz = -math.cos(angle) * road_width
-                
-                # ออฟเซ็ตกลับไปเป็นพิกัด 2D สำหรับดึงความสูง
-                offset_x = (self.map_size[1] + 80) / 2.0
-                offset_z = (self.map_size[0] + 80) / 2.0
-                
+
                 for i in range(steps):
-                    t1 = i / steps
-                    t2 = (i + 1) / steps
-                    
+                    t1, t2 = i / steps, (i + 1) / steps
                     x1, z1 = p1[0] + dx*t1, p1[2] + dz*t1
                     x2, z2 = p1[0] + dx*t2, p1[2] + dz*t2
                     
                     y1 = self.get_height_at(x1 + offset_x, z1 + offset_z) + 0.05
                     y2 = self.get_height_at(x2 + offset_x, z2 + offset_z) + 0.05
-                    
-                    # สีถนนดิน (สีน้ำตาลหม่น)
-                    col = [0.45, 0.35, 0.25, 0.9]
-                    
+
                     vertices.extend([
-                        x1-px, y1, z1-pz, *col, 0,0,
-                        x1+px, y1, z1+pz, *col, 1,0,
-                        x2+px, y2, z2+pz, *col, 1,1,
-                        x2-px, y2, z2-pz, *col, 0,1
+                        x1-px, y1, z1-pz, *road_col, -1,-1,
+                        x1+px, y1, z1+pz, *road_col, -1,-1,
+                        x2+px, y2, z2+pz, *road_col, -1,-1,
+                        x2-px, y2, z2-pz, *road_col, -1,-1
                     ])
                     indices.extend([idx, idx+1, idx+2, idx, idx+2, idx+3])
                     idx += 4
                     
         if indices:
             fmt = [(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')]
-            # เปลี่ยนจาก lines เป็น triangles เพื่อวาดแผ่นถนน
             self.path_group.add(Mesh(fmt=fmt, mode='triangles', vertices=vertices, indices=indices))
         self.canvas.add(self.path_group)
-
+        
     def project_3d_to_2d(self, x, y, z):
         # ฟังก์ชันแปลงพิกัดโลก 3 มิติ ออกมาเป็นพิกัดหน้าจอ 2 มิติ (ไว้แปะธง)
         m = self.proj_mat.multiply(self.camera_mat.multiply(self.model_mat)).get()
@@ -536,79 +504,154 @@ class MacroBoard3D(Widget):
         is_visible = (vw > 0) and (-1.2 <= ndc_x <= 1.2) and (-1.2 <= ndc_y <= 1.2) and (-1.0 <= ndc_z <= 1.0)
         return screen_x, screen_y, is_visible
 
-    def draw_structures(self, nodes_list, nodes_3d_pos):
-        # ฟังก์ชันสร้างแผ่น 2D (Billboard) ตั้งขึ้นบนกระดาน 3D
+    def draw_structures(self, nodes_list, nodes_3d_pos, edges=None):
+        if edges is None: edges = []
         if hasattr(self, 'struct_group'): self.canvas.remove(self.struct_group)
         self.struct_group = InstructionGroup()
         self.canvas.add(self.struct_group)
         self.sprite_rotations.clear()
         
+        offset_x = (self.map_size[1] + 80) / 2.0
+        offset_z = (self.map_size[0] + 80) / 2.0
+
+        # ✨ 1. แปลงข้อมูลเส้นถนนหลัก (Edges) ให้อยู่ในรูปพิกัด [x1, z1, x2, z2] เพื่อง่ายต่อการคำนวณ
+        main_lines = []
+        for edge in edges:
+            if not isinstance(edge, tuple): continue
+            u, v = edge
+            if u['id'] in nodes_3d_pos and v['id'] in nodes_3d_pos:
+                p1 = nodes_3d_pos[u['id']]
+                p2 = nodes_3d_pos[v['id']]
+                main_lines.append((p1[0], p1[2], p2[0], p2[2]))
+
+        # ✨ ฟังก์ชันคณิตศาสตร์: หาระยะห่างที่สั้นที่สุดจากจุดตั้งเมือง ไปยังเส้นถนนหลัก
+        def point_to_segment_dist(px, pz, x1, z1, x2, z2):
+            l2 = (x1 - x2)**2 + (z1 - z2)**2
+            if l2 == 0: return math.hypot(px - x1, pz - z1)
+            t = max(0, min(1, ((px - x1)*(x2 - x1) + (pz - z1)*(z2 - z1)) / l2))
+            proj_x = x1 + t * (x2 - x1)
+            proj_z = z1 + t * (z2 - z1)
+            return math.hypot(px - proj_x, pz - proj_z)
+
+        # ✨ ฟังก์ชันระบบใหม่: สุ่มหาพิกัดรอบวงกลมที่ "ปลอดภัย" (ไม่ทับเมืองอื่น และไม่ทับถนน)
+        def get_safe_circular_pos(cx, cz, r_min, r_max, placed_pts, min_pt_dist, min_line_dist):
+            for _ in range(30): # พยายามสุ่มหาที่ว่างสูงสุด 30 ครั้ง
+                angle = random.uniform(0, 2 * math.pi)
+                r = random.uniform(r_min, r_max)
+                px = cx + math.cos(angle) * r
+                pz = cz + math.sin(angle) * r
+                
+                # เช็คว่าไม่ทับกับอาคารอื่นๆ ที่เคยวางไปแล้วในอาณาเขตนี้
+                safe_pts = all(math.hypot(px - ex, pz - ez) >= min_pt_dist for ex, ez in placed_pts)
+                
+                # เช็คว่าไม่ทับกับเส้นถนนหลัก
+                safe_lines = all(point_to_segment_dist(px, pz, x1, z1, x2, z2) >= min_line_dist for x1, z1, x2, z2 in main_lines)
+                
+                if safe_pts and safe_lines:
+                    return px, pz
+            return None # หากสุ่ม 30 ครั้งแล้วยังหาที่ลงไม่ได้ ให้ยกเลิกการสร้างเพื่อป้องกันบัค
+        
+        # ฟังก์ชันวาด Sprite และถนนย่อย (เหมือนเดิม)
         def draw_sprite(path, x, y, z, size=1.5):
-            if not os.path.exists(path): return
+            if not os.path.exists(path): 
+                print(f"⚠️ [3D Board] ไม่พบไฟล์ภาพแล้วข้ามการวาด: {path}") # แจ้งเตือนใน Console
+                return
             try:
                 tex = CoreImage(path).texture
-                tex.mag_filter = 'nearest'
-                tex.min_filter = 'nearest'
-            except Exception:
+                tex.mag_filter, tex.min_filter = 'nearest', 'nearest'
+            except Exception as e: 
+                print(f"⚠️ [3D Board] โหลดภาพล้มเหลว {path}: {e}")
                 return
 
             self.struct_group.add(PushMatrix())
             self.struct_group.add(Translate(x, y, z))
-            # เอียงภาพให้รับกับมุมกล้อง (หมุนรับกล้อง 45 องศา และแหงนขึ้นนิดๆ)
             rot = Rotate(angle=math.degrees(self.rot_y), axis=(0, 1, 0))
             self.sprite_rotations.append(rot)
             self.struct_group.add(rot)
-            
             self.struct_group.add(Color(1, 1, 1, 1))
             
             w, h = size / 2.0, size
-            # วาดแผ่นสี่เหลี่ยมพร้อมแปะ Texture (UV Mapping)
-            vertices = [
-                -w, 0, 0,  1,1,1,1,  0, 1, # ล่างซ้าย
-                 w, 0, 0,  1,1,1,1,  1, 1, # ล่างขวา
-                 w, h, 0,  1,1,1,1,  1, 0, # บนขวา
-                -w, h, 0,  1,1,1,1,  0, 0  # บนซ้าย
-            ]
-            indices = [0, 1, 2, 0, 2, 3]
+            vertices = [-w, 0, 0, 1,1,1,1, 0,1,  w, 0, 0, 1,1,1,1, 1,1,  w, h, 0, 1,1,1,1, 1,0, -w, h, 0, 1,1,1,1, 0,0]
             fmt = [(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')]
-            self.struct_group.add(Mesh(fmt=fmt, mode='triangles', vertices=vertices, indices=indices, texture=tex))
+            self.struct_group.add(Mesh(fmt=fmt, mode='triangles', vertices=vertices, indices=[0, 1, 2, 0, 2, 3], texture=tex))
             self.struct_group.add(PopMatrix())
+
+        def draw_mini_road(x1, z1, x2, z2):
+            y1 = self.get_height_at(x1 + offset_x, z1 + offset_z) + 0.05
+            y2 = self.get_height_at(x2 + offset_x, z2 + offset_z) + 0.05
+            dx, dz = x2 - x1, z2 - z1
+            angle = math.atan2(dz, dx)
+            rw = 0.15
+            px, pz = math.sin(angle)*rw, -math.cos(angle)*rw
             
+            # ✨ แก้ไข: เปลี่ยนเป็นสีน้ำตาล (เหมือนกับ normal_road_col)
+            rc = [0.55, 0.35, 0.20, 0.8]
+            
+            v = [
+                x1-px, y1, z1-pz, *rc, -1, -1,  x1+px, y1, z1+pz, *rc, -1, -1,
+                x2+px, y2, z2+pz, *rc, -1, -1,  x2-px, y2, z2-pz, *rc, -1, -1
+            ]
+            fmt = [(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')]
+            self.struct_group.add(Mesh(fmt=fmt, mode='triangles', vertices=v, indices=[0,1,2, 0,2,3]))
+
         for node in nodes_list:
             if node.node_id not in nodes_3d_pos: continue
             wx, wy, wz = nodes_3d_pos[node.node_id]
-
+            
+            placed_pts = [(wx, wz)] 
+            
+            # ✨ แก้ไขตรงนี้: เพิ่มระบบเช็คไฟล์ ถ้าไม่มี main_base ให้ใช้ node_type ปกติ
             if getattr(node, 'is_main_base', False):
-                # กำหนด path สำหรับปราสาทหลักโดยเฉพาะ (แก้ชื่อโฟลเดอร์ให้ตรงกับที่คุณมี)
                 base_path = f"assets/structure/base/main_base/main_base_{node.faction}.png"
+                if not os.path.exists(base_path):
+                    # Fallback กลับไปใช้ castle หรือ village
+                    base_path = f"assets/structure/base/{node.node_type}/{node.node_type}_{node.faction}.png"
             else:
-                # ถ้าเป็นเมืองธรรมดา ให้ดึงตาม node_type ปกติ
                 base_path = f"assets/structure/base/{node.node_type}/{node.node_type}_{node.faction}.png"
             
-            # 1. วาด ฐานเมือง (Base Structure)
-            base_path = f"assets/structure/base/{node.node_type}/{node.node_type}_{node.faction}.png"
-            draw_sprite(base_path, wx, wy + 0.1, wz, size=2.5)
-            
-            # 2. จัดการส่วนเสริม (Addons)
-            addons_to_draw = []
-            if node.node_type == 'village':
+            size_base = 3.5 if getattr(node, 'is_main_base', False) else 2.5
+            draw_sprite(base_path, wx, wy + 0.1, wz, size=size_base)
+
+            # ฟังก์ชันช่วยสร้าง Addons แบบสุ่มรัศมีวงกลม
+            def process_addons(center_x, center_z, addons_dict, r_min, r_max, pt_dist, line_dist, sprite_size):
+                addons_list = []
                 for key in ['farm', 'tavern']:
-                    lvl = getattr(node, 'addons', {}).get(key, 0)
-                    if lvl > 0: addons_to_draw.append((key, lvl))
-                sp = getattr(node, 'addons', {}).get('special', None)
-                if sp: addons_to_draw.append((sp, getattr(node, 'addons', {}).get('special_lvl', 1)))
-            elif node.node_type == 'castle':
-                for sv in getattr(node, 'sub_villages', []):
-                    sv_addons = sv.get('addons', {})
-                    sp = sv_addons.get('special', None)
-                    if sp: addons_to_draw.append((sp, sv_addons.get('special_lvl', 1)))
-                    elif sv_addons.get('farm', 0) > 0: addons_to_draw.append(('farm', sv_addons.get('farm', 1)))
-                    elif sv_addons.get('tavern', 0) > 0: addons_to_draw.append(('tavern', sv_addons.get('tavern', 1)))
+                    lvl = addons_dict.get(key, 0)
+                    if lvl > 0: addons_list.append((key, lvl))
+                sp = addons_dict.get('special', None)
+                if sp: addons_list.append((sp, addons_dict.get('special_lvl', 1)))
+                
+                for ad_name, ad_lvl in addons_list[:6]:
+                    pos = get_safe_circular_pos(center_x, center_z, r_min, r_max, placed_pts, pt_dist, line_dist)
+                    if not pos: continue # ถ้าหาที่ลงไม่ได้ ให้ข้ามอาคารนี้ไป
                     
-            # 3. วาง Addons รอบๆ ฐานเมือง (ซ้าย, ขวา, หน้า, หลัง)
-            offsets = [(-2.5, 0.0), (2.5, 0.0), (0.0, -2.5), (0.0, 2.5)]
-            for i, (ad_name, ad_lvl) in enumerate(addons_to_draw[:4]):
-                ox, oz = offsets[i]
-                lvl_str = "base1" if ad_lvl == 1 else ("up1" if ad_lvl == 2 else "up2")
-                ad_path = f"assets/structure/addon/{lvl_str}/{ad_name}.png"
-                draw_sprite(ad_path, wx + ox, wy + 0.1, wz + oz, size=1.5)
+                    ax, az = pos
+                    placed_pts.append((ax, az)) # แอดลง List ว่าตรงนี้มีตึกตั้งอยู่แล้วนะ
+                    
+                    ay = self.get_height_at(ax + offset_x, az + offset_z)
+                    lvl_str = "base1" if ad_lvl == 1 else ("up1" if ad_lvl == 2 else "up2")
+                    ad_path = f"assets/structure/addon/{lvl_str}/{ad_name}.png"
+                    
+                    draw_mini_road(center_x, center_z, ax, az)
+                    draw_sprite(ad_path, ax, ay + 0.1, az, size=sprite_size)
+
+            # 4.1 วาด Addons รอบๆ ปราสาท/หมู่บ้านหลักของตัวเอง
+            process_addons(wx, wz, getattr(node, 'addons', {}), r_min=1.8, r_max=3.5, pt_dist=1.5, line_dist=1.0, sprite_size=1.0)
+
+            # ✨ 5. วาดหมู่บ้านจำลองของประดับฉาก (Sub-villages) แบบสุ่มวงกลมวงนอก
+            if node.node_type == 'castle' and hasattr(node, 'sub_villages'):
+                for sv_data in node.sub_villages:
+                    # สุ่มให้อยู่วงนอก รัศมี 4.5 ถึง 6.5
+                    pos = get_safe_circular_pos(wx, wz, 4.5, 6.5, placed_pts, min_pt_dist=3.0, min_line_dist=1.2)
+                    if not pos: continue
+                    sx, sz = pos
+                    placed_pts.append((sx, sz))
+                    
+                    sy = self.get_height_at(sx + offset_x, sz + offset_z)
+                    draw_mini_road(wx, wz, sx, sz)
+                    
+                    sv_path = f"assets/structure/base/village/village_{node.faction}.png"
+                    draw_sprite(sv_path, sx, sy + 0.1, sz, size=2.0)
+                    
+                    # วาด Addons ย่อยๆ ของหมู่บ้านประดับฉาก โดยซ้อนวงกลมเข้าไปอีกชั้น
+                    process_addons(sx, sz, sv_data.get('addons', {}), r_min=1.2, r_max=2.0, pt_dist=1.0, line_dist=0.8, sprite_size=0.8)
