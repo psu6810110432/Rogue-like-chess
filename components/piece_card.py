@@ -15,7 +15,7 @@ from components.passive.passive_manager import PassiveManager
 
 class PieceCard(ButtonBehavior, FloatLayout):
     # ✨ 2. เพิ่มพารามิเตอร์ game_mode และ tribe_name
-    def __init__(self, piece, image_path, on_select, game_mode="classic", tribe_name="the knight company", **kwargs):
+    def __init__(self, piece, image_path, on_select, game_mode="classic", tribe_name="the knight company", is_deployed=False, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
         self.size = (dp(140), dp(200))
@@ -77,37 +77,32 @@ class PieceCard(ButtonBehavior, FloatLayout):
         # ==========================================
         info_box = BoxLayout(orientation='vertical', size_hint=(0.9, 0.45), pos_hint={'center_x': 0.5, 'y': 0.02})
         
-        # 1. ชื่อตัวหมาก
         class_name = piece.__class__.__name__.upper()
         info_box.add_widget(Label(
             text=f"[b]{class_name}[/b]", markup=True, color=self.text_color, 
             font_size='14sp', size_hint_y=0.25
         ))
         
-        # 2. ดึงข้อมูลจาก PassiveManager
         piece_type = piece.__class__.__name__.lower()
         handler = PassiveManager.get_passive_handler(piece_type, tribe_name)
-        
-        # เช็คโหมดเพื่อส่งให้ get_piece_stats ถูกตัว
         mode_key = "dnc" if game_mode == 'Divide_Conquer' else "classic"
         stats_dict = handler['get_piece_stats'](mode_key) if handler else {}
         
-        # ดึงเหรียญปัจจุบัน (เผื่อโดนบัฟมา) ถ้าไม่มีให้ใช้ Base Coin
         current_coins = getattr(piece, 'coins', stats_dict.get('coins', 0)) 
         
         if mode_key == "dnc":
-            # โหมด DNC แสดง ATK / DEF / COIN
             current_atk = getattr(piece, 'atk', stats_dict.get('base_atk', 0))
             current_def = getattr(piece, 'hp', stats_dict.get('base_def', 0))
-            stats_text = f"ATK: {current_atk} | DEF: {current_def} | C: {current_coins}"
+            # ✨ เพิ่มสถานะกำกับในการ์ด ว่าทหารลงสนามไปหรือยัง
+            status_txt = "[color=44ff44]DEPLOYED[/color]" if is_deployed else "[color=ffaa00]STANDBY[/color]"
+            stats_text = f"ATK: {current_atk} | DEF: {current_def}\n{status_txt}"
         else:
-            # โหมด Classic แสดง Points / COIN[cite: 7, 8, 9, 10]
             current_pts = getattr(piece, 'hp', stats_dict.get('dice', 0))
             stats_text = f"Points: {current_pts} | Coins: {current_coins}"
             
         info_box.add_widget(Label(
             text=stats_text, color=self.text_color, 
-            font_size='11sp', size_hint_y=0.2
+            font_size='11sp', size_hint_y=0.3, markup=True
         ))
         
         # 3. ความสามารถพิเศษ (Passive Description)

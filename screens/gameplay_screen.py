@@ -92,7 +92,7 @@ class GameplayScreen(Screen):
         
         with self.root_layout.canvas.before:
             Color(1, 1, 1, 1)
-            self.main_bg_image = Rectangle(source='assets/ui/backgrounds/menu_bg.png', pos=self.pos, size=self.size)
+            self.main_bg_image = Rectangle(source='assets/ui/backgrounds/sky.png', pos=self.pos, size=self.size)
             Color(0.02, 0.02, 0.04, 0.9)
             self.main_bg_overlay = Rectangle(pos=self.pos, size=self.size)
             
@@ -246,6 +246,7 @@ class GameplayScreen(Screen):
             self.game.board[r][c] = p
             
         self.game.current_turn = 'white'
+        
 
     def _update_inv_bg(self, instance, value): self.inv_bg.pos, self.inv_bg.size = instance.pos, instance.size
     def _update_sb_bg(self, instance, value): self.sb_bg.pos, self.sb_bg.size = instance.pos, instance.size
@@ -498,6 +499,34 @@ class GameplayScreen(Screen):
             self.update_inventory_ui()
         else:
             self.update_hand_ui()
+
+        # ✨ สร้างปุ่มเดิน/สลับตำแหน่ง (Action Menu) สำหรับโหมด 3D
+            if hasattr(self, 'action_menu_layout'):
+                self.action_menu_layout.clear_widgets()
+                if self.selected and legal_moves:
+                    phase = getattr(self, 'battle_phase', 'playing')
+                    
+                    for r, c in legal_moves:
+                        # 1. จัดข้อความบนปุ่ม (ถ้าอยู่ในช่วงจัดทัพให้ใช้คำว่า SWAP)
+                        if phase in ['deployment_arrange_atk', 'deployment_arrange_def']:
+                            btn_text = f"SWAP\n{chr(65+c)}{r+1}"
+                            bg_col = (0.8, 0.4, 0.1, 1) # สีส้มสำหรับสลับที่
+                        else:
+                            btn_text = f"MOVE\n{chr(65+c)}{r+1}"
+                            bg_col = (0.2, 0.6, 0.8, 1) # สีฟ้าสำหรับเดินปกติ
+                            
+                        # 2. สร้างปุ่มลงไปเรียงกัน
+                        btn = Button(
+                            text=btn_text, 
+                            size_hint=(None, 1), 
+                            width=dp(70),
+                            background_color=bg_col,
+                            bold=True,
+                            halign='center'
+                        )
+                        # 3. จำลองพฤติกรรมให้เหมือนผู้เล่นเอานิ้วไปจิ้มกระดานตรงๆ
+                        btn.bind(on_release=lambda x, row=r, col=c: self.handle_3d_click(row, col))
+                        self.action_menu_layout.add_widget(btn)
         
         phase = getattr(self, 'battle_phase', 'playing')
         
@@ -552,7 +581,10 @@ class GameplayScreen(Screen):
                 lambda piece: self.get_piece_image_path(piece),
                 selected=self.selected,
                 legal_moves=legal_moves,
-                last_move=getattr(self.game, 'last_move', []) # ✨ ส่งพิกัดการเดินตาที่แล้วเข้าไป
+                last_move=getattr(self.game, 'last_move', []),
+                game_mode=getattr(self, 'game_mode', 'classic'), # ✨ โยนเข้ากระดาน 3D
+                phase=phase,                                     # ✨ โยนเข้ากระดาน 3D
+                current_player=self.game.current_turn            # ✨ โยนเข้ากระดาน 3D
             )
             
         elif hasattr(self, 'squares'):
@@ -663,40 +695,56 @@ class GameplayScreen(Screen):
         piece = self.game.board[r][c]
         print(f"[DEBUG] Click Event - current_turn: {self.game.current_turn}, clicked_piece_color: {getattr(piece, 'color', None)}, is_input_locked: {getattr(self, 'is_input_locked', False)}, phase: {phase}")
         
+        # ==========================================
+        # 🟢 โหมดจัดทัพฝ่ายบุก (Attacker - 3 แถวล่าง)
+        # ==========================================
         if phase == 'deployment_arrange_atk':
-            if r < 5: return 
+            if r < 5: return # ห้ามคลิกเกิน 3 แถว
             
             if self.selected is None:
                 piece = self.game.board[r][c]
                 if piece and piece.color == self.game.current_turn:
-                    self.selected = (r, c); self.refresh_ui()
+                    self.selected = (r, c)
+                    # ✨ 1. สร้างพื้นที่เดินให้ครอบคลุม 3 แถว (แถว 5, 6, 7) และส่งให้ UI แสดงแสงไฮไลต์
+                    legal_moves = [(dr, dc) for dr in range(5, 8) for dc in range(8) if (dr, dc) != (r, c)]
+                    self.refresh_ui(legal_moves)
+                    self.show_piece_status(piece)
             else:
                 sr, sc = self.selected
-                if (r, c) == (sr, sc): self.selected = None; self.refresh_ui(); return
+                if (r, c) == (sr, sc): 
+                    self.selected = None; self.hide_piece_status(); self.refresh_ui(); return
                 
+                # ✨ 2. ระบบสลับที่ (Swap) ไม่ว่าช่องเป้าหมายจะว่างหรือมีทหารอยู่ ก็สลับที่กันได้เลย
                 target_piece = self.game.board[r][c]
-                if not target_piece or target_piece.color == self.game.current_turn:
-                    self.game.board[r][c] = self.game.board[sr][sc]
-                    self.game.board[sr][sc] = target_piece
-                    self.selected = None; self.init_board_ui()
+                self.game.board[r][c] = self.game.board[sr][sc]
+                self.game.board[sr][sc] = target_piece
+                self.selected = None; self.hide_piece_status(); self.refresh_ui()
             return
             
+        # ==========================================
+        # 🔴 โหมดจัดทัพฝ่ายรับ (Defender - 3 แถวบน)
+        # ==========================================
         elif phase == 'deployment_arrange_def':
-            if r > 2: return 
+            if r > 2: return # ห้ามคลิกเกิน 3 แถว
             
             if self.selected is None:
                 piece = self.game.board[r][c]
                 if piece and piece.color == 'black': 
-                    self.selected = (r, c); self.refresh_ui()
+                    self.selected = (r, c)
+                    # ✨ 1. สร้างพื้นที่เดินให้ครอบคลุม 3 แถว (แถว 0, 1, 2)
+                    legal_moves = [(dr, dc) for dr in range(3) for dc in range(8) if (dr, dc) != (r, c)]
+                    self.refresh_ui(legal_moves)
+                    self.show_piece_status(piece)
             else:
                 sr, sc = self.selected
-                if (r, c) == (sr, sc): self.selected = None; self.refresh_ui(); return
+                if (r, c) == (sr, sc): 
+                    self.selected = None; self.hide_piece_status(); self.refresh_ui(); return
                 
+                # ✨ 2. ระบบสลับที่ (Swap) ฝั่งตั้งรับ
                 target_piece = self.game.board[r][c]
-                if not target_piece or target_piece.color == 'black':
-                    self.game.board[r][c] = self.game.board[sr][sc]
-                    self.game.board[sr][sc] = target_piece
-                    self.selected = None; self.init_board_ui()
+                self.game.board[r][c] = self.game.board[sr][sc]
+                self.game.board[sr][sc] = target_piece
+                self.selected = None; self.hide_piece_status(); self.refresh_ui()
             return
             
         elif phase == 'deployment_reveal':
@@ -889,7 +937,7 @@ class GameplayScreen(Screen):
                     piece=piece, 
                     image_path=img_path, 
                     # ✨ สั่งให้ไปเรียก on_card_selected ในคลาส BottomUIManager แทน
-                    on_select=lambda c_instance, row=r, col=c: self.bottom_ui.on_card_selected(c_instance, row, col) 
+                    on_select=lambda c_instance, row=r, col=c: self.on_card_selected(c_instance, row, col) 
                 )
                 if self.selected == (r, c):
                     card.set_selected_visuals()
@@ -917,11 +965,23 @@ class GameplayScreen(Screen):
         # อัปเดตพิกัดเป็น "ตัวที่เลือก" ในระบบ (เสมือนคลิกตัวหมาก)
         self.selected = (r, c)
         
-        # ส่งต่อให้ระบบเก่าโชว์ Status และไฮไลต์ช่องบนกระดาน
+        # ส่งต่อให้ระบบเก่าโชว์ Status
         self.show_piece_status(card_instance.piece)
         
-        # ตอนนี้ระบบยังไม่ได้ทำ Action Menu เลยส่งเข้า refresh_ui แบบเดิมไปก่อน
-        self.refresh_ui(self.game.get_legal_moves((r, c)))
+        # ✨ เช็ค Phase และสร้างพื้นที่เดินแบบอิสระ (Free Swap)
+        phase = getattr(self, 'battle_phase', 'playing')
+        if phase == 'deployment_arrange_atk':
+            # ฝั่งบุก ขยับได้อิสระในแถว 5, 6, 7 (หมายเลข 6, 7, 8 หน้ากระดาน)
+            legal_moves = [(dr, dc) for dr in range(5, 8) for dc in range(8) if (dr, dc) != (r, c)]
+        elif phase == 'deployment_arrange_def':
+            # ฝั่งตั้งรับ ขยับได้อิสระในแถว 0, 1, 2
+            legal_moves = [(dr, dc) for dr in range(3) for dc in range(8) if (dr, dc) != (r, c)]
+        else:
+            # ถ้าเป็นโหมดต่อสู้ปกติ ค่อยใช้กฎหมากรุก
+            legal_moves = self.game.get_legal_moves((r, c))
+            
+        # รีเฟรช UI ให้กระดานแสดงช่องสีฟ้าทั่วทั้ง 3 แถว
+        self.refresh_ui(legal_moves)
 
     def on_item_click(self, item):
         if getattr(self.game, 'game_result', None): return
