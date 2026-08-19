@@ -174,8 +174,6 @@ class Board3D(Widget):
                 if game_mode == 'Divide_Conquer':
                     if phase == 'deployment_arrange_atk' and row <= 2:
                         is_enemy_zone = True
-                    elif phase == 'deployment_arrange_def' and row >= 5:
-                        is_enemy_zone = True
 
                 img_path = None
                 icons_to_draw = []

@@ -618,24 +618,6 @@ class GameplayScreen(Screen):
                 self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]\n[color=ffff00][size=16sp]Returning to map in {self.countdown_time}s...[/size][/color]"
             else:
                 self.info_label.text = f"[color=ff3333][b]{self.game.game_result}[/b][/color]"
-        else: 
-            if phase == 'deployment_arrange_atk':
-                self.info_label.text = "[color=00ffff]PHASE 1: Arrange your units (Bottom 3 rows)[/color]"
-            elif phase == 'deployment_arrange_def':
-                self.info_label.text = "[color=ffaa00]PHASE 2: Defender Arrange (Top 3 rows)[/color]"
-            elif phase == 'deployment_reveal':
-                self.info_label.text = "[color=ffaa00]PHASE 2: Enemy Revealed! Observe their position.[/color]"
-            else:
-                turn_text = f"{self.game.current_turn.upper()}'S TURN"
-                if self.turn_timer_limit > 0 and self.turn_timer_remaining > 0:
-                    t = max(0, self.turn_timer_remaining)
-                    mins, secs = divmod(t, 60)
-                    turn_text += f"   [color=aaaaaa]|[/color]   [color=ffdd55]{mins:02d}:{secs:02d}[/color]"
-                self.info_label.text = turn_text
-            self._end_played = False 
-
-        # 2. อัปเดต Sidebar History
-        self.sidebar.update_history_text(self.game.history.move_text_history)
 
         # 3. แยกการทำงานระหว่าง 2D และ 3D (ตัด return ออกเพื่อให้ UI ทำงานครบถ้วน)
         if hasattr(self, 'board_3d') and self.board_3d in self.board_anchor.children:
@@ -652,24 +634,42 @@ class GameplayScreen(Screen):
             )
             
         elif hasattr(self, 'squares'):
-            # อัปเดตกระดานและตัวหมากในโหมด 2D
+            # อัปเดตกระดานและตัวหมากในโหมด 2D และ 2D iso
             cp = self.game.find_king(self.game.current_turn) if self.game.is_in_check(self.game.current_turn) else None
             
             if phase == 'deployment_arrange_atk':
                 for (r, c), sq in self.squares.items():
                     is_deploy_zone = (r >= 5)
+                    is_enemy_zone = (r <= 2) # โซนฝ่ายรับที่ยังเป็นความลับ
                     is_legal_deploy = (is_deploy_zone and self.selected is not None and (r, c) != self.selected)
+                    
                     sq.update_square_style(highlight=(self.selected == (r, c)), is_legal=('move' if is_legal_deploy else False), is_check=False, is_last=False)
                     p = self.game.board[r][c]
-                    if not is_deploy_zone: sq.set_piece_icon(None, piece=None)
-                    else: sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+                    
+                    # ✨ ถ้าเป็น 2D iso ให้ตั้งภาพ hidden_enemy แทนแผ่นดำ
+                    if is_enemy_zone and getattr(self, 'current_dimension', '2D') == '2D iso':
+                        sq.set_piece_icon('assets/ui/hidden_enemy.png', piece=None)
+                    elif not is_deploy_zone: 
+                        sq.set_piece_icon(None, piece=None)
+                    else: 
+                        sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+                        
             elif phase == 'deployment_arrange_def':
                 for (r, c), sq in self.squares.items():
                     is_deploy_zone = (r <= 2)
                     is_legal_deploy = (is_deploy_zone and self.selected is not None and (r, c) != self.selected)
+                    
                     sq.update_square_style(highlight=(self.selected == (r, c)), is_legal=('move' if is_legal_deploy else False), is_check=False, is_last=False)
                     p = self.game.board[r][c]
-                    sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+                    
+                    # ✨ Logic ใหม่: ฝ่ายรับต้องมองเห็นทหารฝ่ายบุก (แถว 5+) ที่จัดทัพเสร็จแล้ว
+                    if not is_deploy_zone and not (r >= 5): 
+                        # ตรงกลาง (แถว 3-4) ให้ว่างเปล่า
+                        sq.set_piece_icon(None, piece=None)
+                    else: 
+                        # แสดงทหารฝั่งตัวเอง (0-2) และฝั่งบุก (5-7) ตามปกติ ไม่มี Hidden Enemy
+                        sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p)
+                        
             elif phase == 'deployment_reveal':
                 enemy_header_pos = None
                 for r in range(8):

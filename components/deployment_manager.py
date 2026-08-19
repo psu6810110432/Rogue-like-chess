@@ -29,7 +29,13 @@ class DeploymentManager:
             
         self.black_mask = Widget()
         with self.black_mask.canvas.before:
-            Color(0, 0, 0, 1) 
+            # ✨ ให้โปร่งใสทั้งโหมด 2D iso และ 2.5D
+            current_dim = getattr(self.screen, 'current_dimension', '2D')
+            if current_dim in ['2D iso', '2.5D']:
+                Color(0, 0, 0, 0)  # โปร่งใส 100%
+            else:
+                Color(0, 0, 0, 1)  # สีดำทึบ สำหรับโหมด 2D Classic
+                
             self.mask_rect = Rectangle()
             
         def update_mask(*args):

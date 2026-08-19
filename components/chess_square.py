@@ -57,6 +57,15 @@ class ChessSquare(ButtonBehavior, FloatLayout):
         self.is_legal = False
         self.highlight = False 
         self.is_check = False
+        # ✨ เพิ่มตัวแปรสำหรับระบบ Fog
+        self.is_fog = False
+        self.fog_tex = None
+        try:
+            self.fog_tex = CoreImage('assets/ui/hidden_enemy.png').texture
+            if self.fog_tex:
+                self.fog_tex.mag_filter = 'nearest'
+        except Exception:
+            pass
         
         self.bind(pos=self.sync_layout, size=self.sync_layout)
 
@@ -198,11 +207,12 @@ class ChessSquare(ButtonBehavior, FloatLayout):
         except Exception as e:
             print(f"Error drawing event cube: {e}")
 
-    def update_square_style(self, highlight=False, is_legal=False, is_check=False, is_last=False):
+    def update_square_style(self, highlight=False, is_legal=False, is_check=False, is_last=False, is_fog=False):
         self.is_last_move = is_last
         self.is_legal = is_legal
         self.highlight = highlight 
         self.is_check = is_check
+        self.is_fog = is_fog
         self.sync_layout()
 
     def set_piece_icon(self, path, is_frozen=False, piece=None, flip=False):
@@ -223,9 +233,10 @@ class ChessSquare(ButtonBehavior, FloatLayout):
             if not self.is_2d:
                 self.scale_inst.x = -1 if flip else 1
             
-            if piece:
-                self.show_hidden_passive(piece)
-                self.show_commander_indicator(piece)
+            # ✨ นำ if piece: ออกไปเลย เพื่อบังคับให้ระบบเข้าไปเคลียร์ไอคอนค้าง
+            # (เนื่องจากในฟังก์ชัน 2 ตัวนี้มีระบบเซ็ต opacity = 0 ถ้า piece=None ดักไว้อยู่แล้ว)
+            self.show_hidden_passive(piece)
+            self.show_commander_indicator(piece)
             
             self.piece_img.color = (0.2, 0.6, 1, 1) if is_frozen else (1, 1, 1, 1)
         else: 
