@@ -339,8 +339,11 @@ class BuildPopup(ModalView):
             if self.node.node_type == 'castle':
                 if b_state == 'building_market':
                     self.content_grid.add_widget(Label(text="[color=ffff00]Market is under construction (1 Turn)...[/color]", markup=True, size_hint_y=None, height=dp(40)))
+                elif b_state == 'building_makerspace':
+                    self.content_grid.add_widget(Label(text="[color=ffff00]Makerspace is under construction (1 Turn)...[/color]", markup=True, size_hint_y=None, height=dp(40)))
                 elif b_state == 'destroying':
                     self.content_grid.add_widget(Label(text="[color=ff0000]Building is being demolished (1 Turn)...[/color]", markup=True, size_hint_y=None, height=dp(40)))
+                # --- UI ของ Market ---
                 elif b_state == 'market':
                     # สร้าง Header ตลาด
                     m_header = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(40))
@@ -349,6 +352,49 @@ class BuildPopup(ModalView):
                     btn_destroy.bind(on_release=self.destroy_castle_structure)
                     m_header.add_widget(btn_destroy)
                     self.content_grid.add_widget(m_header)
+                    
+                    # ลิสต์รายการสินค้า (ย้ายกลับมาให้ถูกที่)
+                    rates = getattr(self.node, 'market_rates', {})
+                    for r_key, r_val in rates.items():
+                        r_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(5))
+                        r_box.add_widget(Label(text=f"{r_key.capitalize()} (Rate: {r_val})", size_hint_x=0.4))
+                        
+                        btn_sell = Button(text=f"SELL (+{r_val} Tax)", background_color=(0.2, 0.6, 0.2, 1), size_hint_x=0.3)
+                        btn_sell.bind(on_release=lambda x, k=r_key, r=r_val: self.trade_market(k, False, r))
+                        
+                        btn_buy = Button(text=f"BUY (-{r_val} Tax)", background_color=(0.8, 0.4, 0.2, 1), size_hint_x=0.3)
+                        btn_buy.bind(on_release=lambda x, k=r_key, r=r_val: self.trade_market(k, True, r))
+                        
+                        r_box.add_widget(btn_sell)
+                        r_box.add_widget(btn_buy)
+                        self.content_grid.add_widget(r_box)
+
+                # --- UI ของ Makerspace ---
+                elif b_state == 'makerspace':
+                    m_header = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(40))
+                    m_header.add_widget(Label(text="[b][color=00ffcc]MAKERSPACE[/color][/b]", markup=True, halign='left'))
+                    btn_destroy = Button(text="DESTROY", background_color=(0.8, 0.2, 0.2, 1), size_hint_x=0.3)
+                    btn_destroy.bind(on_release=self.destroy_castle_structure)
+                    m_header.add_widget(btn_destroy)
+                    self.content_grid.add_widget(m_header)
+                    
+                    # Helper วาดสูตรคราฟต์
+                    def add_recipe(label_text, cb_name):
+                        r_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(5))
+                        r_box.add_widget(Label(text=label_text, markup=True, size_hint_x=0.7))
+                        btn_craft = Button(text="CRAFT", background_color=(0.2, 0.6, 0.8, 1), size_hint_x=0.3)
+                        # แก้ไข lambda closure bug ตรงนี้ด้วยการประกาศตัวแปร cb=cb_name
+                        btn_craft.bind(on_release=lambda x, cb=cb_name: self.craft_item(cb))
+                        r_box.add_widget(btn_craft)
+                        self.content_grid.add_widget(r_box)
+
+                    add_recipe("2 Coal + 2 Tax [color=00ff00]-> 1 Iron[/color]", 'coal_to_iron')
+                    add_recipe("1 Silver + 2 Tax [color=00ff00]-> 1 Iron[/color]", 'silver_to_iron')
+                    add_recipe("1 Gold + 2 Tax [color=00ff00]-> 3 Iron[/color]", 'gold_to_iron')
+                    add_recipe("2 Wood + 3 Iron [color=00ffff]-> Weapon T1[/color]", 'weapon_t1')
+                    add_recipe("4 Wood + 3 Iron [color=00ffff]-> Weapon T2[/color]", 'weapon_t2')
+                    # เพิ่ม Weapon T3 กลับเข้ามาแล้วครับ!
+                    add_recipe("6 Wood + 4 Iron [color=00ffff]-> Weapon T3[/color]", 'weapon_t3')
                     
                     # ลิสต์รายการสินค้า
                     # ลิสต์รายการสินค้า
@@ -399,12 +445,17 @@ class BuildPopup(ModalView):
                     self.content_grid.add_widget(BuildCard(spec.capitalize(), f"Lvl {spec_lvl} -> {spec_lvl+1}", spec_cost, img, lambda: self.on_upgrade_addon('special_lvl', spec_cost)))
 
             # --- วาด Card สร้างสิ่งปลูกสร้างปราสาท ---
-            # ปราสาทจะสร้างสิ่งปลูกสร้างได้ก็ต่อเมื่ออยู่ในหน้า Main Castle และยังไม่มีสิ่งปลูกสร้างใดๆ
             if self.node.node_type == 'castle' and self.panel.active_sub_village is None:
                 if b_state is None:
-                    # คุณสามารถหารูป assets/structure/market.png มาใส่ได้
-                    self.content_grid.add_widget(BuildCard("Market", "Trade resources for Tax.\nCost: 3 Wood", 3, "assets/icon_effect/tax.png", lambda: self.build_castle_structure('market', 3)))
+                    # ใช้ BoxLayout แนวนอนเพื่อวางการ์ดเรียงซ้าย-ขวา
+                    h_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(115), spacing=dp(10))
                     
+                    # สร้างตึก Market
+                    h_box.add_widget(BuildCard("Market", "Trade items\nCost: 3 Wood", 3, "assets/icon_effect/tax.png", lambda: self.build_castle_structure('market', 3)))
+                    # สร้างตึก Makerspace
+                    h_box.add_widget(BuildCard("Makerspace", "Craft weapons\nCost: 4 Wood", 4, "assets/icon_effect/base_atk.png", lambda: self.build_castle_structure('makerspace', 4)))
+                    
+                    self.content_grid.add_widget(h_box)
     def on_upgrade_addon(self, key, cost):
         self.panel.upgrade_addon(key, cost)
         self.refresh_ui()
@@ -431,7 +482,10 @@ class BuildPopup(ModalView):
         fac = self.node.faction
         res_dict = {
             'wood': self.app.wood_points, 'coal': self.app.coal_points,
-            'silver': self.app.silver_points, 'iron': self.app.iron_points, 'gold': self.app.gold_points
+            'silver': self.app.silver_points, 'iron': self.app.iron_points, 'gold': self.app.gold_points,
+            'weapon_t1': self.app.weapon_t1_points, # เพิ่มอาวุธเข้าไปในระบบ Trade
+            'weapon_t2': self.app.weapon_t2_points,
+            'weapon_t3': self.app.weapon_t3_points
         }
         
         if hasattr(self.app, 'play_click_sound'): self.app.play_click_sound()
@@ -451,6 +505,50 @@ class BuildPopup(ModalView):
         if hasattr(self.panel.map_screen, 'update_resource_display'):
             self.panel.map_screen.update_resource_display()
         self.refresh_ui()
+
+    def craft_item(self, recipe_name):
+        fac = self.node.faction
+        app = self.app
+        if hasattr(app, 'play_click_sound'): app.play_click_sound()
+
+        # เก็บสถานะการคราฟต์เพื่อเช็คว่าสำเร็จไหม
+        success = False
+
+        if recipe_name == 'coal_to_iron':
+            if app.coal_points.get(fac, 0) >= 2 and app.tax_points.get(fac, 0) >= 2:
+                app.coal_points[fac] -= 2; app.tax_points[fac] -= 2
+                app.iron_points[fac] += 1
+                success = True
+        elif recipe_name == 'silver_to_iron':
+            if app.silver_points.get(fac, 0) >= 1 and app.tax_points.get(fac, 0) >= 2:
+                app.silver_points[fac] -= 1; app.tax_points[fac] -= 2
+                app.iron_points[fac] += 1
+                success = True
+        elif recipe_name == 'gold_to_iron':
+            if app.gold_points.get(fac, 0) >= 1 and app.tax_points.get(fac, 0) >= 2:
+                app.gold_points[fac] -= 1; app.tax_points[fac] -= 2
+                app.iron_points[fac] += 3
+                success = True
+        elif recipe_name == 'weapon_t1':
+            if app.wood_points.get(fac, 0) >= 2 and app.iron_points.get(fac, 0) >= 3:
+                app.wood_points[fac] -= 2; app.iron_points[fac] -= 3
+                app.weapon_t1_points[fac] += 1
+                success = True
+        elif recipe_name == 'weapon_t2':
+            if app.wood_points.get(fac, 0) >= 4 and app.iron_points.get(fac, 0) >= 3:
+                app.wood_points[fac] -= 4; app.iron_points[fac] -= 3
+                app.weapon_t2_points[fac] += 1
+                success = True
+        elif recipe_name == 'weapon_t3':
+            if app.wood_points.get(fac, 0) >= 6 and app.iron_points.get(fac, 0) >= 4:
+                app.wood_points[fac] -= 6; app.iron_points[fac] -= 4
+                app.weapon_t3_points[fac] += 1
+                success = True
+
+        if success:
+            if hasattr(self.panel.map_screen, 'update_resource_display'):
+                self.panel.map_screen.update_resource_display()
+            self.refresh_ui()
 
 # ----------------- Army Status (เปลี่ยน Text เป็น BoxLayout Icons) -----------------
 class ArmyStatusPopup(ModalView):

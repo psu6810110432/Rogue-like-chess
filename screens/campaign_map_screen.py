@@ -334,6 +334,8 @@ class CampaignMapScreen(Screen):
                         node.market_rates = self.generate_market_rates()
                     elif b_state == 'market':
                         node.market_rates = self.generate_market_rates() # สุ่มใหม่ทุกเทิร์น
+                    elif b_state == 'building_makerspace': # 🟢 เพิ่มส่วนนี้
+                        node.building_state = 'makerspace'
                     elif b_state == 'destroying':
                         node.building_state = None
                         if hasattr(node, 'market_rates'):
@@ -618,6 +620,11 @@ class CampaignMapScreen(Screen):
             app.silver_points = {'white': 0, 'black': 0} 
             app.gold_points = {'white': 0, 'black': 0}
             app.iron_points = {'white': 0, 'black': 0} # 🟢 เพิ่มเหล็กตรงนี้
+
+            # 🗡️ เพิ่มตัวแปรสำหรับเก็บอาวุธ
+            app.weapon_t1_points = {'white': 0, 'black': 0}
+            app.weapon_t2_points = {'white': 0, 'black': 0}
+            app.weapon_t3_points = {'white': 0, 'black': 0}
             
             app.unlocked_units = {
                 'white': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'},
@@ -782,5 +789,8 @@ class CampaignMapScreen(Screen):
             'coal': random.randint(2, 5),     # 2-5
             'silver': random.randint(3, 9),   # ปรับจาก 2.5-9
             'iron': random.randint(4, 7),     # ปรับจาก 3.5-7
-            'gold': random.randint(7, 12)     # ปรับจาก 6.5-12
+            'gold': random.randint(7, 12),    # ปรับจาก 6.5-12
+            'weapon_t1': random.randint(14, 16), # อาวุธ Tier 1
+            'weapon_t2': random.randint(16, 18), # อาวุธ Tier 2
+            'weapon_t3': random.randint(22, 24)  # อาวุธ Tier 3
         }
