@@ -325,6 +325,19 @@ class CampaignMapScreen(Screen):
                             silver_collected += 2
                         elif spec_lvl >= 3:
                             gold_collected += 1
+
+                if node.node_type == 'castle':
+                    b_state = getattr(node, 'building_state', None)
+                    
+                    if b_state == 'building_market':
+                        node.building_state = 'market'
+                        node.market_rates = self.generate_market_rates()
+                    elif b_state == 'market':
+                        node.market_rates = self.generate_market_rates() # สุ่มใหม่ทุกเทิร์น
+                    elif b_state == 'destroying':
+                        node.building_state = None
+                        if hasattr(node, 'market_rates'):
+                            del node.market_rates
                 
                 # --- 🔵 จัดการสิ่งปลูกสร้างใน หมู่บ้านย่อย (Sub-villages) ---
                 if node.node_type == 'castle': 
@@ -604,6 +617,7 @@ class CampaignMapScreen(Screen):
             app.coal_points = {'white': 0, 'black': 0} 
             app.silver_points = {'white': 0, 'black': 0} 
             app.gold_points = {'white': 0, 'black': 0}
+            app.iron_points = {'white': 0, 'black': 0} # 🟢 เพิ่มเหล็กตรงนี้
             
             app.unlocked_units = {
                 'white': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'},
@@ -745,7 +759,8 @@ class CampaignMapScreen(Screen):
             c = getattr(app, 'coal_points', {}).get(fac, 0)
             sv = getattr(app, 'silver_points', {}).get(fac, 0)
             g = getattr(app, 'gold_points', {}).get(fac, 0)
-            
+            i = getattr(app, 'iron_points', {}).get(fac, 0)
+
             # ใช้การเว้นช่องไฟและตัวย่อให้ UI ดูคลีน ไม่รกตา
             self.resource_lbl.text = (
                 f"[color=d4af37]Tax: {t}[/color]  |  "
@@ -753,7 +768,19 @@ class CampaignMapScreen(Screen):
                 f"[color=cd853f]Wood: {w}[/color]  |  "
                 f"[color=808080]Coal: {c}[/color]  |  "
                 f"[color=c0c0c0]Silv: {sv}[/color]  |  "
-                f"[color=ffd700]Gold: {g}[/color]"
+                f"[color=ffd700]Gold: {g}[/color]  |  "
+                f"[color=8f8f8f]Iron: {i}[/color]"
             )
         else:
             self.resource_lbl.text = f"[color=d4af37]Tax: {t}[/color]"
+
+    def generate_market_rates(self):
+        import random
+        # ใช้ random.randint เพื่อสุ่มค่าเป็น int ล้วนๆ
+        return {
+            'wood': random.randint(1, 2),     # ปรับจาก 0.5-1.5
+            'coal': random.randint(2, 5),     # 2-5
+            'silver': random.randint(3, 9),   # ปรับจาก 2.5-9
+            'iron': random.randint(4, 7),     # ปรับจาก 3.5-7
+            'gold': random.randint(7, 12)     # ปรับจาก 6.5-12
+        }

@@ -1,4 +1,6 @@
 # components/campaign_popups.py
+import math
+
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.scrollview import ScrollView
@@ -272,6 +274,8 @@ class BuildPopup(ModalView):
         
         econ_enabled = getattr(self.app, 'selected_economic_system', False)
 
+        b_state = getattr(self.node, 'building_state', None)
+
         # ========================================================
         # 🟢 TAB: MANAGE
         # ========================================================
@@ -330,6 +334,39 @@ class BuildPopup(ModalView):
             if self.node.node_type == 'castle' and hasattr(self.node, 'sub_villages'):
                 for sv in self.node.sub_villages:
                     build_manage_row(f"Village {sv['id']}", sv['addons'])
+
+            # --- วาดระบบ Market (ถ้ามี) ---
+            if self.node.node_type == 'castle':
+                if b_state == 'building_market':
+                    self.content_grid.add_widget(Label(text="[color=ffff00]Market is under construction (1 Turn)...[/color]", markup=True, size_hint_y=None, height=dp(40)))
+                elif b_state == 'destroying':
+                    self.content_grid.add_widget(Label(text="[color=ff0000]Building is being demolished (1 Turn)...[/color]", markup=True, size_hint_y=None, height=dp(40)))
+                elif b_state == 'market':
+                    # สร้าง Header ตลาด
+                    m_header = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(40))
+                    m_header.add_widget(Label(text="[b][color=d4af37]GRAND MARKET[/color][/b]", markup=True, halign='left'))
+                    btn_destroy = Button(text="DESTROY", background_color=(0.8, 0.2, 0.2, 1), size_hint_x=0.3)
+                    btn_destroy.bind(on_release=self.destroy_castle_structure)
+                    m_header.add_widget(btn_destroy)
+                    self.content_grid.add_widget(m_header)
+                    
+                    # ลิสต์รายการสินค้า
+                    # ลิสต์รายการสินค้า
+                    rates = getattr(self.node, 'market_rates', {})
+                    for r_key, r_val in rates.items():
+                        r_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(5))
+                        r_box.add_widget(Label(text=f"{r_key.capitalize()} (Rate: {r_val})", size_hint_x=0.4))
+                        
+                        # แสดงผล r_val ตรงๆ ได้เลยเพราะเป็น Integer แล้ว
+                        btn_sell = Button(text=f"SELL (+{r_val} Tax)", background_color=(0.2, 0.6, 0.2, 1), size_hint_x=0.3)
+                        btn_sell.bind(on_release=lambda x, k=r_key, r=r_val: self.trade_market(k, False, r))
+                        
+                        btn_buy = Button(text=f"BUY (-{r_val} Tax)", background_color=(0.8, 0.4, 0.2, 1), size_hint_x=0.3)
+                        btn_buy.bind(on_release=lambda x, k=r_key, r=r_val: self.trade_market(k, True, r))
+                        
+                        r_box.add_widget(btn_sell)
+                        r_box.add_widget(btn_buy)
+                        self.content_grid.add_widget(r_box)
                     
         # ========================================================
         # 🔴 TAB: UPGRADE
@@ -360,9 +397,59 @@ class BuildPopup(ModalView):
                 if spec_lvl < 3:
                     img = get_addon_img(spec, spec_lvl)
                     self.content_grid.add_widget(BuildCard(spec.capitalize(), f"Lvl {spec_lvl} -> {spec_lvl+1}", spec_cost, img, lambda: self.on_upgrade_addon('special_lvl', spec_cost)))
+
+            # --- วาด Card สร้างสิ่งปลูกสร้างปราสาท ---
+            # ปราสาทจะสร้างสิ่งปลูกสร้างได้ก็ต่อเมื่ออยู่ในหน้า Main Castle และยังไม่มีสิ่งปลูกสร้างใดๆ
+            if self.node.node_type == 'castle' and self.panel.active_sub_village is None:
+                if b_state is None:
+                    # คุณสามารถหารูป assets/structure/market.png มาใส่ได้
+                    self.content_grid.add_widget(BuildCard("Market", "Trade resources for Tax.\nCost: 3 Wood", 3, "assets/icon_effect/tax.png", lambda: self.build_castle_structure('market', 3)))
                     
     def on_upgrade_addon(self, key, cost):
         self.panel.upgrade_addon(key, cost)
+        self.refresh_ui()
+
+    def build_castle_structure(self, structure_name, wood_cost):
+        if getattr(self.app, 'wood_points', {}).get(self.node.faction, 0) < wood_cost:
+            return
+        if hasattr(self.app, 'play_click_sound'): self.app.play_click_sound()
+        
+        self.app.wood_points[self.node.faction] -= wood_cost
+        self.node.building_state = f'building_{structure_name}'
+        
+        # รีเฟรชจอใหญ่เผื่ออัปเดตเลขไม้
+        if hasattr(self.panel.map_screen, 'update_resource_display'):
+            self.panel.map_screen.update_resource_display()
+        self.refresh_ui()
+
+    def destroy_castle_structure(self, instance):
+        if hasattr(self.app, 'play_click_sound'): self.app.play_click_sound()
+        self.node.building_state = 'destroying'
+        self.refresh_ui()
+
+    def trade_market(self, res_type, is_buying, rate):
+        fac = self.node.faction
+        res_dict = {
+            'wood': self.app.wood_points, 'coal': self.app.coal_points,
+            'silver': self.app.silver_points, 'iron': self.app.iron_points, 'gold': self.app.gold_points
+        }
+        
+        if hasattr(self.app, 'play_click_sound'): self.app.play_click_sound()
+        
+        # rate เป็น int อยู่แล้ว เอามาใช้ได้เลย
+        tax_val = int(rate) 
+        
+        if is_buying: 
+            if self.app.tax_points.get(fac, 0) >= tax_val:
+                self.app.tax_points[fac] -= tax_val
+                res_dict[res_type][fac] += 1
+        else: 
+            if res_dict[res_type].get(fac, 0) >= 1:
+                res_dict[res_type][fac] -= 1
+                self.app.tax_points[fac] += tax_val
+                
+        if hasattr(self.panel.map_screen, 'update_resource_display'):
+            self.panel.map_screen.update_resource_display()
         self.refresh_ui()
 
 # ----------------- Army Status (เปลี่ยน Text เป็น BoxLayout Icons) -----------------
