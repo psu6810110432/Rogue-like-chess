@@ -184,6 +184,28 @@ class CampaignMapScreen(Screen):
 
     def initiate_combat(self, source_node, target_node):
         app = App.get_running_app()
+        # ข้อยกเว้น: ไม่ทำงานกับกบฏ (red faction) เพราะกบฏเกิดจากในเมืองเอง
+        # --- 🏰 ระบบกำแพงเมือง (Wallbuilder) ---
+        if getattr(target_node, 'building_state', None) == 'wallbuilder' and getattr(target_node, 'wallbuilder_cooldown', 0) == 0 and source_node.faction != 'red':
+            import random
+            if random.random() < 0.70: # 70% โอกาสป้องกันสำเร็จ
+                if hasattr(app, 'play_click_sound'): app.play_click_sound()
+                self.status_lbl.text = f"[color=ff0000]ATTACK ON {getattr(target_node, 'city_name', 'CASTLE').upper()} REPELLED BY WALL![/color]"
+                
+                # ติด Cooldown 2 เทิร์น
+                target_node.wallbuilder_cooldown = 2 
+                
+                # ทัพศัตรูต้องล่าถอยกลับไปที่เดิม และเหนื่อยล้าเต็มที่ (Fatigue = 6) ทันที
+                source_node.army_pieces.extend(app.combat_marching_army)
+                source_node.fatigue = 6
+                
+                # คืนค่าสถานะการเดินทัพ เพื่อให้ผู้เล่นไปสั่งการเมืองอื่นต่อได้
+                self.marching_from_node = None
+                app.combat_marching_army = []
+                self.refresh_banners()
+                
+                # 🟢 ลบ self.end_turn(None) ทิ้งไป และใช้แค่ return เพื่อออกจากฟังก์ชันการต่อสู้
+                return
         app.combat_source = source_node
         app.combat_target = target_node
         
@@ -327,15 +349,23 @@ class CampaignMapScreen(Screen):
                             gold_collected += 1
 
                 if node.node_type == 'castle':
+                    # ลด Cooldown ของ Wallbuilder ลงทุกๆ เทิร์น
+                    wb_cd = getattr(node, 'wallbuilder_cooldown', 0)
+                    if wb_cd > 0:
+                        node.wallbuilder_cooldown = wb_cd - 1
+
                     b_state = getattr(node, 'building_state', None)
                     
                     if b_state == 'building_market':
                         node.building_state = 'market'
                         node.market_rates = self.generate_market_rates()
                     elif b_state == 'market':
-                        node.market_rates = self.generate_market_rates() # สุ่มใหม่ทุกเทิร์น
-                    elif b_state == 'building_makerspace': # 🟢 เพิ่มส่วนนี้
+                        node.market_rates = self.generate_market_rates() 
+                    elif b_state == 'building_makerspace': 
                         node.building_state = 'makerspace'
+                    elif b_state == 'building_wallbuilder': # 🟢 อัปเดตสถานะสร้างกำแพงเสร็จ
+                        node.building_state = 'wallbuilder'
+                        node.wallbuilder_cooldown = 0
                     elif b_state == 'destroying':
                         node.building_state = None
                         if hasattr(node, 'market_rates'):

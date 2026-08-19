@@ -365,6 +365,8 @@ class BuildPopup(ModalView):
                     self.content_grid.add_widget(Label(text="[color=ffff00]Market is under construction (1 Turn)...[/color]", markup=True, size_hint_y=None, height=dp(40)))
                 elif b_state == 'building_makerspace':
                     self.content_grid.add_widget(Label(text="[color=ffff00]Makerspace is under construction (1 Turn)...[/color]", markup=True, size_hint_y=None, height=dp(40)))
+                elif b_state == 'building_wallbuilder': # 🟢 เพิ่มแจ้งเตือนกำลังสร้างกำแพง
+                    self.content_grid.add_widget(Label(text="[color=ffff00]Wallbuilder is under construction (1 Turn)...[/color]", markup=True, size_hint_y=None, height=dp(40)))
                 elif b_state == 'destroying':
                     self.content_grid.add_widget(Label(text="[color=ff0000]Building is being demolished (1 Turn)...[/color]", markup=True, size_hint_y=None, height=dp(40)))
                 # --- UI ของ Market ---
@@ -377,7 +379,7 @@ class BuildPopup(ModalView):
                     m_header.add_widget(btn_destroy)
                     self.content_grid.add_widget(m_header)
                     
-                    # ลิสต์รายการสินค้า (ย้ายกลับมาให้ถูกที่)
+                    # ลิสต์รายการสินค้าของ Market
                     rates = getattr(self.node, 'market_rates', {})
                     for r_key, r_val in rates.items():
                         r_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(5))
@@ -402,12 +404,11 @@ class BuildPopup(ModalView):
                     m_header.add_widget(btn_destroy)
                     self.content_grid.add_widget(m_header)
                     
-                    # Helper วาดสูตรคราฟต์
+                    # Helper วาดสูตรคราฟต์ของ Makerspace
                     def add_recipe(label_text, cb_name):
                         r_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(5))
                         r_box.add_widget(Label(text=label_text, markup=True, size_hint_x=0.7))
                         btn_craft = Button(text="CRAFT", background_color=(0.2, 0.6, 0.8, 1), size_hint_x=0.3)
-                        # แก้ไข lambda closure bug ตรงนี้ด้วยการประกาศตัวแปร cb=cb_name
                         btn_craft.bind(on_release=lambda x, cb=cb_name: self.craft_item(cb))
                         r_box.add_widget(btn_craft)
                         self.content_grid.add_widget(r_box)
@@ -417,26 +418,26 @@ class BuildPopup(ModalView):
                     add_recipe("1 Gold + 2 Tax [color=00ff00]-> 3 Iron[/color]", 'gold_to_iron')
                     add_recipe("2 Wood + 3 Iron [color=00ffff]-> Weapon T1[/color]", 'weapon_t1')
                     add_recipe("4 Wood + 3 Iron [color=00ffff]-> Weapon T2[/color]", 'weapon_t2')
-                    # เพิ่ม Weapon T3 กลับเข้ามาแล้วครับ!
                     add_recipe("6 Wood + 4 Iron [color=00ffff]-> Weapon T3[/color]", 'weapon_t3')
+
+                # --- UI ของ Wallbuilder ---
+                elif b_state == 'wallbuilder':
+                    m_header = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(40))
+                    m_header.add_widget(Label(text="[b][color=aaaaaa]WALLBUILDER[/color][/b]", markup=True, halign='left'))
+                    btn_destroy = Button(text="DESTROY", background_color=(0.8, 0.2, 0.2, 1), size_hint_x=0.3)
+                    btn_destroy.bind(on_release=self.destroy_castle_structure)
+                    m_header.add_widget(btn_destroy)
+                    self.content_grid.add_widget(m_header)
                     
-                    # ลิสต์รายการสินค้า
-                    # ลิสต์รายการสินค้า
-                    rates = getattr(self.node, 'market_rates', {})
-                    for r_key, r_val in rates.items():
-                        r_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(35), spacing=dp(5))
-                        r_box.add_widget(Label(text=f"{r_key.capitalize()} (Rate: {r_val})", size_hint_x=0.4))
+                    # เช็คสถานะ Cooldown ของ Wallbuilder อย่างเดียว
+                    cd = getattr(self.node, 'wallbuilder_cooldown', 0)
+                    if cd > 0:
+                        status_text = f"[color=ff0000]COOLDOWN ({cd} Turns left)[/color]"
+                    else:
+                        status_text = "[color=00ff00]ACTIVE (70% Block Chance)[/color]"
                         
-                        # แสดงผล r_val ตรงๆ ได้เลยเพราะเป็น Integer แล้ว
-                        btn_sell = Button(text=f"SELL (+{r_val} Tax)", background_color=(0.2, 0.6, 0.2, 1), size_hint_x=0.3)
-                        btn_sell.bind(on_release=lambda x, k=r_key, r=r_val: self.trade_market(k, False, r))
-                        
-                        btn_buy = Button(text=f"BUY (-{r_val} Tax)", background_color=(0.8, 0.4, 0.2, 1), size_hint_x=0.3)
-                        btn_buy.bind(on_release=lambda x, k=r_key, r=r_val: self.trade_market(k, True, r))
-                        
-                        r_box.add_widget(btn_sell)
-                        r_box.add_widget(btn_buy)
-                        self.content_grid.add_widget(r_box)
+                    status_lbl = Label(text=f"Status: {status_text}", markup=True, size_hint_y=None, height=dp(30))
+                    self.content_grid.add_widget(status_lbl)
                     
         # ========================================================
         # 🔴 TAB: UPGRADE
@@ -471,15 +472,19 @@ class BuildPopup(ModalView):
             # --- วาด Card สร้างสิ่งปลูกสร้างปราสาท ---
             if self.node.node_type == 'castle' and self.panel.active_sub_village is None:
                 if b_state is None:
-                    # ใช้ BoxLayout แนวนอนเพื่อวางการ์ดเรียงซ้าย-ขวา
-                    h_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(115), spacing=dp(10))
+                    # เปลี่ยนเป็น GridLayout เพื่อรองรับตึกจำนวนมากโดยไม่ทำให้ UI เสียทรง
+                    grid_b = GridLayout(cols=2, spacing=dp(10), size_hint_y=None)
+                    grid_b.bind(minimum_height=grid_b.setter('height'))
                     
                     # สร้างตึก Market
-                    h_box.add_widget(BuildCard("Market", "Trade items\nCost: 3 Wood", 3, "assets/icon_effect/tax.png", lambda: self.build_castle_structure('market', 3)))
+                    grid_b.add_widget(BuildCard("Market", "Trade items\nCost: 3 Wood", 3, "assets/icon_effect/tax.png", lambda: self.build_castle_structure('market', 3)))
                     # สร้างตึก Makerspace
-                    h_box.add_widget(BuildCard("Makerspace", "Craft weapons\nCost: 4 Wood", 4, "assets/icon_effect/base_atk.png", lambda: self.build_castle_structure('makerspace', 4)))
+                    grid_b.add_widget(BuildCard("Makerspace", "Craft weapons\nCost: 4 Wood", 4, "assets/icon_effect/base_atk.png", lambda: self.build_castle_structure('makerspace', 4)))
+                    # 🟢 สร้างตึก Wallbuilder
+                    grid_b.add_widget(BuildCard("Wallbuilder", "70% Block Attack\nCost: 9 Wood", 9, "assets/icon_effect/buff_def.png", lambda: self.build_castle_structure('wallbuilder', 9)))
                     
-                    self.content_grid.add_widget(h_box)
+                    self.content_grid.add_widget(grid_b)
+
     def on_upgrade_addon(self, key, cost):
         self.panel.upgrade_addon(key, cost)
         self.refresh_ui()
