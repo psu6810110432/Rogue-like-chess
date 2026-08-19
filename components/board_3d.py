@@ -11,9 +11,16 @@ import math
 import os
 
 class Board3D(Widget):
-    def __init__(self, map_name='Classic Board', on_square_click=None, **kwargs):
+    def __init__(self, map_name='Classic Board', on_square_click=None, tile_color_light=(0.8, 0.8, 0.8, 1), tile_color_dark=(0.4, 0.4, 0.4, 1), **kwargs):
         super().__init__(**kwargs)
         self.canvas = RenderContext(compute_normal_mat=True)
+        
+        # ✨ เก็บค่าสีไว้ใช้ในคลาส
+        self.tile_color_light = tile_color_light
+        self.tile_color_dark = tile_color_dark
+        
+        self.map_name = map_name
+        self.touch_start = None
         
         shader_path = os.path.join(os.path.dirname(__file__), '..', 'simple3d.glsl')
         try:
@@ -51,15 +58,13 @@ class Board3D(Widget):
         vertex_format = [(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')]
         vertices, indices = [], []
         
-        if self.map_name == 'Enchanted Forest': color_light, color_dark = (0.55, 0.65, 0.55, 1), (0.35, 0.45, 0.35, 1)
-        elif self.map_name == 'Desert Ruins': color_light, color_dark = (0.9, 0.65, 0.2, 1), (0.7, 0.45, 0.1, 1)
-        elif self.map_name == 'Frozen Tundra': color_light, color_dark = (0.5, 0.8, 0.95, 1), (0.15, 0.4, 0.75, 1)
-        else: color_light, color_dark = (0.8, 0.8, 0.8, 1), (0.4, 0.4, 0.4, 1)
+        # ✨ ดึงค่าสีที่ถูกส่งมาจาก gameplay_screen มาใช้โดยตรง
+        color_light = self.tile_color_light
+        color_dark = self.tile_color_dark
 
         tile_size = 1.0
         offset = 4.0 
         
-
         idx = 0
         for row in range(8):
             for col in range(8):
@@ -72,6 +77,7 @@ class Board3D(Widget):
                 z1 = z0 + tile_size
                 y = 0.0
                 
+                # พิกัด UV -1.0 จะถูก Shader ของคุณจับและวาดสีอย่างถูกต้อง
                 vertices.extend([x0, y, z0, r, g, b, a, -1.0, -1.0]) 
                 vertices.extend([x0, y, z1, r, g, b, a, -1.0, -1.0]) 
                 vertices.extend([x1, y, z1, r, g, b, a, -1.0, -1.0]) 
@@ -101,7 +107,7 @@ class Board3D(Widget):
                 is_legal = ((row, col) in legal_moves)
                 is_last = ((row, col) in last_move) 
                 
-                # ✨ เช็คว่าเป็นโซนจัดทัพหรือไม่ และให้ไฮไลต์เรืองแสงอ่อนๆ
+                # เช็คว่าเป็นโซนจัดทัพหรือไม่ และให้ไฮไลต์เรืองแสงอ่อนๆ
                 is_deploy_zone = False
                 if game_mode == 'Divide_Conquer':
                     if phase == 'deployment_arrange_atk' and row >= 5:
@@ -157,13 +163,13 @@ class Board3D(Widget):
                     self.pieces_group.add(group)
 
         # ==========================================
-        # 2. วาดตัวหมาก + Icon 
+        # 2. วาดตัวหมาก + ก้อน Event 3 มิติ + Icon 
         # ==========================================
         for row in range(8):
             for col in range(8):
                 piece = board_data[row][col]
 
-                # ✨ 1. กำหนดว่าแถวไหนคือโซนศัตรู
+                # กำหนดโซนศัตรู (Fog of War)
                 is_enemy_zone = False
                 if game_mode == 'Divide_Conquer':
                     if phase == 'deployment_arrange_atk' and row <= 2:
@@ -174,30 +180,23 @@ class Board3D(Widget):
                 img_path = None
                 icons_to_draw = []
 
-                # ✨ 2. กำหนดรูปภาพและไอคอน
                 if is_enemy_zone:
-                    # โซนศัตรู: บังคับวาดรูปเงาดำทั้งหมด ไม่ต้องสนใจว่ามีหมากจริงไหม (Fake Enemy)
+                    # โซนศัตรู วาด Fake Enemy ให้เต็ม
                     img_path = 'assets/ui/hidden_enemy.png'
                 else:
-                    # โซนเรา: ถ้าไม่มีหมาก ให้ข้ามช่องนี้ไปเลย
                     if not piece: continue
 
-                    # ถ้ามีหมาก ให้โหลดรูปและเก็บไอคอน (ทำแค่รอบเดียวจบ)
                     img_path = image_path_resolver(piece)
-                    
                     if getattr(piece, 'passive_icon', None): 
                         icons_to_draw.append(piece.passive_icon)
-                        
                     hp = getattr(piece, 'hidden_passive', None)
                     if hp and getattr(hp, 'passive_type', None):
                         hp_icon = f"assets/icon_effect/{hp.description.lower().replace(' ', '_')}.png"
                         icons_to_draw.append(hp_icon)
-                        
                     it = getattr(piece, 'item', None)
                     if it and hasattr(it, 'image_path'): 
                         icons_to_draw.append(it.image_path)
 
-                # ✨ 3. ตรวจสอบว่ามีไฟล์รูปไหม
                 if not img_path or not os.path.exists(img_path): continue
                 
                 try:
@@ -207,48 +206,97 @@ class Board3D(Widget):
                     tex.min_filter = 'nearest'
                 except Exception: continue
 
-                # ✨ 4. เริ่มวาด 3D Mesh
+                # ✨ แยกระบบวาดก้อน Event กับตัวละครปกติ
+                is_obstacle = (piece and piece.__class__.__name__.lower() == 'obstacle') and not is_enemy_zone
+                
                 group = InstructionGroup()
-                group.add(PushMatrix())
-                group.add(Translate(col * tile_size - offset + 0.5, 0, row * tile_size - offset + 0.5))
-                rot = Rotate(angle=math.degrees(self.rot_y), axis=(0, 1, 0))
-                self.piece_rotations.append(rot)
-                group.add(rot)
                 
-                w, h = 1.0, 1.5
-                v_piece = [
-                    -w/2, h, 0, 1,1,1,1, 0,0,  -w/2, 0, 0, 1,1,1,1, 0,1,
-                     w/2, 0, 0, 1,1,1,1, 1,1,   w/2, h, 0, 1,1,1,1, 1,0 
-                ]
-                group.add(Mesh(
-                    fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
-                    mode='triangles', vertices=v_piece, indices=[0, 1, 2, 0, 2, 3], texture=tex
-                ))
-                
-                # วาดไอคอน
-                start_y = 1.2 
-                for icon_path in icons_to_draw:
-                    if icon_path and os.path.exists(icon_path):
-                        try:
-                            icon_tex = CoreImage(icon_path).texture
-                            if icon_tex:
-                                icon_tex.mag_filter, icon_tex.min_filter = 'nearest', 'nearest'
-                                group.add(PushMatrix())
-                                group.add(Translate(0.35, start_y, 0)) 
-                                iw, ih = 0.4, 0.4
-                                v_icon = [
-                                    -iw/2, ih, 0, 1,1,1,1, 0,0,  -iw/2, 0, 0, 1,1,1,1, 0,1,
-                                     iw/2, 0, 0, 1,1,1,1, 1,1,   iw/2, ih, 0, 1,1,1,1, 1,0 
-                                ]
-                                group.add(Mesh(
-                                    fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
-                                    mode='triangles', vertices=v_icon, indices=[0, 1, 2, 0, 2, 3], texture=icon_tex
-                                ))
-                                group.add(PopMatrix())
-                                start_y -= 0.45 
-                        except Exception: pass
-                
-                group.add(PopMatrix())
+                if is_obstacle:
+                    # 🧊 [ระบบวาดก้อนสี่เหลี่ยม 3 มิติ สำหรับ Event]
+                    cx, cz = col * tile_size - offset + 0.5, row * tile_size - offset + 0.5
+                    
+                    v_cube, i_cube = [], []
+                    idx = 0
+                    
+                    def add_face(p0, p1, p2, p3, f_col):
+                        nonlocal idx
+                        # นำพิกัด UV (0,1), (1,1), (1,0), (0,0) ไปแปะบนจุดแต่ละมุมของ 4 เหลี่ยม
+                        v_cube.extend([
+                            *p0, *f_col, 0, 1,
+                            *p1, *f_col, 1, 1,
+                            *p2, *f_col, 1, 0,
+                            *p3, *f_col, 0, 0
+                        ])
+                        i_cube.extend([idx, idx+1, idx+2, idx, idx+2, idx+3])
+                        idx += 4
+                        
+                    # ดึงชุดสีเดียวกับใน chess_square.py
+                    c_top = (1, 1, 1, 1)
+                    c_front = (0.7, 0.7, 0.7, 1)
+                    c_side = (0.4, 0.4, 0.4, 1)
+                    
+                    w_c, h_c, d_c = 0.8, 0.8, 0.8 # ขนาดกล่อง Event (ย่อให้เล็กกว่า 1 ช่องกระดานนิดนึง)
+                    hw, hd = w_c / 2.0, d_c / 2.0
+                    
+                    # ด้านบน (Top)
+                    add_face((cx - hw, h_c, cz + hd), (cx + hw, h_c, cz + hd), (cx + hw, h_c, cz - hd), (cx - hw, h_c, cz - hd), c_top)
+                    # ด้านหน้า (Front)
+                    add_face((cx - hw, 0, cz + hd), (cx + hw, 0, cz + hd), (cx + hw, h_c, cz + hd), (cx - hw, h_c, cz + hd), c_front)
+                    # ด้านหลัง (Back)
+                    add_face((cx + hw, 0, cz - hd), (cx - hw, 0, cz - hd), (cx - hw, h_c, cz - hd), (cx + hw, h_c, cz - hd), c_front)
+                    # ด้านขวา (Right)
+                    add_face((cx + hw, 0, cz + hd), (cx + hw, 0, cz - hd), (cx + hw, h_c, cz - hd), (cx + hw, h_c, cz + hd), c_side)
+                    # ด้านซ้าย (Left)
+                    add_face((cx - hw, 0, cz - hd), (cx - hw, 0, cz + hd), (cx - hw, h_c, cz + hd), (cx - hw, h_c, cz - hd), c_side)
+
+                    group.add(Mesh(
+                        fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
+                        mode='triangles', vertices=v_cube, indices=i_cube, texture=tex
+                    ))
+                    
+                else:
+                    # 👤 [ระบบวาดตัวหมากปกติ / ตัวหลอก]
+                    group.add(PushMatrix())
+                    group.add(Translate(col * tile_size - offset + 0.5, 0, row * tile_size - offset + 0.5))
+                    rot = Rotate(angle=math.degrees(self.rot_y), axis=(0, 1, 0))
+                    self.piece_rotations.append(rot)
+                    group.add(rot)
+                    
+                    w, h = 1.0, 1.5
+                    v_piece = [
+                        -w/2, h, 0, 1,1,1,1, 0,0,  -w/2, 0, 0, 1,1,1,1, 0,1,
+                         w/2, 0, 0, 1,1,1,1, 1,1,   w/2, h, 0, 1,1,1,1, 1,0 
+                    ]
+                    group.add(Mesh(
+                        fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
+                        mode='triangles', vertices=v_piece, indices=[0, 1, 2, 0, 2, 3], texture=tex
+                    ))
+                    
+                    # วาดไอคอน
+                    start_y = 1.2 
+                    for icon_path in icons_to_draw:
+                        if icon_path and os.path.exists(icon_path):
+                            try:
+                                icon_tex = CoreImage(icon_path).texture
+                                if icon_tex:
+                                    icon_tex.mag_filter, icon_tex.min_filter = 'nearest', 'nearest'
+                                    group.add(PushMatrix())
+                                    group.add(Translate(0.35, start_y, 0)) 
+                                    iw, ih = 0.4, 0.4
+                                    v_icon = [
+                                        -iw/2, ih, 0, 1,1,1,1, 0,0,  -iw/2, 0, 0, 1,1,1,1, 0,1,
+                                         iw/2, 0, 0, 1,1,1,1, 1,1,   iw/2, ih, 0, 1,1,1,1, 1,0 
+                                    ]
+                                    group.add(Mesh(
+                                        fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
+                                        mode='triangles', vertices=v_icon, indices=[0, 1, 2, 0, 2, 3], texture=icon_tex
+                                    ))
+                                    group.add(PopMatrix())
+                                    start_y -= 0.45 
+                            except Exception: pass
+                    
+                    group.add(PopMatrix())
+                    
                 self.pieces_group.add(group)
                 
     def on_touch_down(self, touch):

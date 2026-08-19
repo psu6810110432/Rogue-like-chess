@@ -357,9 +357,16 @@ class GameplayScreen(Screen):
             self.bottom_area.size_hint_y = None
             self.bottom_area.height = dp(320) # ล็อกความสูงให้พอดีกับการ์ด + เมนู
             self.board_anchor.size_hint_y = 1 # ให้กระดาน 3D ยืดใช้พื้นที่ที่เหลือทั้งหมด
+
+            # วาดกระดาน 3D (รวมพารามิเตอร์สีและลบการบรรทัดที่สร้างซ้ำทิ้ง)
+            self.board_3d = Board3D(
+                map_name=map_name, 
+                on_square_click=self.handle_3d_click, 
+                tile_color_light=t_light, 
+                tile_color_dark=t_dark, 
+                size_hint=(1, 1)
+            )
             
-            # วาดกระดาน 3D
-            self.board_3d = Board3D(map_name=map_name, on_square_click=self.handle_3d_click, size_hint=(1, 1))
             if saved_camera:
                 self.board_3d.rot_x = saved_camera[0]
                 self.board_3d.rot_y = saved_camera[1]
