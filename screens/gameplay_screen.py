@@ -350,6 +350,61 @@ class GameplayScreen(Screen):
             self.bottom_area.add_widget(self.inv_anchor)
 
         # ====================================================
+        # 🟡 กรณีเป็นโหมด 2D ISO (Isometric ดั้งเดิม)
+        # ====================================================
+        elif self.current_dimension == '2D iso':
+            self.board_anchor.size_hint_y = 0.82
+            self.bottom_area.size_hint_y = 0.18
+            
+            tile_w = dp(160)
+            tile_h = dp(80)
+            board_width = tile_w * 8
+            board_height = tile_h * 8
+
+            self.grid = CameraBoard(size_hint=(None, None), size=(board_width, board_height))
+            self.board_layer = FloatLayout(size_hint=(1, 1))
+            self.piece_layer = FloatLayout(size_hint=(1, 1))
+            self.grid.add_widget(self.board_layer)
+            self.grid.add_widget(self.piece_layer)
+            self.board_anchor.add_widget(self.grid)
+                
+            self.squares = {}
+            offset_x = self.grid.width / 2
+            offset_y = dp(50) 
+            
+            def get_render_rc(r, c):
+                return (r, c) if vp == 'white' else (7 - r, 7 - c)
+                
+            coords = [(r, c) for r in range(8) for c in range(8)]
+            coords.sort(key=lambda coord: get_render_rc(coord[0], coord[1])[0] + get_render_rc(coord[0], coord[1])[1])
+            
+            for r, c in coords:
+                sq = ChessSquare(row=r, col=c, is_2d=False, piece_layer=self.piece_layer, tile_color_light=t_light, tile_color_dark=t_dark)
+                sq.bind(on_release=self.on_square_tap)
+                
+                rr, rc = get_render_rc(r, c)
+                iso_x = (rr - rc) * (tile_w / 2)
+                iso_y = (14 - (rr + rc)) * (tile_h / 2)
+                
+                sq.size_hint = (None, None)
+                sq.size = (tile_w, tile_h)
+                sq.pos = (iso_x + offset_x - (tile_w / 2), iso_y + offset_y)
+                
+                self.board_layer.add_widget(sq)
+                self.squares[(r, c)] = sq
+
+            # ✨ นำโค้ดส่วนนี้กลับมาวางต่อท้าย เพื่อสร้างกล่อง Inventory ให้โหมดนี้
+            self.inv_anchor = AnchorLayout(anchor_x='center', anchor_y='top', padding=[0, dp(10), 0, dp(20)])
+            self.inventory_layout = BoxLayout(orientation='horizontal', size_hint_x=0.85, spacing=dp(10), padding=dp(10))
+            with self.inventory_layout.canvas.before:
+                Color(0.05, 0.05, 0.07, 0.6)
+                self.inv_bg = Rectangle(pos=self.inventory_layout.pos, size=self.inventory_layout.size)
+            self.inventory_layout.bind(pos=self._update_inv_bg, size=self._update_inv_bg)
+            self.inv_anchor.add_widget(self.inventory_layout)
+            self.bottom_area.add_widget(self.inv_anchor)
+
+
+        # ====================================================
         # 🔴 กรณีเป็นโหมด 2.5D (3D)
         # ====================================================
         else:
@@ -402,31 +457,31 @@ class GameplayScreen(Screen):
             self.bottom_area.add_widget(hand_container)
             
         # ====================================================
-        # เคลียร์ปุ่ม Toggle เก่าทิ้งก่อน เพื่อป้องกันปุ่มซ้อนกันเวลาสลับ 2D / 3D
+        # เคลียร์ปุ่ม Toggle เก่าทิ้งก่อน เพื่อป้องกันปุ่มซ้อนกัน
         # ====================================================
         if hasattr(self, 'sidebar_toggle_btn') and self.sidebar_toggle_btn in self.root_layout.children:
             self.root_layout.remove_widget(self.sidebar_toggle_btn)
         if hasattr(self, 'inv_toggle_btn') and self.inv_toggle_btn in self.root_layout.children:
             self.root_layout.remove_widget(self.inv_toggle_btn)
 
-        # --- ส่วนที่ 1: ปุ่มเปิด/ปิด Sidebar (โชว์ตลอดทั้ง 2D และ 3D) ---
+        # --- ส่วนที่ 1: ปุ่มเปิด/ปิด Sidebar ---
         self.sidebar_is_open = True
         self.sidebar_toggle_btn = Button(
             text=">", font_size='24sp', bold=True,
             size_hint=(None, None), size=(dp(30), dp(60)),
             pos_hint={'right': 1, 'center_y': 0.5},
-            background_color=(0.1, 0.1, 0.1, 0.8) # สีคลีนๆ เข้มๆ
+            background_color=(0.1, 0.1, 0.1, 0.8)
         )
         self.sidebar_toggle_btn.bind(on_release=self.toggle_sidebar)
         self.root_layout.add_widget(self.sidebar_toggle_btn)
 
-        # --- ส่วนที่ 2: ปุ่มเปิด/ปิด Inventory (✨ แสดงเฉพาะโหมด 2D เท่านั้น) ---
-        if self.current_dimension == '2D':
+        # --- ส่วนที่ 2: ปุ่มเปิด/ปิด Inventory (แสดงบนโหมด 2D และ 2D iso) ---
+        if self.current_dimension in ['2D', '2D iso']:
             self.inv_is_open = True
             self.inv_toggle_btn = Button(
                 text="v", font_size='24sp', bold=True,
                 size_hint=(None, None), size=(dp(60), dp(30)),
-                pos_hint={'center_x': 0.5, 'y': 0.18}, # ปรับ y ให้เหนือ Inventory
+                pos_hint={'center_x': 0.5, 'y': 0.18}, 
                 background_color=(0.1, 0.1, 0.1, 0.8)
             )
             self.inv_toggle_btn.bind(on_release=self.toggle_inventory)
@@ -502,7 +557,9 @@ class GameplayScreen(Screen):
         if legal_moves is None:
             legal_moves = []
 
-        if getattr(self, 'current_dimension', '2D') == '2D':
+        # ✨ เพิ่ม '2D iso' เข้าไปในรายการอนุญาตให้อัปเดต Inventory
+        current_dim = getattr(self, 'current_dimension', '2D')
+        if current_dim in ['2D', '2D iso']:
             self.update_inventory_ui()
         else:
             self.update_hand_ui()

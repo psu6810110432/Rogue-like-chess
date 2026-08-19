@@ -63,7 +63,7 @@ class OptionsScreen(Screen):
         
         self.dim_layout = BoxLayout(orientation='horizontal', spacing=20)
         self.dim_btns = {}
-        for level in ['2D', '2.5D']:
+        for level in ['2D', '2D iso', '2.5D']: # เพิ่ม '2D iso' เข้าไปตรงกลาง
             btn = SelectionCard(text=f"[b]{level}[/b]")
             btn.val = level
             btn.bind(on_release=self.set_dimension)
