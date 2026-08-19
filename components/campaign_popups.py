@@ -179,6 +179,7 @@ class BuildPopup(ModalView):
         self.app = panel.app
         self.node = panel.current_node
         self.active_sv = panel.active_sub_village
+        self.current_tab = 'manage' # กำหนด Tab เริ่มต้น
         
         self.root_box = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(10))
         with self.root_box.canvas.before:
@@ -188,31 +189,38 @@ class BuildPopup(ModalView):
             self.border_line = Line(rounded_rectangle=[self.root_box.x, self.root_box.y, self.root_box.width, self.root_box.height, dp(12)], width=2)
         self.root_box.bind(pos=self._update_bg, size=self._update_bg)
         
+        # --- ส่วน Header ---
         self.header = BoxLayout(size_hint_y=None, height=dp(40))
-        self.title = Label(text="[b]CONSTRUCT[/b]", markup=True, font_size='20sp', halign='left', color=(0.8, 0.5, 0.2, 1), size_hint_x=0.2)
-        self.status_box = BoxLayout(orientation='horizontal', size_hint_x=0.25, spacing=dp(5))
+        self.title = Label(text="[b]CONSTRUCTION[/b]", markup=True, font_size='22sp', halign='left', color=(0.8, 0.5, 0.2, 1), size_hint_x=0.4)
         
-        # ปุ่ม Farm
-        self.btn_farm_mode = Button(text="FARM: TAX", size_hint_x=0.2, background_color=(0.8, 0.6, 0.2, 1))
-        self.btn_farm_mode.bind(on_release=self.toggle_farm_mode)
+        self.status_box = BoxLayout(orientation='horizontal', size_hint_x=0.4, spacing=dp(5))
         
-        # ปุ่ม Mine
-        self.btn_mine_mode = Button(text="MINE: TAX", size_hint_x=0.2, background_color=(0.8, 0.6, 0.2, 1))
-        self.btn_mine_mode.bind(on_release=self.toggle_mine_mode)
-        
-        close_btn = Button(text="CLOSE", size_hint_x=0.15, background_color=(0.8, 0.2, 0.2, 1))
+        close_btn = Button(text="CLOSE", size_hint_x=0.2, background_color=(0.8, 0.2, 0.2, 1))
         close_btn.bind(on_release=self.dismiss)
         
         self.header.add_widget(self.title)
         self.header.add_widget(self.status_box)
-        self.header.add_widget(self.btn_farm_mode)
-        self.header.add_widget(self.btn_mine_mode)
         self.header.add_widget(close_btn)
         self.root_box.add_widget(self.header)
         
+        # --- ส่วนปุ่มสลับ Tab (MANAGE / UPGRADE) ---
+        self.tab_box = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(10))
+        
+        self.btn_tab_manage = Button(text="[b]MANAGE[/b]", markup=True, background_color=(0.3, 0.5, 0.8, 1))
+        self.btn_tab_manage.bind(on_release=lambda x: self.switch_tab('manage'))
+        
+        self.btn_tab_upgrade = Button(text="[b]UPGRADE[/b]", markup=True, background_color=(0.2, 0.2, 0.2, 1))
+        self.btn_tab_upgrade.bind(on_release=lambda x: self.switch_tab('upgrade'))
+        
+        self.tab_box.add_widget(self.btn_tab_manage)
+        self.tab_box.add_widget(self.btn_tab_upgrade)
+        self.root_box.add_widget(self.tab_box)
+        
+        # --- แถบตัวเลือก Sub-village (แสดงเฉพาะโหมด Upgrade) ---
         self.nav_container = BoxLayout(size_hint_y=None, height=dp(40))
         self.root_box.add_widget(self.nav_container)
         
+        # --- พื้นที่เนื้อหา ---
         self.scroll = ScrollView(size_hint=(1, 1), do_scroll_y=True, do_scroll_x=False)
         self.content_grid = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(10), padding=dp(10))
         self.content_grid.bind(minimum_height=self.content_grid.setter('height'))
@@ -225,103 +233,136 @@ class BuildPopup(ModalView):
     def _update_bg(self, instance, value):
         self.bg.pos, self.bg.size = instance.pos, instance.size
         self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(12)]
+
+    def switch_tab(self, tab_name):
+        if hasattr(self.app, 'play_click_sound'): self.app.play_click_sound()
+        self.current_tab = tab_name
+        # อัปเดตสีปุ่ม Tab
+        if tab_name == 'manage':
+            self.btn_tab_manage.background_color = (0.3, 0.5, 0.8, 1)
+            self.btn_tab_upgrade.background_color = (0.2, 0.2, 0.2, 1)
+        else:
+            self.btn_tab_manage.background_color = (0.2, 0.2, 0.2, 1)
+            self.btn_tab_upgrade.background_color = (0.8, 0.5, 0.2, 1)
+        self.refresh_ui()
         
     def change_sv(self, sv):
         if hasattr(self.app, 'play_click_sound'): self.app.play_click_sound()
         self.panel.active_sub_village = sv
         self.refresh_ui()
 
-    # 2. ฟังก์ชันสำหรับสลับสถานะ
-    def toggle_farm_mode(self, instance):
-        if hasattr(self.app, 'play_click_sound'): 
-            self.app.play_click_sound()
-            
-        addons = self.panel.get_active_addons()
-        current_mode = addons.get('farm_mode', 'tax')
-        
-        # สลับไปมาระหว่าง tax และ resources
-        if current_mode == 'tax':
-            addons['farm_mode'] = 'resources'
-        else:
-            addons['farm_mode'] = 'tax'
-            
+    def toggle_addon_mode(self, addons, key, instance):
+        if hasattr(self.app, 'play_click_sound'): self.app.play_click_sound()
+        # สลับค่าโหมด
+        current_mode = addons.get(key, 'tax')
+        addons[key] = 'resources' if current_mode == 'tax' else 'tax'
         self.refresh_ui()
 
     def refresh_ui(self):
         self.nav_container.clear_widgets()
-        self.nav_container.add_widget(create_subvillage_nav(self.panel, self))
         self.content_grid.clear_widgets()
         
         tax = self.app.tax_points.get(self.node.faction, 0)
-        addons = self.panel.get_active_addons()
         
-        # อัปเดต Status Box
+        # อัปเดต Status Box (ช่องเงิน)
         self.status_box.clear_widgets()
         tax_img = Image(source='assets/icon_effect/tax.png', size_hint_x=None, width=dp(24))
         self.status_box.add_widget(tax_img)
         self.status_box.add_widget(Label(text=f"{tax}", font_size='16sp', color=(0, 1, 0, 1), halign='left'))
         
-        farm_lvl = addons.get('farm', 1) 
-        spec = addons.get('special')
         econ_enabled = getattr(self.app, 'selected_economic_system', False)
-        
-        # อัปเดตปุ่ม Farm
-        if econ_enabled and farm_lvl > 0:
-            self.btn_farm_mode.opacity = 1
-            self.btn_farm_mode.disabled = False
-            if addons.get('farm_mode', 'tax') == 'tax':
-                self.btn_farm_mode.text = "FARM: TAX"
-                self.btn_farm_mode.background_color = (0.8, 0.6, 0.2, 1)
-            else:
-                self.btn_farm_mode.text = "FARM: RES"
-                self.btn_farm_mode.background_color = (0.2, 0.6, 0.2, 1)
-        else:
-            self.btn_farm_mode.opacity = 0
-            self.btn_farm_mode.disabled = True
 
-        # อัปเดตปุ่ม Mine
-        if econ_enabled and spec == 'mine':
-            self.btn_mine_mode.opacity = 1
-            self.btn_mine_mode.disabled = False
-            if addons.get('mine_mode', 'tax') == 'tax':
-                self.btn_mine_mode.text = "MINE: TAX"
-                self.btn_mine_mode.background_color = (0.8, 0.6, 0.2, 1)
-            else:
-                self.btn_mine_mode.text = "MINE: ORE"
-                self.btn_mine_mode.background_color = (0.5, 0.5, 0.5, 1)
-        else:
-            self.btn_mine_mode.opacity = 0
-            self.btn_mine_mode.disabled = True
+        # ========================================================
+        # 🟢 TAB: MANAGE
+        # ========================================================
+        if self.current_tab == 'manage':
+            self.nav_container.height = 0  # ซ่อนปุ่มเลือกหมู่บ้านย่อย
+            self.nav_container.opacity = 0
             
-        # สร้าง Card อัปเกรด (ลบเงื่อนไขที่ห้ามอัปเกรด mine ออก)
-        farm_cost = farm_lvl * 5
-        if farm_lvl < 3:
-            img = get_addon_img('farm', farm_lvl)
-            self.content_grid.add_widget(BuildCard("Farm", f"Lvl {farm_lvl} -> {farm_lvl+1}", farm_cost, img, lambda: self.on_upgrade_addon('farm', farm_cost)))
-            
-        tav_lvl = addons.get('tavern', 1)
-        tav_cost = tav_lvl * 6
-        if tav_lvl < 3:
-            img = get_addon_img('tavern', tav_lvl)
-            self.content_grid.add_widget(BuildCard("Tavern", f"Lvl {tav_lvl} -> {tav_lvl+1}", tav_cost, img, lambda: self.on_upgrade_addon('tavern', tav_cost)))
-            
-        spec_lvl = addons.get('special_lvl', 0)
-        if spec: # <--- เอาคำว่า and spec not in ['mine'] ตรงนี้ออก
-            spec_cost = spec_lvl * 8
-            if spec_lvl < 3:
-                img = get_addon_img(spec, spec_lvl)
-                self.content_grid.add_widget(BuildCard(spec.capitalize(), f"Lvl {spec_lvl} -> {spec_lvl+1}", spec_cost, img, lambda: self.on_upgrade_addon('special_lvl', spec_cost)))
+            if not econ_enabled:
+                self.content_grid.add_widget(Label(text="[color=ffaa00]Economic System is disabled in this match.[/color]", markup=True, size_hint_y=None, height=dp(40)))
+                return
+
+            # Helper สำหรับสร้างแต่ละแถว (Row) ให้เรียงลงมา
+            def build_manage_row(title, addons):
+                row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(50), spacing=dp(10), padding=dp(5))
                 
+                # พื้นหลังของแถว
+                with row.canvas.before:
+                    Color(0.2, 0.2, 0.25, 1)
+                    bg = RoundedRectangle(radius=[dp(8)])
+                def update_bg(instance, value, bg=bg):
+                    bg.pos = instance.pos
+                    bg.size = instance.size
+                row.bind(pos=update_bg, size=update_bg)
+                
+                row.add_widget(Label(text=f"[b]{title}[/b]", markup=True, size_hint_x=0.4))
+                
+                # 🌾 ปุ่มจัดการ Farm
+                if addons.get('farm', 0) > 0:
+                    f_mode = addons.get('farm_mode', 'tax')
+                    f_text = "FARM: TAX" if f_mode == 'tax' else "FARM: RES"
+                    f_color = (0.8, 0.6, 0.2, 1) if f_mode == 'tax' else (0.2, 0.6, 0.2, 1)
+                    btn_farm = Button(text=f_text, background_color=f_color, size_hint_x=0.3)
+                    btn_farm.bind(on_release=lambda x, a=addons: self.toggle_addon_mode(a, 'farm_mode', x))
+                    row.add_widget(btn_farm)
+                else:
+                    row.add_widget(Widget(size_hint_x=0.3)) # เว้นว่างถ้าไม่มีฟาร์ม
+
+                # ⛏️ ปุ่มจัดการ Mine
+                if addons.get('special') == 'mine':
+                    m_mode = addons.get('mine_mode', 'tax')
+                    m_text = "MINE: TAX" if m_mode == 'tax' else "MINE: ORE"
+                    m_color = (0.8, 0.6, 0.2, 1) if m_mode == 'tax' else (0.5, 0.5, 0.5, 1)
+                    btn_mine = Button(text=m_text, background_color=m_color, size_hint_x=0.3)
+                    btn_mine.bind(on_release=lambda x, a=addons: self.toggle_addon_mode(a, 'mine_mode', x))
+                    row.add_widget(btn_mine)
+                else:
+                    row.add_widget(Widget(size_hint_x=0.3)) # เว้นว่างถ้าไม่มีเหมือง
+
+                self.content_grid.add_widget(row)
+
+            # 1. วาดแถวของฐานหลัก (Main Base)
+            main_addons = getattr(self.node, 'addons', {'farm': 1, 'tavern': 1, 'special': None, 'special_lvl': 0})
+            build_manage_row("Main Base", main_addons)
+            
+            # 2. วาดแถวของหมู่บ้านย่อยเรียงลงมา (ถ้าเป็น Castle)
+            if self.node.node_type == 'castle' and hasattr(self.node, 'sub_villages'):
+                for sv in self.node.sub_villages:
+                    build_manage_row(f"Village {sv['id']}", sv['addons'])
+                    
+        # ========================================================
+        # 🔴 TAB: UPGRADE
+        # ========================================================
+        elif self.current_tab == 'upgrade':
+            self.nav_container.height = dp(40)  # โชว์ปุ่มเลือกหมู่บ้านย่อย
+            self.nav_container.opacity = 1
+            self.nav_container.add_widget(create_subvillage_nav(self.panel, self))
+            
+            addons = self.panel.get_active_addons()
+            
+            farm_lvl = addons.get('farm', 1)
+            farm_cost = farm_lvl * 5
+            if farm_lvl < 3:
+                img = get_addon_img('farm', farm_lvl)
+                self.content_grid.add_widget(BuildCard("Farm", f"Lvl {farm_lvl} -> {farm_lvl+1}", farm_cost, img, lambda: self.on_upgrade_addon('farm', farm_cost)))
+                
+            tav_lvl = addons.get('tavern', 1)
+            tav_cost = tav_lvl * 6
+            if tav_lvl < 3:
+                img = get_addon_img('tavern', tav_lvl)
+                self.content_grid.add_widget(BuildCard("Tavern", f"Lvl {tav_lvl} -> {tav_lvl+1}", tav_cost, img, lambda: self.on_upgrade_addon('tavern', tav_cost)))
+                
+            spec = addons.get('special')
+            spec_lvl = addons.get('special_lvl', 0)
+            if spec: 
+                spec_cost = spec_lvl * 8
+                if spec_lvl < 3:
+                    img = get_addon_img(spec, spec_lvl)
+                    self.content_grid.add_widget(BuildCard(spec.capitalize(), f"Lvl {spec_lvl} -> {spec_lvl+1}", spec_cost, img, lambda: self.on_upgrade_addon('special_lvl', spec_cost)))
+                    
     def on_upgrade_addon(self, key, cost):
         self.panel.upgrade_addon(key, cost)
-        self.refresh_ui()
-
-    def toggle_mine_mode(self, instance):
-        if hasattr(self.app, 'play_click_sound'): 
-            self.app.play_click_sound()
-        addons = self.panel.get_active_addons()
-        current_mode = addons.get('mine_mode', 'tax')
-        addons['mine_mode'] = 'resources' if current_mode == 'tax' else 'tax'
         self.refresh_ui()
 
 # ----------------- Army Status (เปลี่ยน Text เป็น BoxLayout Icons) -----------------
