@@ -189,16 +189,24 @@ class BuildPopup(ModalView):
         self.root_box.bind(pos=self._update_bg, size=self._update_bg)
         
         self.header = BoxLayout(size_hint_y=None, height=dp(40))
-        self.title = Label(text="[b]CONSTRUCTION[/b]", markup=True, font_size='22sp', halign='left', color=(0.8, 0.5, 0.2, 1), size_hint_x=0.4)
+        self.title = Label(text="[b]CONSTRUCT[/b]", markup=True, font_size='20sp', halign='left', color=(0.8, 0.5, 0.2, 1), size_hint_x=0.2)
+        self.status_box = BoxLayout(orientation='horizontal', size_hint_x=0.25, spacing=dp(5))
         
-        # แท่นที่ Label เดิมด้วย BoxLayout สำหรับค่า Tax
-        self.status_box = BoxLayout(orientation='horizontal', size_hint_x=0.4, spacing=dp(5))
+        # ปุ่ม Farm
+        self.btn_farm_mode = Button(text="FARM: TAX", size_hint_x=0.2, background_color=(0.8, 0.6, 0.2, 1))
+        self.btn_farm_mode.bind(on_release=self.toggle_farm_mode)
         
-        close_btn = Button(text="CLOSE", size_hint_x=0.2, background_color=(0.8, 0.2, 0.2, 1))
+        # ปุ่ม Mine
+        self.btn_mine_mode = Button(text="MINE: TAX", size_hint_x=0.2, background_color=(0.8, 0.6, 0.2, 1))
+        self.btn_mine_mode.bind(on_release=self.toggle_mine_mode)
+        
+        close_btn = Button(text="CLOSE", size_hint_x=0.15, background_color=(0.8, 0.2, 0.2, 1))
         close_btn.bind(on_release=self.dismiss)
         
         self.header.add_widget(self.title)
         self.header.add_widget(self.status_box)
+        self.header.add_widget(self.btn_farm_mode)
+        self.header.add_widget(self.btn_mine_mode)
         self.header.add_widget(close_btn)
         self.root_box.add_widget(self.header)
         
@@ -219,8 +227,24 @@ class BuildPopup(ModalView):
         self.border_line.rounded_rectangle = [instance.x, instance.y, instance.width, instance.height, dp(12)]
         
     def change_sv(self, sv):
-        self.app.play_click_sound()
+        if hasattr(self.app, 'play_click_sound'): self.app.play_click_sound()
         self.panel.active_sub_village = sv
+        self.refresh_ui()
+
+    # 2. ฟังก์ชันสำหรับสลับสถานะ
+    def toggle_farm_mode(self, instance):
+        if hasattr(self.app, 'play_click_sound'): 
+            self.app.play_click_sound()
+            
+        addons = self.panel.get_active_addons()
+        current_mode = addons.get('farm_mode', 'tax')
+        
+        # สลับไปมาระหว่าง tax และ resources
+        if current_mode == 'tax':
+            addons['farm_mode'] = 'resources'
+        else:
+            addons['farm_mode'] = 'tax'
+            
         self.refresh_ui()
 
     def refresh_ui(self):
@@ -237,21 +261,52 @@ class BuildPopup(ModalView):
         self.status_box.add_widget(tax_img)
         self.status_box.add_widget(Label(text=f"{tax}", font_size='16sp', color=(0, 1, 0, 1), halign='left'))
         
-        farm_lvl = addons.get('farm', 1)
+        farm_lvl = addons.get('farm', 1) 
+        spec = addons.get('special')
+        econ_enabled = getattr(self.app, 'selected_economic_system', False)
+        
+        # อัปเดตปุ่ม Farm
+        if econ_enabled and farm_lvl > 0:
+            self.btn_farm_mode.opacity = 1
+            self.btn_farm_mode.disabled = False
+            if addons.get('farm_mode', 'tax') == 'tax':
+                self.btn_farm_mode.text = "FARM: TAX"
+                self.btn_farm_mode.background_color = (0.8, 0.6, 0.2, 1)
+            else:
+                self.btn_farm_mode.text = "FARM: RES"
+                self.btn_farm_mode.background_color = (0.2, 0.6, 0.2, 1)
+        else:
+            self.btn_farm_mode.opacity = 0
+            self.btn_farm_mode.disabled = True
+
+        # อัปเดตปุ่ม Mine
+        if econ_enabled and spec == 'mine':
+            self.btn_mine_mode.opacity = 1
+            self.btn_mine_mode.disabled = False
+            if addons.get('mine_mode', 'tax') == 'tax':
+                self.btn_mine_mode.text = "MINE: TAX"
+                self.btn_mine_mode.background_color = (0.8, 0.6, 0.2, 1)
+            else:
+                self.btn_mine_mode.text = "MINE: ORE"
+                self.btn_mine_mode.background_color = (0.5, 0.5, 0.5, 1)
+        else:
+            self.btn_mine_mode.opacity = 0
+            self.btn_mine_mode.disabled = True
+            
+        # สร้าง Card อัปเกรด (ลบเงื่อนไขที่ห้ามอัปเกรด mine ออก)
         farm_cost = farm_lvl * 5
         if farm_lvl < 3:
             img = get_addon_img('farm', farm_lvl)
-            self.content_grid.add_widget(BuildCard("Farm", f"Lvl {farm_lvl} -> {farm_lvl+1}\n(+2 Tax)", farm_cost, img, lambda: self.on_upgrade_addon('farm', farm_cost)))
+            self.content_grid.add_widget(BuildCard("Farm", f"Lvl {farm_lvl} -> {farm_lvl+1}", farm_cost, img, lambda: self.on_upgrade_addon('farm', farm_cost)))
             
         tav_lvl = addons.get('tavern', 1)
         tav_cost = tav_lvl * 6
         if tav_lvl < 3:
             img = get_addon_img('tavern', tav_lvl)
-            self.content_grid.add_widget(BuildCard("Tavern", f"Lvl {tav_lvl} -> {tav_lvl+1}\n(Unlocks Units)", tav_cost, img, lambda: self.on_upgrade_addon('tavern', tav_cost)))
+            self.content_grid.add_widget(BuildCard("Tavern", f"Lvl {tav_lvl} -> {tav_lvl+1}", tav_cost, img, lambda: self.on_upgrade_addon('tavern', tav_cost)))
             
-        spec = addons.get('special')
         spec_lvl = addons.get('special_lvl', 0)
-        if spec and spec not in ['mine']: 
+        if spec: # <--- เอาคำว่า and spec not in ['mine'] ตรงนี้ออก
             spec_cost = spec_lvl * 8
             if spec_lvl < 3:
                 img = get_addon_img(spec, spec_lvl)
@@ -259,6 +314,14 @@ class BuildPopup(ModalView):
                 
     def on_upgrade_addon(self, key, cost):
         self.panel.upgrade_addon(key, cost)
+        self.refresh_ui()
+
+    def toggle_mine_mode(self, instance):
+        if hasattr(self.app, 'play_click_sound'): 
+            self.app.play_click_sound()
+        addons = self.panel.get_active_addons()
+        current_mode = addons.get('mine_mode', 'tax')
+        addons['mine_mode'] = 'resources' if current_mode == 'tax' else 'tax'
         self.refresh_ui()
 
 # ----------------- Army Status (เปลี่ยน Text เป็น BoxLayout Icons) -----------------

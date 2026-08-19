@@ -47,8 +47,14 @@ class CampaignMapScreen(Screen):
         jump_btn.bind(on_release=self.jump_to_base)
         top_bar.add_widget(jump_btn)
         
-        self.status_lbl = Label(text="DIVINE ORDER (WHITE) - TURN 1", bold=True, color=(1, 0.8, 0.2, 1), font_size='18sp', markup=True)
-        top_bar.add_widget(self.status_lbl)
+
+        center_box = BoxLayout(orientation='vertical', size_hint_x=0.65)
+        self.status_lbl = Label(text="DIVINE ORDER (WHITE) - TURN 1", bold=True, color=(1, 0.8, 0.2, 1), font_size='16sp', markup=True)
+        self.resource_lbl = Label(text="", bold=True, font_size='14sp', markup=True) # แถบโชว์ทรัพยากร
+        
+        center_box.add_widget(self.status_lbl)
+        center_box.add_widget(self.resource_lbl)
+        top_bar.add_widget(center_box)
         
         next_btn = Button(text="END TURN >", size_hint_x=0.15, background_color=(0.2, 0.6, 0.2, 1))
         next_btn.bind(on_release=self.end_turn)
@@ -141,6 +147,10 @@ class CampaignMapScreen(Screen):
             app.turn_number = 1
             app.tax_points = {'white': 0, 'black': 0}
             app.prince_rewards = {'white': 0, 'black': 0}
+
+            # ✨ สิ่งที่ต้องเพิ่ม: ทรัพยากรใหม่
+            app.supplies_points = {'white': 0, 'black': 0} 
+            app.wood_points = {'white': 0, 'black': 0}
             
             app.unlocked_units = {
                 'white': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'},
@@ -159,6 +169,7 @@ class CampaignMapScreen(Screen):
                     Clock.schedule_once(
                         lambda dt: self.end_turn(None), 1.0
                     )
+        self.update_resource_display()
 
     def go_back(self, instance):
         app = App.get_running_app()
@@ -238,6 +249,7 @@ class CampaignMapScreen(Screen):
                 and getattr(app, 'match_type', '') == 'PVE'):
             self.ai_turn_active = True
             self.campaign_ai.execute_turn(self, 'black')
+        self.update_resource_display()
 
     def trigger_rebellion(self, node):
         app = App.get_running_app()
@@ -264,7 +276,6 @@ class CampaignMapScreen(Screen):
 
     def end_turn(self, instance):
         app = App.get_running_app()
-        # Block the human player from pressing END TURN during the AI's turn
         if self.ai_turn_active and instance is not None:
             return
         if instance is not None:
@@ -275,20 +286,76 @@ class CampaignMapScreen(Screen):
             self.marching_from_node.army_pieces.extend(app.combat_marching_army)
             self.marching_from_node = None
             
+        # 1. เพิ่มตัวแปรเริ่มต้นตรงนี้
         tax_collected = 0
+        supplies_collected = 0 
+        wood_collected = 0
+        coal_collected = 0
+        silver_collected = 0
+        gold_collected = 0
         rebellions = []
         
-        for node in self.nodes_list:
-            if node.faction == app.current_map_turn:
-                if hasattr(node, 'refresh_recruits'): node.refresh_recruits()
+        for node in self.nodes_list: 
+            if node.faction == app.current_map_turn: 
+                if hasattr(node, 'refresh_recruits'): node.refresh_recruits() 
                 
-                farm_bonus = getattr(node, 'addons', {}).get('farm', 0) * 2
-                mine_bonus = 3 if getattr(node, 'addons', {}).get('special') == 'mine' else 0
-                tax_collected += farm_bonus + mine_bonus
+                # --- 🟢 จัดการฟาร์ม ---
+                farm_lvl = getattr(node, 'addons', {}).get('farm', 0)
+                farm_mode = getattr(node, 'addons', {}).get('farm_mode', 'tax')
                 
-                if node.node_type == 'castle':
-                    for sv in getattr(node, 'sub_villages', []):
-                        tax_collected += (sv['addons'].get('farm', 0) * 2) + (3 if sv['addons'].get('special') == 'mine' else 0)
+                if farm_lvl > 0:
+                    if farm_mode == 'tax':
+                        tax_collected += farm_lvl * 2
+                    elif farm_mode == 'resources':
+                        supplies_collected += farm_lvl * 2 
+                        wood_collected += farm_lvl * 3 
+                
+                # --- ⛏️ จัดการเหมือง (Mine) ---
+                spec = getattr(node, 'addons', {}).get('special')
+                spec_lvl = getattr(node, 'addons', {}).get('special_lvl', 1)
+                mine_mode = getattr(node, 'addons', {}).get('mine_mode', 'tax')
+                
+                if spec == 'mine':
+                    if mine_mode == 'tax':
+                        tax_collected += spec_lvl * 3 # ให้ภาษีคูณตามเลเวลจะได้คุ้มค่าอัปเกรด
+                    elif mine_mode == 'resources':
+                        if spec_lvl == 1:
+                            coal_collected += 2
+                        elif spec_lvl == 2:
+                            silver_collected += 2
+                        elif spec_lvl >= 3:
+                            gold_collected += 1
+                
+                # --- 🔵 จัดการสิ่งปลูกสร้างใน หมู่บ้านย่อย (Sub-villages) ---
+                if node.node_type == 'castle': 
+                    for sv in getattr(node, 'sub_villages', []): 
+                        # ฟาร์มย่อย
+                        sv_farm_lvl = sv['addons'].get('farm', 0)
+                        sv_farm_mode = sv['addons'].get('farm_mode', 'tax')
+                        if sv_farm_lvl > 0:
+                            if sv_farm_mode == 'tax':
+                                tax_collected += sv_farm_lvl * 2
+                            elif sv_farm_mode == 'resources':
+                                supplies_collected += sv_farm_lvl * 2
+                                wood_collected += sv_farm_lvl * 3
+                                
+                        # เหมืองย่อย
+                        sv_spec = sv['addons'].get('special')
+                        sv_spec_lvl = sv['addons'].get('special_lvl', 1)
+                        sv_mine_mode = sv['addons'].get('mine_mode', 'tax')
+                        if sv_spec == 'mine':
+                            if sv_mine_mode == 'tax':
+                                tax_collected += sv_spec_lvl * 3
+                            elif sv_mine_mode == 'resources':
+                                if sv_spec_lvl == 1:
+                                    coal_collected += 2
+                                elif sv_spec_lvl == 2:
+                                    silver_collected += 2
+                                elif sv_spec_lvl >= 3:
+                                    gold_collected += 1
+                                
+
+                # 2. ลบ if node.node_type == 'castle': บล็อกเก่าที่ซ้ำซ้อนทิ้งไปเลย เพื่อป้องกันการบวกภาษีซ้ำซ้อน
                         
                 if node.is_main_base:
                     node.loyalty = 100
@@ -296,7 +363,13 @@ class CampaignMapScreen(Screen):
                     node.loyalty = max(0, min(100, node.loyalty + (10 if len(node.army_pieces) >= 3 else -20)))
                     if node.loyalty == 0: rebellions.append(node)
                     
+        # อัปเดตเข้าระบบตอนจบเทิร์น
         app.tax_points[app.current_map_turn] += tax_collected
+        app.supplies_points[app.current_map_turn] += supplies_collected
+        app.wood_points[app.current_map_turn] += wood_collected
+        app.coal_points[app.current_map_turn] += coal_collected
+        app.silver_points[app.current_map_turn] += silver_collected
+        app.gold_points[app.current_map_turn] += gold_collected
         
         if rebellions:
             node = rebellions[0]
@@ -522,6 +595,15 @@ class CampaignMapScreen(Screen):
             app.turn_number = 1
             app.tax_points = {'white': 0, 'black': 0}
             app.prince_rewards = {'white': 0, 'black': 0}
+
+            # ✨ สิ่งที่ต้องเพิ่ม: ทรัพยากรใหม่ (ต้องมี 2 บรรทัดนี้)
+            app.supplies_points = {'white': 0, 'black': 0} 
+            app.wood_points = {'white': 0, 'black': 0}
+
+            # ทรัพยากรสำหรับ Mine
+            app.coal_points = {'white': 0, 'black': 0} 
+            app.silver_points = {'white': 0, 'black': 0} 
+            app.gold_points = {'white': 0, 'black': 0}
             
             app.unlocked_units = {
                 'white': {'pawn', 'levies', 'menatarm', 'knight', 'bishop', 'rook', 'queen'},
@@ -651,3 +733,27 @@ class CampaignMapScreen(Screen):
             else:
                 # เมืองศัตรู -> โชว์แค่ชื่อ
                 self.status_lbl.text = f"[color=ff8800]ENEMY BASE: {instance.city_name.upper()}[/color]"
+
+    def update_resource_display(self):
+        app = App.get_running_app()
+        fac = app.current_map_turn
+        t = app.tax_points.get(fac, 0)
+        
+        if getattr(app, 'selected_economic_system', False):
+            s = getattr(app, 'supplies_points', {}).get(fac, 0)
+            w = getattr(app, 'wood_points', {}).get(fac, 0)
+            c = getattr(app, 'coal_points', {}).get(fac, 0)
+            sv = getattr(app, 'silver_points', {}).get(fac, 0)
+            g = getattr(app, 'gold_points', {}).get(fac, 0)
+            
+            # ใช้การเว้นช่องไฟและตัวย่อให้ UI ดูคลีน ไม่รกตา
+            self.resource_lbl.text = (
+                f"[color=d4af37]Tax: {t}[/color]  |  "
+                f"[color=ffffff]Sup: {s}[/color]  |  "
+                f"[color=cd853f]Wood: {w}[/color]  |  "
+                f"[color=808080]Coal: {c}[/color]  |  "
+                f"[color=c0c0c0]Silv: {sv}[/color]  |  "
+                f"[color=ffd700]Gold: {g}[/color]"
+            )
+        else:
+            self.resource_lbl.text = f"[color=d4af37]Tax: {t}[/color]"

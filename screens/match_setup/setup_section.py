@@ -288,6 +288,7 @@ class SetupSection(BoxLayout):
         self.app.selected_unit_white = ''
         self.app.selected_unit_black = ''
         self.app.selected_time_limit = None  
+        self.app.selected_economic_system = False
         
         # จัดเก็บหน้าสองหน้า
         self.page1 = BoxLayout(orientation='vertical', spacing=15)
@@ -363,6 +364,33 @@ class SetupSection(BoxLayout):
             timer_grid.add_widget(card)
         self.timer_box.add_widget(timer_grid)
         self.page2.add_widget(self.timer_box)
+
+        self.econ_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(0), spacing=5, opacity=0, disabled=True)
+        
+        # ใส่ Tooltip เพื่ออธิบายระบบให้ผู้เล่นอ่าน
+        tooltip_econ = (
+            "[color=d4af37][b]Standard Economy:[/b][/color] Farms produce only Tax.\n"
+            "[color=00ff44][b]Advanced Economy:[/b][/color] You can switch farm outputs.\n"
+            " - [b]Supplies:[/b] Equals to Tax amount.\n"
+            " - [b]Wood:[/b] Lv1=3, Lv2=6, Lv3=9 per turn."
+        )
+        self.add_header(self.econ_box, "BATTLEFIELD OPTIONS (ECONOMIC)", tooltip_text=tooltip_econ)
+        
+        econ_grid = GridLayout(cols=2, spacing=12)
+        self.econ_cards = []
+        econ_options = [
+            (False, 'Standard Economy', 'Farms produce only Tax'),
+            (True, 'Advanced Economy', 'Farms can produce Supplies or Wood'),
+        ]
+        for val, title, desc in econ_options:
+            card = SelectionCard(text=f"[b][size=15sp]{title}[/size][/b]\n[size=12sp][color=a0a0a0]{desc}[/color][/size]")
+            card.val = val
+            card.bind(on_press=self.play_sound, on_release=self.on_econ_select)
+            self.econ_cards.append(card)
+            econ_grid.add_widget(card)
+            
+        self.econ_box.add_widget(econ_grid)
+        self.page2.add_widget(self.econ_box)
 
         # 4. SELECT FACTIONS
         self.fac_box = BoxLayout(orientation='vertical', size_hint_y=1, spacing=5)
@@ -448,12 +476,17 @@ class SetupSection(BoxLayout):
             self.app.play_click_sound()
 
     def update_selections(self):
-        for c in self.type_cards: c.set_selected(c.val == self.app.match_type)
-        for c in self.mode_cards: c.set_selected(c.val == self.app.sub_mode)
-        for c in getattr(self, 'map_cards', []): c.set_selected(c.val == self.app.selected_board)
-        for c in self.timer_cards: c.set_selected(c.val == self.app.selected_time_limit)
-        for c in self.white_cards: c.set_selected(c.val == self.app.selected_unit_white)
-        for c in self.black_cards: c.set_selected(c.val == self.app.selected_unit_black)
+        for c in self.type_cards: c.set_selected(c.val == self.app.match_type) #[cite: 2]
+        for c in self.mode_cards: c.set_selected(c.val == self.app.sub_mode) #[cite: 2]
+        for c in getattr(self, 'map_cards', []): c.set_selected(c.val == self.app.selected_board) #[cite: 2]
+        for c in self.timer_cards: c.set_selected(c.val == self.app.selected_time_limit) #[cite: 2]
+        
+        # ✨ เพิ่มบรรทัดนี้ให้อัปเดต UI ปุ่ม Economic
+        if hasattr(self, 'econ_cards'):
+            for c in self.econ_cards: c.set_selected(c.val == self.app.selected_economic_system)
+            
+        for c in self.white_cards: c.set_selected(c.val == self.app.selected_unit_white) #[cite: 2]
+        for c in self.black_cards: c.set_selected(c.val == self.app.selected_unit_black) #[cite: 2]
 
     def on_type_select(self, instance):
         self.app.match_type = instance.val
@@ -471,16 +504,29 @@ class SetupSection(BoxLayout):
         self.map_box.disabled = False
         Animation(opacity=1, duration=0.3).start(self.map_box)
 
-        # จัดการการแสดงผลของ Timer Box สำหรับหน้าที่ 2
+        # จัดการการแสดงผลของ Timer และ Economic Box สำหรับหน้าที่ 2
         if instance.val == 'Divide_Conquer':
+            # ปิด Timer
             self.timer_box.disabled = True
             self.timer_box.height = dp(0)
             self.timer_box.opacity = 0
             self.app.selected_time_limit = None
+            
+            # เปิด Economic System (จุดที่เพิ่มเข้ามา)
+            self.econ_box.disabled = False
+            self.econ_box.height = dp(90) # ปรับความสูงให้พอดี
+            self.econ_box.opacity = 1
         else:
+            # เปิด Timer
             self.timer_box.disabled = False
             self.timer_box.height = dp(90)
             self.timer_box.opacity = 1
+            
+            # ปิด Economic System (จุดที่เพิ่มเข้ามา)
+            self.econ_box.disabled = True
+            self.econ_box.height = dp(0)
+            self.econ_box.opacity = 0
+            self.app.selected_economic_system = False
 
     def load_map_options(self):
         self.map_header_layout.clear_widgets()
@@ -546,6 +592,10 @@ class SetupSection(BoxLayout):
 
     def on_timer_select(self, instance):
         self.app.selected_time_limit = instance.val
+        self.update_selections()
+
+    def on_econ_select(self, instance):
+        self.app.selected_economic_system = instance.val
         self.update_selections()
 
     def on_map_select(self, instance):

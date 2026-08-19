@@ -70,7 +70,9 @@ class CampaignArmyPanel(FloatLayout):
         self.btn_action.bind(on_release=self.execute_action)
         self.action_box.add_widget(self.btn_action)
         
+        # --- ก๊อปปี้ส่วนนี้เติมกลับเข้าไป ---
         self.sub_action_box = BoxLayout(orientation='horizontal', spacing=dp(5), size_hint_y=0.4)
+        
         self.btn_status = Button(text="[b]STATUS[/b]", markup=True, background_color=(0.2, 0.6, 0.8, 1))
         self.btn_status.bind(on_release=self.show_army_status)
         self.sub_action_box.add_widget(self.btn_status)
@@ -80,6 +82,8 @@ class CampaignArmyPanel(FloatLayout):
         self.sub_action_box.add_widget(self.btn_upgrade)
         
         self.action_box.add_widget(self.sub_action_box)
+        # --------------------------------
+        
         self.add_widget(self.action_box)
         self.piece_cards = []
 
@@ -110,6 +114,7 @@ class CampaignArmyPanel(FloatLayout):
         self.title_box.add_widget(lbl_val)
         
         self.is_upgrade_mode = False
+
         
         for n in self.map_screen.nodes_list:
             n.is_selected_node = (n == node)
@@ -193,6 +198,7 @@ class CampaignArmyPanel(FloatLayout):
         self.btn_status.disabled = False 
         self.btn_upgrade.disabled = False
         self.btn_upgrade.background_color = (0.6, 0.2, 0.8, 1)
+
         
         for p in self.current_node.army_pieces:
             card = PieceCard(p, map_screen_ref=self.map_screen)
@@ -204,9 +210,11 @@ class CampaignArmyPanel(FloatLayout):
         faction = self.current_node.faction
         if self.app.tax_points.get(faction, 0) < cost: return
         self.app.tax_points[faction] -= cost
+        self.map_screen.update_resource_display()
         addons = self.get_active_addons()
         addons[key] += 1
         self.current_node.update_graphics()
+
 
     def buy_piece(self, piece_name, cost, row_key, idx):
         self.app.play_click_sound()
@@ -218,6 +226,7 @@ class CampaignArmyPanel(FloatLayout):
         if len(self.current_node.army_pieces) >= max_cap: return False
         
         self.app.tax_points[faction] -= cost
+        self.map_screen.update_resource_display()
         
         shop = self.active_sub_village['shop_recruits'] if self.active_sub_village else getattr(self.current_node, 'shop_recruits', {})
         if row_key in shop and idx < len(shop[row_key]['data']):
