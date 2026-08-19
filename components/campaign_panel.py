@@ -219,14 +219,52 @@ class CampaignArmyPanel(FloatLayout):
     def buy_piece(self, piece_name, cost, row_key, idx):
         self.app.play_click_sound()
         faction = self.current_node.faction
-        if self.app.tax_points.get(faction, 0) < cost: return False
         
+        # 1. กำหนดความต้องการทรัพยากรตามคลาสทหาร
+        p_lower = piece_name.lower()
+        req_sup = 0
+        req_wep_type = None
+        
+        if p_lower in ['pawn', 'levies']:
+            req_sup = 2
+            req_wep_type = None 
+        elif p_lower in ['knight', 'bishop', 'rook']:
+            req_sup = 2
+            req_wep_type = 'weapon_t1'
+        elif p_lower in ['hastati', 'menatarm']:
+            req_sup = 2
+            req_wep_type = 'weapon_t2'
+        elif p_lower in ['royalguard', 'praetorian']:
+            req_sup = 3
+            req_wep_type = 'weapon_t3'
+            
+        # 2. ตรวจสอบว่ามีทรัพยากรเพียงพอหรือไม่ (Tax, อาหาร(Supplies), และ อาวุธ)
+        if self.app.tax_points.get(faction, 0) < cost: return False
+        if req_sup > 0 and self.app.supplies_points.get(faction, 0) < req_sup: return False
+        
+        if req_wep_type == 'weapon_t1' and self.app.weapon_t1_points.get(faction, 0) < 1: return False
+        if req_wep_type == 'weapon_t2' and self.app.weapon_t2_points.get(faction, 0) < 1: return False
+        if req_wep_type == 'weapon_t3' and self.app.weapon_t3_points.get(faction, 0) < 1: return False
+        
+        # 3. เช็คจำนวนทหารสูงสุด (Max Capacity)
         headers = sum(1 for p in self.current_node.army_pieces if p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False))
         max_cap = 16 if headers > 0 else 8
         if len(self.current_node.army_pieces) >= max_cap: return False
         
+        # 4. หักทรัพยากร
         self.app.tax_points[faction] -= cost
-        self.map_screen.update_resource_display()
+        if req_sup > 0: 
+            self.app.supplies_points[faction] -= req_sup
+            
+        if req_wep_type == 'weapon_t1': self.app.weapon_t1_points[faction] -= 1
+        elif req_wep_type == 'weapon_t2': self.app.weapon_t2_points[faction] -= 1
+        elif req_wep_type == 'weapon_t3': self.app.weapon_t3_points[faction] -= 1
+        
+        # อัปเดต UI ทรัพยากรด้านบน
+        if hasattr(self.map_screen, 'update_resource_display'):
+            self.map_screen.update_resource_display()
+        
+        # ... (โค้ดดึง shop และใส่ passive ทหารให้คงไว้เหมือนเดิมตั้งแต่บรรทัด shop = self.active_sub_village...) ...
         
         shop = self.active_sub_village['shop_recruits'] if self.active_sub_village else getattr(self.current_node, 'shop_recruits', {})
         if row_key in shop and idx < len(shop[row_key]['data']):
@@ -256,7 +294,7 @@ class CampaignArmyPanel(FloatLayout):
             
         self.current_node.army_pieces.append(new_p)
         self.switch_tab('army')
-        return True 
+        return True
 
     def execute_action(self, instance):
         if self.current_tab != 'army': return

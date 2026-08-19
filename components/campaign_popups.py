@@ -152,18 +152,42 @@ class RecruitPopup(ModalView):
                 self.content_grid.add_widget(locked_btn)
                 return
 
-            row_box = BoxLayout(orientation='horizontal', spacing=dp(15), size_hint_y=None, height=dp(140))
+            # ปรับความสูงของ row_box ขึ้นนิดหน่อยเพื่อเว้นที่ให้ตัวหนังสือบอกทรัพยากร
+            row_box = BoxLayout(orientation='horizontal', spacing=dp(15), size_hint_y=None, height=dp(160))
             row_box.add_widget(Widget())  
             for idx, p_data in enumerate(items):
                 if p_data is None:
                     card = RecruitCard(None, 0, self.node.faction, self.app, None)
+                    row_box.add_widget(card)
                 else:
                     p_name = p_data['name']
                     base_cost = p_data['cost']
                     final_cost = self.panel.get_discounted_price(base_cost, addons)
                     cb = lambda n, c, r=row_key, i=idx: self.on_buy_piece(n, c, r, i)
+                    
+                    # ห่อ Card ด้วย BoxLayout แนวดิ่งเพื่อใส่ข้อความไว้ด้านล่าง
+                    wrap_box = BoxLayout(orientation='vertical', size_hint=(None, 1), width=dp(140))
+                    
                     card = RecruitCard(p_name, final_cost, self.node.faction, self.app, cb)
-                row_box.add_widget(card)
+                    wrap_box.add_widget(card)
+                    
+                    # กำหนดข้อความความต้องการทรัพยากร
+                    req_text = ""
+                    p_lower = p_name.lower()
+                    if p_lower in ['pawn', 'levies']:
+                        req_text = "2 Sup" # แสดงแค่อาหาร
+                    elif p_lower in ['knight', 'bishop', 'rook']:
+                        req_text = "2 Sup, 1 Wep T1"
+                    elif p_lower in ['hastati', 'menatarm']:
+                        req_text = "2 Sup, 1 Wep T2"
+                    elif p_lower in ['royalguard', 'praetorian']:
+                        req_text = "3 Sup, 1 Wep T3"
+                        
+                    if req_text:
+                        lbl_req = Label(text=f"[size=11sp][color=00ffff]{req_text}[/color][/size]", markup=True, size_hint_y=None, height=dp(20))
+                        wrap_box.add_widget(lbl_req)
+                        
+                    row_box.add_widget(wrap_box)
             row_box.add_widget(Widget())  
             self.content_grid.add_widget(row_box)
             
