@@ -707,6 +707,22 @@ class GameplayScreen(Screen):
                     p = self.game.board[r][c]
                     flip_piece = False if p and p.color != self.current_vp else True
                     sq.set_piece_icon(self.get_piece_image_path(p) if p else None, piece=p, flip=flip_piece)
+                    
+                    # --- ❄️ เริ่ม: เพิ่มระบบวางรูปแช่แข็งทับตัวละคร ---
+                    # ลบรูปแช่แข็งเก่าออกก่อน (ถ้ามี) เพื่อป้องกันการซ้อนทับกันหลายชั้น
+                    if hasattr(sq, 'freeze_icon') and sq.freeze_icon in sq.children:
+                        sq.remove_widget(sq.freeze_icon)
+                        
+                    # ตรวจสอบสถานะการแช่แข็งจาก logic ของเกม
+                    if p and getattr(p, 'freeze_timer', 0) > 0:
+                        # สร้าง Image widget วางทับด้วย Path ที่คุณระบุ
+                        sq.freeze_icon = Image(
+                            source=r"E:\game\Rogue-like-chess\assets\pieces\event\event4.png",
+                            size_hint=(0.9, 0.9), # ปรับขนาดให้พอดีกับช่อง (ไม่บังขอบช่องจนมิด)
+                            pos_hint={'center_x': 0.5, 'center_y': 0.5}
+                        )
+                        sq.add_widget(sq.freeze_icon)
+                    # --- จบ: ระบบแช่แข็ง ---
                 
                 self.highlight_headers()
 
