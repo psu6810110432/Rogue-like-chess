@@ -61,18 +61,37 @@ class CampaignAI:
     # ------------------------------------------------------------------
     def _step_analyze(self, map_screen, faction):
         """Step 1: Pan camera to AI base, show 'ANALYZING' label."""
-        map_screen.status_lbl.text = (
-            "[color=ff6644][b]AI IS ANALYZING...[/b][/color]"
-        )
+        map_screen.status_lbl.text = "[color=ff6644][b]AI IS ANALYZING...[/b][/color]"
         map_screen.status_lbl.color = (1, 0.4, 0.27, 1)
 
-        # Scroll the map viewport to center on the AI faction's main base
         self._scroll_to_faction_base(map_screen, faction)
 
-        # Chain → Step 2 after a delay
+        # 🟢 เปลี่ยนไปเรียก Phase จัดการเศรษฐกิจก่อน
+        ev = Clock.schedule_once(
+            lambda dt: self._step_trade_and_craft(map_screen, faction),
+            self.STEP_DELAY_SHORT,
+        )
+        self._pending_events.append(ev)
+
+    def _step_trade_and_craft(self, map_screen, faction):
+        """Step 1.5: ตลาดและการคราฟต์อาวุธ (ทำงานเฉพาะโหมด Advanced Economy)"""
+        app = App.get_running_app()
+        if getattr(app, 'selected_economic_system', False):
+            map_screen.status_lbl.text = "[color=ffff44][b]AI IS MANAGING ECONOMY...[/b][/color]"
+            map_screen.status_lbl.color = (1, 1, 0.27, 1)
+            
+            # เรียกใช้งานระบบการตลาดและการคราฟต์อาวุธ
+            self.plan_trading(map_screen, faction)
+            self.plan_crafting(map_screen, faction)
+            
+            delay = self.STEP_DELAY_SHORT
+        else:
+            delay = 0.1 # หากปิดโหมด Advanced ไว้ ให้ข้ามขั้นตอนนี้ไปไวๆ
+
+        # เชื่อมต่อไปยัง Phase เกณฑ์ทหาร
         ev = Clock.schedule_once(
             lambda dt: self._step_recruit(map_screen, faction),
-            self.STEP_DELAY_SHORT,
+            delay,
         )
         self._pending_events.append(ev)
 
@@ -147,119 +166,79 @@ class CampaignAI:
     # Recruitment logic
     # ------------------------------------------------------------------
     def plan_recruitment(self, map_screen, faction):
-        """
-        Browse every owned node's shop and buy affordable units,
-        mirroring the player's recruitment path exactly.
-
-        The AI prioritises nodes that are under-garrisoned (fewest
-        current troops) and prefers the cheapest units first so it
-        can spread purchases across multiple nodes.
-        """
         app = App.get_running_app()
-        budget = app.tax_points.get(faction, 0)
-        if budget <= 0:
-            return
+        is_advanced = getattr(app, 'selected_economic_system', False)
 
-        # Collect all friendly nodes, sorted by army size (weakest first)
         owned_nodes = sorted(
             [n for n in map_screen.nodes_list if n.faction == faction],
             key=lambda n: len(n.army_pieces),
         )
-        if not owned_nodes:
-            return
+        if not owned_nodes: return
 
-        # Keep buying until we run out of money or all nodes are full
-        purchases_made = True  # sentinel to break when no more buys possible
-        while budget >= 2 and purchases_made:
+        # AI จะพยายามซื้อไปเรื่อยๆ จนกว่าจะไม่เหลือเงิน/ทรัพยากรพอซื้อตัวที่ถูกที่สุด
+        purchases_made = True
+        while purchases_made:
             purchases_made = False
             for node in owned_nodes:
-                if budget < 2:
-                    break
-
-                # Capacity check (same formula as campaign_panel.buy_piece)
                 has_header = any(
-                    p.__class__.__name__.lower() == 'king'
-                    or getattr(p, 'name', '') == 'Prince'
-                    or getattr(p, 'is_header', False)
+                    p.__class__.__name__.lower() == 'king' or getattr(p, 'name', '') == 'Prince' or getattr(p, 'is_header', False)
                     for p in node.army_pieces
                 )
                 max_cap = 16 if has_header else 8
-                if len(node.army_pieces) >= max_cap:
-                    continue
+                if len(node.army_pieces) >= max_cap: continue
 
-                # Try to find an affordable item in this node's shop
-                bought = self._try_buy_from_node(app, node, faction, budget)
-                if bought is not None:
-                    budget -= bought
-                    purchases_made = True
+                # ส่ง app เข้าไปเช็คกระเป๋าแบบเต็มรูปแบบ
+                bought = self._try_buy_from_node(app, node, faction, is_advanced)
+                if bought: purchases_made = True
 
-        # Write the updated budget back
-        app.tax_points[faction] = budget
-
-    def _try_buy_from_node(self, app, node, faction, budget):
-        """
-        Attempt to buy a single unit from *node*'s shop.
-
-        Returns the cost paid, or None if nothing could be bought.
-        Exactly mirrors the player's buy path in CampaignArmyPanel.buy_piece().
-        """
+    def _try_buy_from_node(self, app, node, faction, is_advanced):
         addons = getattr(node, 'addons', {})
         tav_lvl = addons.get('tavern', 1)
         shop = getattr(node, 'shop_recruits', {})
-        if not shop:
-            return None
+        if not shop: return False
 
-        # Also consider sub-village shops for castles
         shop_sources = [(shop, addons)]
         for sv in getattr(node, 'sub_villages', []):
             sv_shop = sv.get('shop_recruits', {})
             sv_addons = sv.get('addons', {})
-            if sv_shop:
-                shop_sources.append((sv_shop, sv_addons))
+            if sv_shop: shop_sources.append((sv_shop, sv_addons))
 
-        # Gather all available (non-None) items the AI can afford
         candidates = []
         for src_shop, src_addons in shop_sources:
             src_tav_lvl = src_addons.get('tavern', 1)
             for row_key in ['row1', 'row2', 'row3', 'row4', 'row5']:
                 row = src_shop.get(row_key)
-                if row is None:
-                    continue
-                # Tavern level gating — must match or exceed required level
-                if src_tav_lvl < row.get('req_lvl', 1):
-                    continue
+                if row is None: continue
+                if src_tav_lvl < row.get('req_lvl', 1): continue
+                
                 for idx, slot in enumerate(row['data']):
-                    if slot is None:
-                        continue
+                    if slot is None: continue
                     base_cost = slot['cost']
-                    final_cost = self._get_discounted_price(
-                        base_cost, src_addons,
-                    )
-                    if final_cost <= budget:
-                        candidates.append(
-                            (final_cost, slot['name'], row_key, idx,
-                             src_shop, src_addons)
-                        )
+                    final_tax_cost = self._get_discounted_price(base_cost, src_addons)
+                    
+                    # 🟢 ดึงโครงสร้างราคาของหมากตัวนี้
+                    cost_dict = self._get_unit_costs(slot['name'], final_tax_cost, is_advanced)
+                    
+                    # 🟢 เช็คว่า AI สามารถจ่ายได้ครบทุกค่าหรือไม่
+                    if self._can_afford(app, faction, cost_dict):
+                        candidates.append((cost_dict, slot['name'], row_key, idx, src_shop, src_addons))
 
-        if not candidates:
-            return None
+        if not candidates: return False
 
-        # Sort cheapest-first so the AI stretches its budget, with a
-        # small random shuffle among same-price options for variety.
         random.shuffle(candidates)
-        candidates.sort(key=lambda c: c[0])
+        # จัดเรียงโดยให้ความสำคัญกับตัวที่ใช้ภาษีน้อยที่สุดก่อน
+        candidates.sort(key=lambda c: c[0]['tax_points'])
 
-        cost, piece_name, row_key, idx, src_shop, src_addons = candidates[0]
+        cost_dict, piece_name, row_key, idx, src_shop, src_addons = candidates[0]
 
-        # --- Reproduce the exact buy_piece() sequence ---
-
-        # 1. Consume the shop slot
+        # 1. จ่ายทรัพยากร
+        self._pay_costs(app, faction, cost_dict)
+        
+        # 2. นำของออกจาก Shop และเสกทหาร
         src_shop[row_key]['data'][idx] = None
-
-        # 2. Create the unit (identical to campaign_panel.buy_piece)
         new_p = generate_piece(piece_name, faction, app)
 
-        # 3. Apply weaponsmith / blacksmith bonuses from the source
+        # 3. Apply weaponsmith / blacksmith bonuses
         spec = src_addons.get('special')
         slvl = src_addons.get('special_lvl', 0)
 
@@ -269,23 +248,17 @@ class CampaignAI:
                 from components.hidden_passive import HiddenPassive
                 new_p.second_hidden_passive = HiddenPassive()
                 new_p.second_hidden_passive.passive_type = 'atk_buff'
-            new_p.second_hidden_passive.description = (
-                f"Weaponsmith Forged (+{slvl} ATK)"
-            )
+            new_p.second_hidden_passive.description = f"Weaponsmith Forged (+{slvl} ATK)"
         elif spec == 'blacksmith':
             new_p.base_def += slvl
             if not getattr(new_p, 'second_hidden_passive', None):
                 from components.hidden_passive import HiddenPassive
                 new_p.second_hidden_passive = HiddenPassive()
                 new_p.second_hidden_passive.passive_type = 'def_buff'
-            new_p.second_hidden_passive.description = (
-                f"Blacksmith Forged (+{slvl} DEF)"
-            )
+            new_p.second_hidden_passive.description = f"Blacksmith Forged (+{slvl} DEF)"
 
-        # 4. Add the unit to the node's army
         node.army_pieces.append(new_p)
-
-        return cost
+        return True
 
     # ------------------------------------------------------------------
     # Army movement logic
@@ -374,114 +347,94 @@ class CampaignAI:
     # Upgrade logic
     # ------------------------------------------------------------------
     def plan_upgrades(self, map_screen, faction):
-        """
-        Upgrade buildings across all owned nodes, mirroring the player's
-        BuildPopup / upgrade_addon() path exactly.
-
-        Priority order (best ROI first):
-          1. Farms   — cost = level × 5, max level 3  (+2 tax per level)
-          2. Taverns — cost = level × 6, max level 3  (unlocks unit tiers)
-          3. Special — cost = level × 8, max level 3  (mine excluded)
-        """
         app = App.get_running_app()
-        budget = app.tax_points.get(faction, 0)
-        if budget <= 0:
-            return
+        is_advanced = getattr(app, 'selected_economic_system', False)
 
-        owned_nodes = [
-            n for n in map_screen.nodes_list if n.faction == faction
-        ]
-        if not owned_nodes:
-            return
+        owned_nodes = [n for n in map_screen.nodes_list if n.faction == faction]
+        if not owned_nodes: return
 
-        # Keep upgrading until we can no longer afford anything
         upgraded = True
-        while budget > 0 and upgraded:
+        while upgraded:
             upgraded = False
-
-            # Collect every possible upgrade across all owned nodes
             candidates = []
             for node in owned_nodes:
-                candidates.extend(
-                    self._collect_upgrade_candidates(node)
-                )
+                candidates.extend(self._collect_upgrade_candidates(node, is_advanced))
 
-            if not candidates:
-                break
+            if not candidates: break
 
-            # Sort by priority (lower = better), then by cost (cheapest first)
-            candidates.sort(key=lambda c: (c['priority'], c['cost']))
+            # เรียงตามลำดับความสำคัญ (priority) และราคาภาษี
+            candidates.sort(key=lambda c: (c['priority'], c['cost_dict']['tax_points']))
 
             for cand in candidates:
-                if cand['cost'] > budget:
+                if not self._can_afford(app, faction, cand['cost_dict']):
                     continue
-                # Perform the upgrade — identical to upgrade_addon()
-                budget -= cand['cost']
-                cand['addons'][cand['key']] += 1
+                
+                # จ่ายทรัพยากร
+                self._pay_costs(app, faction, cand['cost_dict'])
+                
+                # 🟢 เช็คว่าเป็นการสร้างตึกใหม่ หรืออัปเกรดตึกเดิม
+                if cand['key'] == 'new_building':
+                    # เปลี่ยนสถานะเมืองเป็นกำลังก่อสร้าง (รอสร้างเสร็จตอนจบเทิร์น)
+                    cand['node_ref'].building_state = f"building_{cand['b_name']}"
+                else:
+                    cand['addons'][cand['key']] += 1
+                    
                 upgraded = True
-                break  # re-collect after each upgrade (levels changed)
+                break
 
-        app.tax_points[faction] = budget
-
-    @staticmethod
-    def _collect_upgrade_candidates(node):
-        """
-        Return a list of upgrade candidates for *node* (and its
-        sub-villages if it is a castle).  Each candidate is a dict:
-          {'key': str, 'cost': int, 'priority': int, 'addons': dict}
-
-        Priority values: 1 = farm, 2 = tavern, 3 = special.
-        Mirrors the BuildPopup rules exactly:
-          - Farm:    key='farm',        cost = farm_lvl × 5,  max 3
-          - Tavern:  key='tavern',      cost = tav_lvl  × 6,  max 3
-          - Special: key='special_lvl', cost = spec_lvl × 8,  max 3
-                     (mine is excluded from upgrades)
-        """
+    def _collect_upgrade_candidates(self, node, is_advanced):
         results = []
 
         def _scan_addons(addons):
             # Farm
             farm_lvl = addons.get('farm', 1)
             if farm_lvl < 3:
-                results.append({
-                    'key': 'farm',
-                    'cost': farm_lvl * 5,
-                    'priority': 1,
-                    'addons': addons,
-                })
+                cost_dict = self._get_building_costs('farm', farm_lvl, farm_lvl * 5, is_advanced)
+                results.append({'key': 'farm', 'cost_dict': cost_dict, 'priority': 2, 'addons': addons}) # ถอย Priority ลงมา
+            
             # Tavern
             tav_lvl = addons.get('tavern', 1)
             if tav_lvl < 3:
-                results.append({
-                    'key': 'tavern',
-                    'cost': tav_lvl * 6,
-                    'priority': 2,
-                    'addons': addons,
-                })
-            # Special (mine excluded — matches BuildPopup line 252)
+                cost_dict = self._get_building_costs('tavern', tav_lvl, tav_lvl * 6, is_advanced)
+                results.append({'key': 'tavern', 'cost_dict': cost_dict, 'priority': 3, 'addons': addons})
+            
+            # Special
             spec = addons.get('special')
             spec_lvl = addons.get('special_lvl', 0)
             if spec and spec not in ['mine'] and spec_lvl < 3:
-                results.append({
-                    'key': 'special_lvl',
-                    'cost': spec_lvl * 8,
-                    'priority': 3,
-                    'addons': addons,
-                })
+                cost_dict = self._get_building_costs('special_lvl', spec_lvl, spec_lvl * 8, is_advanced)
+                results.append({'key': 'special_lvl', 'cost_dict': cost_dict, 'priority': 4, 'addons': addons})
 
-        # Main node addons
+        # --- 🟢 เริ่ม: ลอจิกให้ AI ตัดสินใจสร้างตึกใหม่ ---
+        if node.node_type == 'castle' and getattr(node, 'building_state', None) is None:
+            # AI จะสุ่มว่าอยากสร้างตึกอะไร เพื่อความหลากหลาย
+            new_buildings = [
+                ('market', 10),      # (ชื่อตึก, ราคาภาษีเริ่มต้น)
+                ('makerspace', 12),
+                ('wallbuilder', 15)
+            ]
+            import random
+            b_name, b_cost = random.choice(new_buildings)
+            
+            # ดึงราคาแบบตระกร้า และตั้ง Priority เป็น 1 (สำคัญสุด)
+            cost_dict = self._get_building_costs(f"new_{b_name}", 1, b_cost, is_advanced)
+            results.append({
+                'key': 'new_building', 
+                'b_name': b_name, 
+                'cost_dict': cost_dict, 
+                'priority': 1, 
+                'node_ref': node # ส่งอ้างอิงเมืองมาด้วยเพื่อเอาไปเปลี่ยนสถานะ
+            })
+        # --- จบ: ลอจิกตึกใหม่ ---
+
         main_addons = getattr(node, 'addons', {})
-        if main_addons:
-            _scan_addons(main_addons)
+        if main_addons: _scan_addons(main_addons)
 
-        # Castle sub-village addons
         for sv in getattr(node, 'sub_villages', []):
             sv_addons = sv.get('addons', {})
-            if sv_addons:
-                _scan_addons(sv_addons)
+            if sv_addons: _scan_addons(sv_addons)
 
         return results
-
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -531,6 +484,125 @@ class CampaignAI:
             map_screen.scroll_view.scroll_y = (
                 target_node.y / map_screen.map_content.height
             )
+
+    # ==================================================================
+    # Trading & Crafting Logic
+    # ==================================================================
+    def plan_trading(self, map_screen, faction):
+        """ลอจิกสำหรับซื้อทรัพยากรจากตลาด (Market)"""
+        app = App.get_running_app()
+        owned_nodes = [n for n in map_screen.nodes_list if n.faction == faction]
+        
+        # ค้นหาว่ามีเมืองไหนสร้าง Market ไว้ไหม
+        market_nodes = [n for n in owned_nodes if getattr(n, 'building_state', '') == 'market']
+        if not market_nodes: return
+        
+        market = market_nodes[0]
+        rates = getattr(market, 'market_rates', {})
+        if not rates: return
+
+        # AI กำหนดเป้าหมายตุนทรัพยากร (ถ้าของเหลือน้อยกว่านี้จะพยายามซื้อ)
+        target_stock = {
+            'wood_points': ('wood', 15), 
+            'iron_points': ('iron', 10),
+            'coal_points': ('coal', 5)
+        }
+
+        budget = app.tax_points.get(faction, 0)
+        
+        for res_name, (rate_key, target_amount) in target_stock.items():
+            current = getattr(app, res_name, {}).get(faction, 0)
+            cost_per_unit = rates.get(rate_key, 999) # ถ้าไม่มีของขายในตลาด ตั้งแพงๆ ไว้
+            
+            while current < target_amount and budget >= cost_per_unit:
+                budget -= cost_per_unit
+                current += 1
+                getattr(app, res_name)[faction] = current
+                
+        app.tax_points[faction] = budget
+
+    def plan_crafting(self, map_screen, faction):
+        """ลอจิกสำหรับคราฟต์อาวุธที่ Makerspace"""
+        app = App.get_running_app()
+        owned_nodes = [n for n in map_screen.nodes_list if n.faction == faction]
+        
+        # ค้นหาว่ามีเมืองไหนสร้าง Makerspace ไว้ไหม
+        makerspace_nodes = [n for n in owned_nodes if getattr(n, 'building_state', '') == 'makerspace']
+        if not makerspace_nodes: return
+
+        # 🛠️ ตำราคราฟต์อาวุธของ AI (สามารถแก้ทรัพยากรที่ใช้ให้ตรงกับ UI ผู้เล่นได้เลย)
+        # รูปแบบ: ('ชื่อตัวแปรอาวุธ', {'ทรัพยากรที่ต้องใช้': จำนวน}, จำนวนชิ้นที่ AI อยากตุนไว้)
+        crafting_recipes = [
+            ('weapon_t1_points', {'wood_points': 2}, 5),               # ตุน T1 ไว้ 5 ชิ้น
+            ('weapon_t2_points', {'wood_points': 1, 'iron_points': 2}, 3), # ตุน T2 ไว้ 3 ชิ้น
+            ('weapon_t3_points', {'iron_points': 3, 'coal_points': 1}, 2)  # ตุน T3 ไว้ 2 ชิ้น
+        ]
+
+        for wp_name, cost_dict, target_amount in crafting_recipes:
+            current_wp = getattr(app, wp_name, {}).get(faction, 0)
+            
+            while current_wp < target_amount and self._can_afford(app, faction, cost_dict):
+                # หักทรัพยากรทิ้ง
+                self._pay_costs(app, faction, cost_dict)
+                # เพิ่มอาวุธเข้าคลัง
+                current_wp += 1
+                getattr(app, wp_name)[faction] = current_wp
+
+    def _get_unit_costs(self, piece_name, base_cost, is_advanced):
+        """คำนวณราคาทหารเป็นแบบตระกร้าทรัพยากร"""
+        if not is_advanced:
+            return {'tax_points': base_cost}
+            
+        # 🛠️ ราคาทหารโหมด Advanced (คุณสามารถปรับแก้ตัวเลขตรงนี้ให้ตรงกับหน้า UI ของคุณได้เลย)
+        costs = {'tax_points': base_cost, 'supplies_points': 2}
+        p_name = piece_name.lower()
+        
+        if p_name in ['levies', 'pawn']:
+            costs['weapon_t1_points'] = 1
+        elif p_name in ['menatarm', 'hastati', 'knight']:
+            costs['weapon_t2_points'] = 1
+        elif p_name in ['bishop', 'rook', 'queen', 'praetorian', 'royalguard']:
+            costs['weapon_t3_points'] = 1
+            costs['supplies_points'] = 4
+            
+        return costs
+
+    def _get_building_costs(self, key, level, base_cost, is_advanced):
+        """คำนวณราคาสิ่งปลูกสร้างเป็นแบบตระกร้าทรัพยากร"""
+        if not is_advanced:
+            return {'tax_points': base_cost}
+            
+        costs = {'tax_points': base_cost}
+        if key == 'farm':
+            costs['wood_points'] = level * 2
+        elif key == 'tavern':
+            costs['wood_points'] = level * 3
+            costs['iron_points'] = level * 1
+        elif key == 'special_lvl': 
+            costs['wood_points'] = level * 2
+            costs['iron_points'] = level * 2
+            
+        # 🟢 เพิ่มราคาสร้างตึกใหม่ (Market, Makerspace, Wallbuilder)
+        elif key in ['new_market', 'new_makerspace', 'new_wallbuilder']:
+            costs['wood_points'] = 5
+            costs['iron_points'] = 3
+            
+        return costs
+
+    def _can_afford(self, app, faction, cost_dict):
+        """เช็คว่า AI มีทรัพยากรทุกชนิดใน cost_dict เพียงพอหรือไม่"""
+        for res_name, required_amount in cost_dict.items():
+            current_amount = getattr(app, res_name, {}).get(faction, 0)
+            if current_amount < required_amount:
+                return False
+        return True
+
+    def _pay_costs(self, app, faction, cost_dict):
+        """หักทรัพยากรทั้งหมดใน cost_dict ออกจากกระเป๋า AI"""
+        for res_name, required_amount in cost_dict.items():
+            res_dict = getattr(app, res_name, {})
+            current_amount = res_dict.get(faction, 0)
+            res_dict[faction] = max(0, current_amount - required_amount)
 
     # ------------------------------------------------------------------
     # Cleanup
