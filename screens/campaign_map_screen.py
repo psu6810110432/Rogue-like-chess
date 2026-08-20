@@ -459,6 +459,7 @@ class CampaignMapScreen(Screen):
         # ====================================================
         # 🟢 ฝังระบบ SEED ตรงนี้ (ต้องทำก่อนสร้าง MapGenerator)
         # ====================================================
+        save_data = None  # <-- ✨ เพิ่มบรรทัดนี้กัน Error
         if hasattr(app, 'loaded_world_id') and app.loaded_world_id is not None:
             # กรณี Load: ดึงข้อมูลจากฐานข้อมูล
             from logic.save_manager import load_game_data
@@ -648,10 +649,16 @@ class CampaignMapScreen(Screen):
 
             # --- 6. วาง Nodes ให้อยู่บนสุด ---
             nodes_dict = {}
-            for data in nodes_data:
+            for i, data in enumerate(nodes_data): # ✨ เปลี่ยนเป็น enumerate เพื่อดึง Index
                 node = MapNode(node_type=data['type'], faction=data['faction'], node_id=data['id'], is_main_base=data['main'], app=app)
                 node.base_pos = data['pos']
                 node.pos = (data['pos'][0] - node.width/2, data['pos'][1] - node.height/2)
+                # ✨ โหลดข้อมูลสถานะตึก (Building) และ Cooldown กลับเข้ามา
+                if save_data and 'nodes' in save_data:
+                    saved_nodes = save_data['nodes']
+                    if i < len(saved_nodes):
+                        node.building_state = saved_nodes[i].get('building_state')
+                        node.wallbuilder_cooldown = saved_nodes[i].get('wallbuilder_cooldown', 0)
                 self.nodes_list.append(node)
                 nodes_dict[data['id']] = node
 
@@ -721,13 +728,20 @@ class CampaignMapScreen(Screen):
             nodes_dict = {}
 
             # ลูปที่ 1: สร้าง Node และประทับตราชื่อเมือง
-            for data in nodes_data:
+            for i, data in enumerate(nodes_data): # ✨ เปลี่ยนเป็น enumerate เช่นกัน
                 node = MapNode(node_type=data['type'], faction=data['faction'], node_id=data['id'], is_main_base=data['main'], app=app)
                 node.base_pos = data['pos']
                 
                 # แปะชื่อเมืองให้ Node ฝังไว้ในออบเจ็กต์เลย
                 node.city_name = random_names[name_idx % len(random_names)]
                 name_idx += 1
+                
+                # ✨ โหลดข้อมูลสถานะตึก (Building) และ Cooldown กลับเข้ามา
+                if save_data and 'nodes' in save_data:
+                    saved_nodes = save_data['nodes']
+                    if i < len(saved_nodes):
+                        node.building_state = saved_nodes[i].get('building_state')
+                        node.wallbuilder_cooldown = saved_nodes[i].get('wallbuilder_cooldown', 0)
                 
                 self.nodes_list.append(node)
                 nodes_dict[data['id']] = node

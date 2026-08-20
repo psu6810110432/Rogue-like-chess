@@ -49,7 +49,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS nodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             world_id INTEGER,
-            node_index INTEGER,  -- ลำดับของโหนดอ้างอิงตอนสร้างแผนที่
+            node_index INTEGER,
             faction TEXT,
             node_type TEXT,
             loyalty INTEGER,
@@ -58,6 +58,8 @@ def init_db():
             tavern_lvl INTEGER DEFAULT 1,
             special_type TEXT,
             special_lvl INTEGER DEFAULT 0,
+            building_state TEXT,               
+            wallbuilder_cooldown INTEGER DEFAULT 0, 
             FOREIGN KEY(world_id) REFERENCES worlds(id) ON DELETE CASCADE
         )
     ''')
@@ -138,14 +140,20 @@ def save_game(app, map_screen, save_name, is_autosave=False, is_suspended=False)
     # 3. บันทึกแผนที่และสิ่งปลูกสร้าง (Nodes)
     for index, node in enumerate(map_screen.nodes_list):
         addons = getattr(node, 'addons', {})
+        
+        # ดึงสถานะตึกที่สร้างระหว่างเกม
+        b_state = getattr(node, 'building_state', None)
+        wb_cd = getattr(node, 'wallbuilder_cooldown', 0)
+
         cursor.execute('''
-            INSERT INTO nodes (world_id, node_index, faction, node_type, loyalty, fatigue, farm_lvl, tavern_lvl, special_type, special_lvl)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO nodes (world_id, node_index, faction, node_type, loyalty, fatigue, farm_lvl, tavern_lvl, special_type, special_lvl, building_state, wallbuilder_cooldown)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             world_id, index, node.faction, node.node_type, 
             getattr(node, 'loyalty', 100), getattr(node, 'fatigue', 0),
             addons.get('farm', 1), addons.get('tavern', 1),
-            addons.get('special', None), addons.get('special_lvl', 0)
+            addons.get('special', None), addons.get('special_lvl', 0),
+            b_state, wb_cd  # 🟢 ยัดค่าที่ดึงมาลง Database
         ))
         
         node_id = cursor.lastrowid
