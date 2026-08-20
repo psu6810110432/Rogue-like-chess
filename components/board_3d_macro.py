@@ -5,6 +5,8 @@ from kivy.graphics.transformation import Matrix
 from kivy.clock import Clock
 from kivy.graphics import RenderContext, Mesh, PushMatrix, PopMatrix, InstructionGroup, Translate, Rotate, ClearBuffers, Color, BindTexture
 from kivy.core.image import Image as CoreImage # ✨ เพิ่มบรรทัดนี้ด้านบนสุด
+from kivy.core.window import Window
+from kivy.metrics import dp
 import math
 import random
 import os
@@ -47,6 +49,12 @@ class SimpleNoise:
 class MacroBoard3D(Widget):
     def __init__(self, map_size=(16, 16), seed=None, **kwargs):
         super().__init__(**kwargs)
+
+        # ✨ เพิ่มตัวแปรเก็บสถานะการ Hover และอ้างอิงเมือง
+        self.hovered_node_id = None
+        self.nodes_list_ref = []
+        self.nodes_pos_ref = {}
+
         self.canvas = RenderContext(compute_normal_mat=True)
         self.canvas['DEPTH_TEST'] = 1 # ✨ 1. เปิดระบบคำนวณความลึกหน้า/หลัง
         self.map_size = map_size
@@ -80,12 +88,115 @@ class MacroBoard3D(Widget):
         with self.canvas:
             ClearBuffers(clear_depth=True) # ✨ 2. ล้างระยะความลึกใหม่ทุกเฟรม
             PushMatrix()
+            
+            # ✨ 1. วาดพื้นดินและต้นไม้ก่อน
             self.terrain_group = InstructionGroup()
             self.generate_terrain()
             self.canvas.add(self.terrain_group)
-            PopMatrix()
             
+            # ✨ 2. ค่อยวาดวงกลมฐานทับลงไป (เลื่อนลงมาอยู่ตรงนี้)
+            self.rings_group = InstructionGroup() 
+            self.canvas.add(self.rings_group)
+            
+            PopMatrix()
+
+        # ✨ ดักจับพิกัดเมาส์ตลอดเวลาเพื่อทำ Hover
+        Window.bind(mouse_pos=self.on_mouse_hover)
         Clock.schedule_interval(self.update_glsl, 1 / 60.)
+
+    def draw_faction_rings(self):
+        self.rings_group.clear()
+        
+        for node in self.nodes_list_ref:
+            if node.node_id not in self.nodes_pos_ref: continue
+            wx, wy, wz = self.nodes_pos_ref[node.node_id]
+
+            # 🟢 1. กำหนดสีตาม Faction
+            if self.hovered_node_id == node.node_id:
+                color = (0.7, 0.3, 0.9, 0.8) # สีม่วงสว่างเวลา Hover
+            elif node.faction == 'white':
+                color = (0.9, 0.9, 0.9, 0.5) # สีขาว
+            elif node.faction == 'black':
+                color = (0.1, 0.1, 0.1, 0.7) # สีดำ
+            elif node.faction == 'red':
+                color = (0.9, 0.2, 0.2, 0.6) # สีแดง (กบฏ/หมู่บ้าน)
+            else:
+                color = (0.5, 0.5, 0.5, 0.5)
+
+            self.rings_group.add(PushMatrix())
+            # ลอยเหนือพื้นเล็กน้อย (wy + 0.05) เพื่อไม่ให้สีจมดิน
+            self.rings_group.add(Translate(wx, wy + 0.05, wz))
+            
+            # 🟢 2. สร้างเรขาคณิตวงกลม (Triangle Fan)
+            segments = 30
+            radius = 4.0 
+            
+            # ✨ 1. เติมคำสั่งเคลียร์สี (Color) ก่อนวาด เพื่อไม่ให้สีจากวัตถุอื่นมารบกวน
+            self.rings_group.add(Color(1, 1, 1, 1))
+
+            # ✨ 2. เปลี่ยนพิกัด UV จาก 0.5, 0.5 ให้เป็น -1.0, -1.0 
+            vertices = [0, 0, 0, *color, -1.0, -1.0] # จุดศูนย์กลาง
+            indices = []
+
+            for i in range(segments + 1):
+                angle = (i / segments) * 2 * math.pi
+                cx = math.cos(angle) * radius
+                cz = math.sin(angle) * radius
+                # ✨ 3. เปลี่ยนพิกัด UV ตรงนี้เป็น -1.0, -1.0 เช่นกัน
+                vertices.extend([cx, 0, cz, *color, -1.0, -1.0])
+                if i > 0:
+                    indices.extend([0, i, i+1])
+
+            self.rings_group.add(Mesh(
+                fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
+                mode='triangles', vertices=vertices, indices=indices
+            ))
+            self.rings_group.add(PopMatrix())
+
+    def on_mouse_hover(self, window, pos):
+        # ป้องกันบั๊กเวลาออกเกมแล้ว Window ยังส่ง Event มา
+        if not self.get_root_window() or not self.parent: return
+        if not hasattr(self, 'nodes_pos_ref') or not self.nodes_pos_ref: return
+
+        best_node = None
+
+        # 🟢 1. ตรวจสอบการ Hover ที่ Banner (UI ด้านซ้าย/ขวา)
+        from kivy.app import App
+        app = App.get_running_app()
+        if app and app.root and app.root.has_screen('campaign_map'):
+            map_screen = app.root.get_screen('campaign_map')
+            if hasattr(map_screen, 'active_banners'):
+                for banner in map_screen.active_banners:
+                    # ✨ แก้ไขตรงนี้! ใช้ to_widget และ collide_point เพื่อให้คำนวณเป๊ะตามกรอบ UI
+                    local_pos = banner.to_widget(*pos)
+                    if banner.collide_point(*local_pos):
+                        best_node = getattr(banner.node, 'node_id', None)
+                        break
+
+        # 🟢 2. ถ้าไม่ได้ชี้ Banner ค่อยมาเช็คว่าเมาส์อยู่บนกระดาน 3D แทน
+        if best_node is None:
+            local_pos = self.to_widget(*pos)
+            if self.collide_point(*local_pos):
+                min_dist = dp(40) # รัศมีระยะตรวจจับเมาส์บนจอ
+                mvp = self.proj_mat.multiply(self.camera_mat).multiply(self.model_mat)
+
+                for node in self.nodes_list_ref:
+                    if node.node_id not in self.nodes_pos_ref: continue
+                    wx, wy, wz = self.nodes_pos_ref[node.node_id]
+                    
+                    v = mvp.transform_point(wx, wy, wz)
+                    sx = self.x + (v[0] + 1.0) / 2.0 * self.width
+                    sy = self.y + (v[1] + 1.0) / 2.0 * self.height
+                    
+                    dist = math.hypot(local_pos[0] - sx, local_pos[1] - sy)
+                    if dist < min_dist:
+                        min_dist = dist
+                        best_node = node.node_id
+
+        # สั่งอัปเดตสีเฉพาะตอนที่มีการเปลี่ยนเมืองที่ชี้เท่านั้น (กันกระตุก)
+        if getattr(self, 'hovered_node_id', None) != best_node:
+            self.hovered_node_id = best_node
+            self.draw_faction_rings()
 
     def generate_terrain(self):
         self.terrain_group.clear()
@@ -509,6 +620,12 @@ class MacroBoard3D(Widget):
         if hasattr(self, 'struct_group'): self.canvas.remove(self.struct_group)
         self.struct_group = InstructionGroup()
         self.canvas.add(self.struct_group)
+        # ✨ เก็บข้อมูลเมืองอ้างอิงเอาไว้ให้ระบบ Hover ใช้งาน
+        self.nodes_list_ref = nodes_list
+        self.nodes_pos_ref = nodes_3d_pos
+        
+        # ✨ สั่งวาดวงกลมลงที่ฐานก่อน
+        self.draw_faction_rings()
         self.sprite_rotations.clear()
         
         offset_x = (self.map_size[1] + 80) / 2.0
