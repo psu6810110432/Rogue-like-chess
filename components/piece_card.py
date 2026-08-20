@@ -15,7 +15,7 @@ from components.passive.passive_manager import PassiveManager
 
 class PieceCard(ButtonBehavior, FloatLayout):
     # ✨ 2. เพิ่มพารามิเตอร์ game_mode และ tribe_name
-    def __init__(self, piece, image_path, on_select, game_mode="classic", tribe_name="the knight company", is_deployed=False, **kwargs):
+    def __init__(self, piece, image_path, on_select, game_mode="classic", tribe_name="the knight company", is_deployed=False, display_color=None, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
         self.size = (dp(140), dp(200))
@@ -24,12 +24,18 @@ class PieceCard(ButtonBehavior, FloatLayout):
         self.on_select_callback = on_select
         self.is_selected = False
         
+        # ✨ 2. ใช้ display_color ถ้ามีส่งมาให้ ถ้าไม่มีให้ใช้ piece.color แบบเดิม
+        card_color = display_color if display_color else piece.color
+        
         # 🎨 พื้นหลังการ์ด
         with self.canvas.before:
-            if piece.color == 'white':
+            if card_color == 'white':
                 Color(0.9, 0.9, 0.9, 0.95)
                 self.text_color = (0.1, 0.1, 0.1, 1)
-            else:
+            elif card_color == 'red': # สีแดงเข้มสไตล์พรีเมียมสำหรับฝ่ายกบฏ
+                Color(0.55, 0.15, 0.15, 0.95)
+                self.text_color = (0.9, 0.9, 0.9, 1)
+            else: # สีดำ หรือสีอื่นๆ
                 Color(0.15, 0.15, 0.15, 0.95)
                 self.text_color = (0.9, 0.9, 0.9, 1)
                 
@@ -99,9 +105,7 @@ class PieceCard(ButtonBehavior, FloatLayout):
         if mode_key == "dnc":
             current_atk = getattr(piece, 'atk', stats_dict.get('base_atk', 0))
             current_def = getattr(piece, 'hp', stats_dict.get('base_def', 0))
-            # ✨ เพิ่มสถานะกำกับในการ์ด ว่าทหารลงสนามไปหรือยัง
-            status_txt = "[color=44ff44]DEPLOYED[/color]" if is_deployed else "[color=ffaa00]STANDBY[/color]"
-            stats_text = f"ATK: {current_atk} | DEF: {current_def}\n{status_txt}"
+            stats_text = f"ATK: {current_atk} | DEF: {current_def}"
         else:
             current_pts = getattr(piece, 'hp', stats_dict.get('dice', 0))
             stats_text = f"Points: {current_pts} | Coins: {current_coins}"

@@ -35,7 +35,13 @@ class PieceCard(ButtonBehavior, FloatLayout):
         img_path = safe_piece_path(piece_obj, tribe, color)
         self.add_widget(Image(source=img_path, size_hint=(0.85, 0.65), pos_hint={'center_x': 0.5, 'top': 0.98}))
 
-        display_name = getattr(piece_obj, 'name', p_name.capitalize())
+        # ดึงชื่อมาก่อน
+        display_name = getattr(piece_obj, 'name', p_name.title())
+        
+        # เพิ่มเงื่อนไขเช็คว่าถ้าชื่อยาวแค่ 1 ตัวอักษร (เช่น 'K', 'P', 'Q') 
+        # ให้สลับไปใช้ชื่อคลาสเต็มแทน (เช่น 'King', 'Pawn')
+        if len(display_name) <= 2:  
+            display_name = p_name.title()
         lvl_str = f" [color=ffff00]+{lvl}[/color]" if lvl > 0 else ""
 
         

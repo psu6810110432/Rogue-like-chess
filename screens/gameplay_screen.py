@@ -1031,13 +1031,28 @@ class GameplayScreen(Screen):
         
         for piece, r, c in alive_pieces:
             img_path = self.get_piece_image_path(piece)
+            
+            # ✨ 1. คำนวณหาสีที่แท้จริงของ Faction
+            display_color = piece.color
+            game_mode_str = getattr(self, 'game_mode', 'classic')
+            
+            if game_mode_str == 'Divide_Conquer':
+                app = App.get_running_app()
+                if piece.color == 'white':
+                    # ฝ่ายบุก (Attacker)
+                    display_color = getattr(app.combat_source, 'faction', 'white') if hasattr(app, 'combat_source') else 'white'
+                elif piece.color == 'black':
+                    # ฝ่ายรับ (Defender)
+                    display_color = getattr(app.combat_target, 'faction', 'black') if hasattr(app, 'combat_target') else 'black'
+
             if img_path:
                 # สร้างการ์ดและผูก Event เมื่อถูกเลือก
                 card = PieceCard(
                     piece=piece, 
                     image_path=img_path, 
-                    # ✨ สั่งให้ไปเรียก on_card_selected ในคลาส BottomUIManager แทน
-                    on_select=lambda c_instance, row=r, col=c: self.on_card_selected(c_instance, row, col) 
+                    on_select=lambda c_instance, row=r, col=c: self.on_card_selected(c_instance, row, col),
+                    game_mode=game_mode_str,      # ✨ โยนโหมดเกมไปให้การ์ด (แก้บักโชว์ค่า Coin)
+                    display_color=display_color   # ✨ โยนสี Faction ที่ถูกต้องไปวาด UI
                 )
                 if self.selected == (r, c):
                     card.set_selected_visuals()
