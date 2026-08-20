@@ -1050,9 +1050,12 @@ class GameplayScreen(Screen):
                 card = PieceCard(
                     piece=piece, 
                     image_path=img_path, 
+                    row=r, # ✨ ส่งพิกัดแถวให้การ์ด
+                    col=c, # ✨ ส่งพิกัดคอลัมน์ให้การ์ด
                     on_select=lambda c_instance, row=r, col=c: self.on_card_selected(c_instance, row, col),
-                    game_mode=game_mode_str,      # ✨ โยนโหมดเกมไปให้การ์ด (แก้บักโชว์ค่า Coin)
-                    display_color=display_color   # ✨ โยนสี Faction ที่ถูกต้องไปวาด UI
+                    on_hover=self.handle_card_hover, # ✨ ผูก Event Hover เข้ากับฟังก์ชันใหม่
+                    game_mode=game_mode_str,      
+                    display_color=display_color   
                 )
                 if self.selected == (r, c):
                     card.set_selected_visuals()
@@ -1368,3 +1371,11 @@ class GameplayScreen(Screen):
             self.root_layout.remove_widget(self.crash_popup)
         self.crash_popup = None
         self.refresh_ui()
+    def handle_card_hover(self, row, col, is_hovering):
+        if hasattr(self, 'board_3d'):
+            if is_hovering:
+                # สั่งวาดสีม่วงที่กระดาน 3D ตรงพิกัด row, col
+                self.board_3d.highlight_purple(row, col)
+            else:
+                # สั่งลบสีม่วง
+                self.board_3d.clear_purple_highlight()

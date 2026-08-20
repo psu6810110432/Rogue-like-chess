@@ -14,11 +14,18 @@ from kivy.uix.widget import Widget
 from components.passive.passive_manager import PassiveManager
 
 class PieceCard(ButtonBehavior, FloatLayout):
-    # ✨ 2. เพิ่มพารามิเตอร์ game_mode และ tribe_name
-    def __init__(self, piece, image_path, on_select, game_mode="classic", tribe_name="the knight company", is_deployed=False, display_color=None, **kwargs):
+    # ✨ แก้ไขพารามิเตอร์ __init__ ให้รับค่าพิกัดและ Callback สำหรับ Hover
+    def __init__(self, piece, image_path, on_select, game_mode="classic", tribe_name="the knight company", is_deployed=False, display_color=None, on_hover=None, row=None, col=None, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
         self.size = (dp(140), dp(200))
+        
+        self.piece = piece
+        self.on_select_callback = on_select
+        self.on_hover_callback = on_hover  # ✨ เก็บฟังก์ชันแสดงสีม่วง
+        self.row = row                     # ✨ เก็บพิกัดแถว
+        self.col = col                     # ✨ เก็บพิกัดคอลัมน์
+        self._is_hovered_state = False     # ✨ ตัวเช็คสถานะว่าเมาส์ชี้อยู่ไหม
         
         self.piece = piece
         self.on_select_callback = on_select
@@ -148,12 +155,24 @@ class PieceCard(ButtonBehavior, FloatLayout):
     def on_mouse_hover(self, window, pos):
         if not self.get_root_window() or self.is_selected: return
         is_hovering = self.collide_point(*self.to_widget(*pos))
-        if is_hovering:
+        
+        # ✨ ถ้าเมาส์ 'เริ่ม' ชี้การ์ด
+        if is_hovering and not self._is_hovered_state:
+            self._is_hovered_state = True
             Animation(y=self.base_y + dp(15), duration=0.1).start(self)
             self.border.width = dp(2.5)
-        else:
+            # โยนกลับไปบอกกระดานให้แสดงสีม่วงที่ row, col
+            if self.on_hover_callback and self.row is not None:
+                self.on_hover_callback(self.row, self.col, True)
+                
+        # ✨ ถ้าเมาส์ 'เลิก' ชี้การ์ด
+        elif not is_hovering and self._is_hovered_state:
+            self._is_hovered_state = False
             Animation(y=self.base_y, duration=0.1).start(self)
             self.border.width = dp(1.5)
+            # โยนกลับไปบอกกระดานให้ลบสีม่วงออก
+            if self.on_hover_callback and self.row is not None:
+                self.on_hover_callback(self.row, self.col, False)
 
     def on_release(self):
         self.is_selected = True

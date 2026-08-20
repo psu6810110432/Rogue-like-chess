@@ -49,7 +49,9 @@ class Board3D(Widget):
             PushMatrix()
             self.setup_scene()
             self.pieces_group = InstructionGroup()
+            self.hover_group = InstructionGroup() # ✨ เพิ่ม Group สำหรับไฮไลต์ Hover แยกต่างหาก
             self.canvas.add(self.pieces_group)
+            self.canvas.add(self.hover_group)     # ✨ แอดลง canvas
             PopMatrix()
             
         Clock.schedule_interval(self.update_glsl, 1 / 60.)
@@ -373,3 +375,28 @@ class Board3D(Widget):
         degree_y = math.degrees(self.rot_y)
         for rot_instruction in self.piece_rotations:
             rot_instruction.angle = degree_y
+            
+    # ✨ นำ 2 ฟังก์ชันนี้มาวางต่อท้าย โดยย่อหน้าให้ตรงกับ update_glsl ด้านบนเป๊ะๆ
+    def highlight_purple(self, row, col):
+        self.hover_group.clear()
+        tile_size = 1.0
+        offset = 4.0
+        color = (0.7, 0.3, 0.9, 0.6) # ✨ สีม่วงโปร่งแสง
+        
+        self.hover_group.add(PushMatrix())
+        # ✨ ตั้งแกน Y ที่ 0.02 ให้ลอยสูงกว่าไฮไลต์ปกติ (0.01) จะได้ไม่โดนสีฟ้าทับ
+        self.hover_group.add(Translate(col * tile_size - offset, 0.02, row * tile_size - offset))
+        v_highlight = [
+            0, 0, 0,  *color,  -1.0, -1.0,  
+            0, 0, 1,  *color,  -1.0, -1.0,
+            1, 0, 1,  *color,  -1.0, -1.0,  
+            1, 0, 0,  *color,  -1.0, -1.0
+        ]
+        self.hover_group.add(Mesh(
+            fmt=[(b'v_pos', 3, 'float'), (b'v_color', 4, 'float'), (b'v_tc0', 2, 'float')],
+            mode='triangles', vertices=v_highlight, indices=[0, 1, 2, 0, 2, 3]
+        ))
+        self.hover_group.add(PopMatrix())
+
+    def clear_purple_highlight(self):
+        self.hover_group.clear()
