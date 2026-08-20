@@ -612,39 +612,68 @@ class MacroBoard3D(Widget):
             size_base = 3.5 if getattr(node, 'is_main_base', False) else 2.5
             draw_sprite(base_path, wx, wy + 0.1, wz, size=size_base)
 
-            # ฟังก์ชันช่วยสร้าง Addons แบบสุ่มรัศมีวงกลม
-            def process_addons(center_x, center_z, addons_dict, r_min, r_max, pt_dist, line_dist, sprite_size):
+            # ฟังก์ชันช่วยสร้าง Addons แบบสุ่มรัศมีวงกลม (✨ เพิ่มระบบ Cache ป้องกันเมืองเคลื่อน)
+            def process_addons(center_x, center_z, addons_dict, r_min, r_max, pt_dist, line_dist, sprite_size, b_state=None, cache_prefix="main"):
                 addons_list = []
                 for key in ['farm', 'tavern']:
                     lvl = addons_dict.get(key, 0)
-                    if lvl > 0: addons_list.append((key, lvl))
+                    if lvl > 0: addons_list.append((key, lvl, False))
                 sp = addons_dict.get('special', None)
-                if sp: addons_list.append((sp, addons_dict.get('special_lvl', 1)))
+                if sp: addons_list.append((sp, addons_dict.get('special_lvl', 1), False))
+
+                # --- 🟢 เพิ่มสิ่งปลูกสร้างใหม่ (Market, Makerspace, Wallbuilder) ---
+                if b_state in ['market', 'makerspace', 'wallbuilder']:
+                    addons_list.append((b_state, 1, True)) # True = เป็นสิ่งปลูกสร้างใหม่
                 
-                for ad_name, ad_lvl in addons_list[:6]:
-                    pos = get_safe_circular_pos(center_x, center_z, r_min, r_max, placed_pts, pt_dist, line_dist)
-                    if not pos: continue # ถ้าหาที่ลงไม่ได้ ให้ข้ามอาคารนี้ไป
+                # เตรียม Dictionary ไว้เก็บพิกัดถาวรของเมืองนี้
+                if not hasattr(node, 'cached_3d_pos'):
+                    node.cached_3d_pos = {}
+                
+                for ad_name, ad_lvl, is_building in addons_list[:7]: 
+                    cache_key = f"{cache_prefix}_{ad_name}"
                     
-                    ax, az = pos
-                    placed_pts.append((ax, az)) # แอดลง List ว่าตรงนี้มีตึกตั้งอยู่แล้วนะ
+                    # 🟢 ดึงพิกัดเดิมมาใช้ถ้าเคยสุ่มไว้แล้ว
+                    if cache_key in node.cached_3d_pos:
+                        ax, az = node.cached_3d_pos[cache_key]
+                    else:
+                        pos = get_safe_circular_pos(center_x, center_z, r_min, r_max, placed_pts, pt_dist, line_dist)
+                        if not pos: continue 
+                        ax, az = pos
+                        node.cached_3d_pos[cache_key] = (ax, az) # สุ่มเสร็จให้บันทึกพิกัดเก็บไว้เลย
+                    
+                    placed_pts.append((ax, az)) # ใส่ใน placed_pts เพื่อให้ของชิ้นต่อไปไม่มาเกิดทับ
                     
                     ay = self.get_height_at(ax + offset_x, az + offset_z)
-                    lvl_str = "base1" if ad_lvl == 1 else ("up1" if ad_lvl == 2 else "up2")
-                    ad_path = f"assets/structure/addon/{lvl_str}/{ad_name}.png"
+                    
+                    if is_building:
+                        ad_path = f"assets/structure/build/{ad_name}.png"
+                    else:
+                        lvl_str = "base1" if ad_lvl == 1 else ("up1" if ad_lvl == 2 else "up2")
+                        ad_path = f"assets/structure/addon/{lvl_str}/{ad_name}.png"
                     
                     draw_mini_road(center_x, center_z, ax, az)
                     draw_sprite(ad_path, ax, ay + 0.1, az, size=sprite_size)
 
-            # 4.1 วาด Addons รอบๆ ปราสาท/หมู่บ้านหลักของตัวเอง
-            process_addons(wx, wz, getattr(node, 'addons', {}), r_min=1.8, r_max=3.5, pt_dist=1.5, line_dist=1.0, sprite_size=1.0)
+            # 4.1 วาด Addons รอบๆ ปราสาท/หมู่บ้านหลักของตัวเอง (ส่ง cache_prefix เป็น main)
+            process_addons(wx, wz, getattr(node, 'addons', {}), r_min=1.8, r_max=3.5, pt_dist=1.5, line_dist=1.0, sprite_size=1.0, b_state=getattr(node, 'building_state', None), cache_prefix="main")
 
-            # ✨ 5. วาดหมู่บ้านจำลองของประดับฉาก (Sub-villages) แบบสุ่มวงกลมวงนอก
+            # ✨ 5. วาดหมู่บ้านจำลองของประดับฉาก (Sub-villages) 
             if node.node_type == 'castle' and hasattr(node, 'sub_villages'):
-                for sv_data in node.sub_villages:
-                    # สุ่มให้อยู่วงนอก รัศมี 4.5 ถึง 6.5
-                    pos = get_safe_circular_pos(wx, wz, 4.5, 6.5, placed_pts, min_pt_dist=3.0, min_line_dist=1.2)
-                    if not pos: continue
-                    sx, sz = pos
+                if not hasattr(node, 'cached_3d_pos'):
+                    node.cached_3d_pos = {}
+                    
+                for i, sv_data in enumerate(node.sub_villages):
+                    cache_key = f"sv_{i}"
+                    
+                    # 🟢 ใช้ระบบ Cache กับ Sub-village ด้วย
+                    if cache_key in node.cached_3d_pos:
+                        sx, sz = node.cached_3d_pos[cache_key]
+                    else:
+                        pos = get_safe_circular_pos(wx, wz, 4.5, 6.5, placed_pts, min_pt_dist=3.0, min_line_dist=1.2)
+                        if not pos: continue
+                        sx, sz = pos
+                        node.cached_3d_pos[cache_key] = (sx, sz)
+                        
                     placed_pts.append((sx, sz))
                     
                     sy = self.get_height_at(sx + offset_x, sz + offset_z)
@@ -653,5 +682,5 @@ class MacroBoard3D(Widget):
                     sv_path = f"assets/structure/base/village/village_{node.faction}.png"
                     draw_sprite(sv_path, sx, sy + 0.1, sz, size=2.0)
                     
-                    # วาด Addons ย่อยๆ ของหมู่บ้านประดับฉาก โดยซ้อนวงกลมเข้าไปอีกชั้น
-                    process_addons(sx, sz, sv_data.get('addons', {}), r_min=1.2, r_max=2.0, pt_dist=1.0, line_dist=0.8, sprite_size=0.8)
+                    # วาด Addons ย่อยๆ ของหมู่บ้านประดับฉาก (ส่ง cache_prefix แยกตาม ID ของหมู่บ้าน)
+                    process_addons(sx, sz, sv_data.get('addons', {}), r_min=1.2, r_max=2.0, pt_dist=1.0, line_dist=0.8, sprite_size=0.8, cache_prefix=f"sv_{i}")

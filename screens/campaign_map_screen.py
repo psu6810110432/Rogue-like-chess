@@ -435,6 +435,11 @@ class CampaignMapScreen(Screen):
             self.trigger_rebellion(node)
             return
         
+
+        # ✨ สั่งอัปเดตโมเดล 3D ใหม่ หากสร้างอาคารเสร็จในเทิร์นนี้
+        if getattr(self, 'current_dimension', '2D') != '2D' and hasattr(self, 'macro_3d'):
+            self.macro_3d.draw_structures(self.nodes_list, self.nodes_3d_pos, getattr(self, 'current_all_edges', []))
+        
         app = App.get_running_app()
         save_game(app, self, save_name="", is_autosave=True, is_suspended=False)
             
@@ -480,6 +485,7 @@ class CampaignMapScreen(Screen):
         all_edges = map_data['white_edges'] + map_data['black_edges']
         if map_data['cross_edge']:
             all_edges.append(map_data['cross_edge'])
+        self.current_all_edges = all_edges # ✨ บันทึกเส้นทางทั้งหมดไว้สำหรับรีเฟรช 3D
 
         if hasattr(self, 'macro_3d') and self.macro_3d in self.children:
             self.remove_widget(self.macro_3d)
