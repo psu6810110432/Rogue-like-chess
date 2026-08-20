@@ -128,6 +128,8 @@ class RecruitPopup(ModalView):
         tax = self.app.tax_points.get(self.node.faction, 0)
         addons = self.panel.get_active_addons()
         tav_lvl = addons.get('tavern', 1)
+        # ✨ ดึงค่าสถานะโหมด Advanced Economy มาเก็บไว้
+        econ_enabled = getattr(self.app, 'selected_economic_system', False)
         
         # อัปเดต Status Box (Tax + Tavern Level)
         self.status_box.clear_widgets()
@@ -183,7 +185,8 @@ class RecruitPopup(ModalView):
                     elif p_lower in ['royalguard', 'praetorian']:
                         req_text = "3 Sup, 1 Wep T3"
                         
-                    if req_text:
+                    # ✨ เช็ค econ_enabled ก่อน ค่อยแสดงข้อความ
+                    if req_text and econ_enabled:
                         lbl_req = Label(text=f"[size=11sp][color=00ffff]{req_text}[/color][/size]", markup=True, size_hint_y=None, height=dp(20))
                         wrap_box.add_widget(lbl_req)
                         
@@ -232,15 +235,22 @@ class BuildPopup(ModalView):
         # --- ส่วนปุ่มสลับ Tab (MANAGE / UPGRADE) ---
         self.tab_box = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(10))
         
-        self.btn_tab_manage = Button(text="[b]MANAGE[/b]", markup=True, background_color=(0.3, 0.5, 0.8, 1))
-        self.btn_tab_manage.bind(on_release=lambda x: self.switch_tab('manage'))
+        # ✨ เช็คสถานะโหมดเกม ถ้าเปิด Advanced ถึงจะมีปุ่ม Manage
+        econ_enabled = getattr(self.app, 'selected_economic_system', False)
         
-        self.btn_tab_upgrade = Button(text="[b]UPGRADE[/b]", markup=True, background_color=(0.2, 0.2, 0.2, 1))
-        self.btn_tab_upgrade.bind(on_release=lambda x: self.switch_tab('upgrade'))
+        # ✨ บังคับให้หน้าเริ่มต้นเป็น Upgrade หากปิดโหมดเศรษฐกิจไว้
+        self.current_tab = 'manage' if econ_enabled else 'upgrade' 
         
-        self.tab_box.add_widget(self.btn_tab_manage)
-        self.tab_box.add_widget(self.btn_tab_upgrade)
-        self.root_box.add_widget(self.tab_box)
+        if econ_enabled:
+            self.btn_tab_manage = Button(text="[b]MANAGE[/b]", markup=True, background_color=(0.3, 0.5, 0.8, 1))
+            self.btn_tab_manage.bind(on_release=lambda x: self.switch_tab('manage'))
+            
+            self.btn_tab_upgrade = Button(text="[b]UPGRADE[/b]", markup=True, background_color=(0.2, 0.2, 0.2, 1))
+            self.btn_tab_upgrade.bind(on_release=lambda x: self.switch_tab('upgrade'))
+            
+            self.tab_box.add_widget(self.btn_tab_manage)
+            self.tab_box.add_widget(self.btn_tab_upgrade)
+            self.root_box.add_widget(self.tab_box)
         
         # --- แถบตัวเลือก Sub-village (แสดงเฉพาะโหมด Upgrade) ---
         self.nav_container = BoxLayout(size_hint_y=None, height=dp(40))
@@ -471,16 +481,13 @@ class BuildPopup(ModalView):
 
             # --- วาด Card สร้างสิ่งปลูกสร้างปราสาท ---
             if self.node.node_type == 'castle' and self.panel.active_sub_village is None:
-                if b_state is None:
-                    # เปลี่ยนเป็น GridLayout เพื่อรองรับตึกจำนวนมากโดยไม่ทำให้ UI เสียทรง
+                # ✨ ดัก econ_enabled ก่อนโชว์ปุ่มสร้างตึก 3 แบบใหม่
+                if b_state is None and econ_enabled:
                     grid_b = GridLayout(cols=2, spacing=dp(10), size_hint_y=None)
                     grid_b.bind(minimum_height=grid_b.setter('height'))
                     
-                    # สร้างตึก Market
                     grid_b.add_widget(BuildCard("Market", "Trade items\nCost: 3 Wood", 3, "assets/icon_effect/tax.png", lambda: self.build_castle_structure('market', 3)))
-                    # สร้างตึก Makerspace
                     grid_b.add_widget(BuildCard("Makerspace", "Craft weapons\nCost: 4 Wood", 4, "assets/icon_effect/base_atk.png", lambda: self.build_castle_structure('makerspace', 4)))
-                    # 🟢 สร้างตึก Wallbuilder
                     grid_b.add_widget(BuildCard("Wallbuilder", "70% Block Attack\nCost: 9 Wood", 9, "assets/icon_effect/buff_def.png", lambda: self.build_castle_structure('wallbuilder', 9)))
                     
                     self.content_grid.add_widget(grid_b)
