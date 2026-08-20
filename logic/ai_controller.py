@@ -40,7 +40,12 @@ class AIController:
 
         if is_bot_turn and not self.screen.game.game_result:
             self.screen.is_input_locked = True
-            self.screen.ai_event = Clock.schedule_once(self.trigger_ai_move, 0.8)
+            # ✨ เช็คสถานะ FF: ถ้าเปิดอยู่ให้ลดดีเลย์เหลือ 0.05 วินาที
+            ff_mode = getattr(self.screen, 'fast_forward_ai', False)
+            delay = 0.05 if ff_mode else 0.8
+            
+            # ✨ เปลี่ยนจาก 0.8 เป็น delay
+            self.screen.ai_event = Clock.schedule_once(self.trigger_ai_move, delay)
         else:
             self.screen.is_input_locked = False
 
@@ -56,6 +61,11 @@ class AIController:
         game_mode = getattr(self.screen, 'game_mode', 'PVP')
         difficulty = getattr(App.get_running_app(), 'ai_difficulty', 'normal')
         ai_color = self.screen.game.current_turn
+
+        # ✨ กำหนดความเร็วของแอนิเมชันในตานี้
+        ff_mode = getattr(self.screen, 'fast_forward_ai', False)
+        delay_short = 0.05 if ff_mode else 0.5
+        delay_long = 0.05 if ff_mode else 0.8
 
         # 1. Item usage by AI
         inv = getattr(self.screen.game, f'inventory_{ai_color}', [])
@@ -96,12 +106,6 @@ class AIController:
                 if not atk or not df:
                     return
 
-                # ── Visual engagement cue (no icon changes) ─────────────────
-                # Highlight the two squares so the spectator knows what is
-                # attacking what, WITHOUT overwriting any piece icons.
-                # Both pieces remain fully visible on the board.
-                #   Yellow / "selected"  = attacker's current square (origin)
-                #   Red    / "check"     = defender's square (about to be hit)
                 if hasattr(self.screen, 'squares'):
                     sq_a = self.screen.squares.get((sr, sc))
                     sq_d = self.screen.squares.get((er, ec))
@@ -110,23 +114,29 @@ class AIController:
                 App.get_running_app().play_move_sound()
 
                 if getattr(df, 'item', None) and df.item.id == 4:
-                    # Shield block: highlights already set; resolve after a
-                    # short pause so the spectator can see the attempt.
                     def _do_shield_block(dt):
                         self.screen.controller.submit_shield_block((sr, sc), (er, ec))
                         self.screen.init_board_ui()
                         self.screen.ai_event = None
                         self.screen.trigger_end_turn_logic(ai_color)
-                    Clock.schedule_once(_do_shield_block, 0.5)
+                    # ✨ ใช้ delay_short
+                    Clock.schedule_once(_do_shield_block, delay_short)
+                    return
+
+                # ✨ ลอจิกข้ามหน้าจอแอนิเมชันปะทะ (Auto-Resolve) เมื่อกด FF
+                if ff_mode:
+                    # ❌ ลบ import random บรรทัดนี้ทิ้งไปเลยครับ!
+                    # สุ่มผลแพ้ชนะคร่าวๆ (ถ้ามีสูตรคำนวณ ATK/DEF อยู่แล้ว สามารถใส่แทนตรงนี้ได้)
+                    auto_result = random.choices(["won", "died", "draw"], weights=[45, 45, 10])[0]
+                    self.screen.execute_board_move((sr, sc), (er, ec), auto_result)
+                    Clock.schedule_once(self._schedule_next_ai_turn, delay_long)
                     return
 
                 # ── After 0.5s, open the crash overlay ──────────────────────
-                # Both pieces are still on the board; the spectator has had
-                # time to register who is fighting whom.
                 Clock.schedule_once(
                     lambda dt, a=atk, d=df, s=(sr, sc), e=(er, ec):
                         self.screen.show_crash_overlay(a, d, s, e),
-                    0.5
+                    delay_short # ✨ ใช้ delay_short
                 )
                 return
 
@@ -141,9 +151,8 @@ class AIController:
 
         self.screen.ai_event = None
 
-        # 4. Schedule the next AI turn after a short delay so the board
-        #    has time to render and the player can follow the action.
-        Clock.schedule_once(self._schedule_next_ai_turn, 0.8)
+        # ✨ ใช้ delay_long สำหรับการเดินตาถัดไป
+        Clock.schedule_once(self._schedule_next_ai_turn, delay_long)
 
     # ------------------------------------------------------------------
     # Continuous loop helper

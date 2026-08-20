@@ -128,6 +128,7 @@ class GameplayScreen(Screen):
         self.main_layout.clear_widgets()
         self.deployment_manager.remove_layer()
         self.hide_item_tooltip()
+        self.fast_forward_ai = False
         self.status_popup = self.crash_popup = self.item_tooltip = self.selected_item = None
         self.game_mode, self._game_over_scheduled, self.selected = mode, False, None
         self.is_input_locked = False 
@@ -157,6 +158,19 @@ class GameplayScreen(Screen):
         
         if mode == 'Divide_Conquer':
             self.setup_divide_conquer_board(app)
+
+        # ✨ 2. สร้างปุ่ม Fast Forward (FF)
+        if hasattr(self, 'ff_btn') and self.ff_btn in self.root_layout.children:
+            self.root_layout.remove_widget(self.ff_btn)
+            
+        self.ff_btn = Button(
+            text="FF: OFF", font_size='14sp', bold=True,
+            size_hint=(None, None), size=(dp(80), dp(40)),
+            pos_hint={'right': 0.95, 'top': 0.98}, # วางไว้มุมขวาบน
+            background_color=(0.3, 0.3, 0.3, 0.8)
+        )
+        self.ff_btn.bind(on_release=self.toggle_fast_forward)
+        self.root_layout.add_widget(self.ff_btn)
             
         self.board_area = BoxLayout(orientation='vertical', size_hint_x=0.75)
         
@@ -1379,3 +1393,13 @@ class GameplayScreen(Screen):
             else:
                 # สั่งลบสีม่วง
                 self.board_3d.clear_purple_highlight()
+                
+    def toggle_fast_forward(self, instance):
+        """สลับสถานะโหมดเร่งความเร็ว AI"""
+        self.fast_forward_ai = not self.fast_forward_ai
+        if self.fast_forward_ai:
+            instance.text = "FF: ON"
+            instance.background_color = (0.8, 0.4, 0.1, 1) # เปลี่ยนเป็นสีส้มเมื่อเปิดใช้งาน
+        else:
+            instance.text = "FF: OFF"
+            instance.background_color = (0.3, 0.3, 0.3, 0.8)
