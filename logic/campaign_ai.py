@@ -80,6 +80,9 @@ class CampaignAI:
             map_screen.status_lbl.text = "[color=ffff44][b]AI IS MANAGING ECONOMY...[/b][/color]"
             map_screen.status_lbl.color = (1, 1, 0.27, 1)
             
+            # ✨ 1. เพิ่มบรรทัดนี้ ให้ AI สำรวจทรัพยากรและสลับโหมดฟาร์ม
+            self.plan_resource_toggles(map_screen, faction)
+            
             # เรียกใช้งานระบบการตลาดและการคราฟต์อาวุธ
             self.plan_trading(map_screen, faction)
             self.plan_crafting(map_screen, faction)
@@ -315,6 +318,9 @@ class CampaignAI:
                 if marchers > target_strength:
                     score += 5
 
+                if marchers < target_strength:
+                    continue
+
                 # Prefer attacking with bigger armies
                 score += marchers
 
@@ -362,8 +368,8 @@ class CampaignAI:
 
             if not candidates: break
 
-            # เรียงตามลำดับความสำคัญ (priority) และราคาภาษี
-            candidates.sort(key=lambda c: (c['priority'], c['cost_dict']['tax_points']))
+            # ✨ แก้ไข: เปลี่ยนไปใช้ .get('tax_points', 0) เพื่อป้องกัน Error ในกรณีที่ตึกนั้นใช้แต่ไม้ ไม่ใช้ภาษีเลย
+            candidates.sort(key=lambda c: (c['priority'], c['cost_dict'].get('tax_points', 0)))
 
             for cand in candidates:
                 if not self._can_afford(app, faction, cand['cost_dict']):
@@ -583,9 +589,12 @@ class CampaignAI:
             costs['iron_points'] = level * 2
             
         # 🟢 เพิ่มราคาสร้างตึกใหม่ (Market, Makerspace, Wallbuilder)
-        elif key in ['new_market', 'new_makerspace', 'new_wallbuilder']:
-            costs['wood_points'] = 5
-            costs['iron_points'] = 3
+        elif key == 'new_market':
+            costs = {'wood_points': 3}
+        elif key == 'new_makerspace':
+            costs = {'wood_points': 4}
+        elif key == 'new_wallbuilder':
+            costs = {'wood_points': 9}
             
         return costs
 
@@ -603,6 +612,30 @@ class CampaignAI:
             res_dict = getattr(app, res_name, {})
             current_amount = res_dict.get(faction, 0)
             res_dict[faction] = max(0, current_amount - required_amount)
+
+    def plan_resource_toggles(self, map_screen, faction):
+        """ลอจิกปรับโหมดฟาร์มและเหมืองตามความต้องการทรัพยากร"""
+        app = App.get_running_app()
+        wood = app.wood_points.get(faction, 0)
+        iron = app.iron_points.get(faction, 0)
+        
+        # ถ้าไม้หรือแร่น้อยเกินไป ให้เน้นฟาร์มทรัพยากร (Res) แทนภาษี (Tax)
+        need_resources = (wood < 15 or iron < 10)
+        
+        owned_nodes = [n for n in map_screen.nodes_list if n.faction == faction]
+        for node in owned_nodes:
+            addons = getattr(node, 'addons', {})
+            if addons.get('farm', 0) > 0:
+                addons['farm_mode'] = 'resources' if need_resources else 'tax'
+            if addons.get('special') == 'mine':
+                addons['mine_mode'] = 'resources' if need_resources else 'tax'
+                
+            for sv in getattr(node, 'sub_villages', []):
+                sv_addons = sv.get('addons', {})
+                if sv_addons.get('farm', 0) > 0:
+                    sv_addons['farm_mode'] = 'resources' if need_resources else 'tax'
+                if sv_addons.get('special') == 'mine':
+                    sv_addons['mine_mode'] = 'resources' if need_resources else 'tax'
 
     # ------------------------------------------------------------------
     # Cleanup
