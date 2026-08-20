@@ -52,3 +52,13 @@ Thumbs.db
 # IDE specific files (VSCode, PyCharm)
 .vscode/
 .idea/
+
+# Database
+*.db
+*.sqlite3
+rogue_chess_save.db
+*.db-journal
+
+# Python Cache
+__pycache__/
+*.pyc

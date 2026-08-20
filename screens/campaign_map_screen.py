@@ -22,6 +22,7 @@ from components.map_node import MapNode
 # ✨ เพิ่มการ Import แมพ 3D โหมด DNC เข้ามา
 from components.board_3d_macro import MacroBoard3D
 import math
+from logic.save_manager import save_game
 
 
 class CampaignMapScreen(Screen):
@@ -425,6 +426,9 @@ class CampaignMapScreen(Screen):
             self.switch_turn() 
             self.trigger_rebellion(node)
             return
+        
+        app = App.get_running_app()
+        save_game(app, self, save_name="", is_autosave=True, is_suspended=False)
             
         self.switch_turn()
 
@@ -940,3 +944,11 @@ class CampaignMapScreen(Screen):
             
         if hasattr(self, 'army_panel'):
             self.army_panel.close_panel()
+
+    def on_quit_campaign(self):
+        # บันทึกสถานะปัจจุบันเป็นแบบ Suspended (ยังเล่นไม่จบเทิร์น)
+        app = App.get_running_app()
+        save_game(app, self, save_name="", is_autosave=True, is_suspended=True)
+        
+        # ตัดเข้าสู่หน้า Main Menu
+        self.manager.current = 'main_menu'
