@@ -102,3 +102,20 @@ class MapBanner(ButtonBehavior, FloatLayout):
     def destroy(self):
         """คลายการผูกเมาส์เมื่อรีเฟรชธงทิ้ง"""
         Window.unbind(mouse_pos=self.on_mouse_hover)
+
+    def update_faction_state(self):
+        """อัปเดตสีพื้นหลังและขอบตาม Faction ปัจจุบันของ Node"""
+        if self.node.faction == 'white':
+            bg_color = (0.9, 0.9, 0.9, 0.95)
+            border_color = (0.1, 0.1, 0.1, 1)
+        elif self.node.faction == 'black':
+            bg_color = (0.15, 0.15, 0.15, 0.95)
+            border_color = (0.9, 0.9, 0.9, 1)
+        else: # Red
+            bg_color = (0.6, 0.1, 0.15, 0.95)
+            border_color = (0, 0, 0, 0) # โปร่งใสแทน None เพื่อป้องกัน error
+            
+        # อัปเดตสีใน Canvas ที่ถูกสร้างไว้แล้ว
+        self.mesh_color.rgba = bg_color
+        if self.line_color:
+            self.line_color.rgba = border_color

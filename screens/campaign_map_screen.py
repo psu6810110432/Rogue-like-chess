@@ -258,7 +258,6 @@ class CampaignMapScreen(Screen):
             app.turn_number += 1
             self.status_lbl.text = f"DIVINE ORDER (WHITE) - TURN {app.turn_number}"
             self.status_lbl.color = (1, 0.8, 0.2, 1)
-            # AI turn just finished — unlock inputs
             self.ai_turn_active = False
             
         for node in self.nodes_list:
@@ -267,7 +266,11 @@ class CampaignMapScreen(Screen):
                 
         self.jump_to_base(None)
         
-        # If Black's turn in a PVE match, hand control to the Campaign AI
+        # ✨ เพิ่มส่วนนี้: สั่งให้รีเฟรชธงใหม่เพื่อสลับฝั่งเมืองฝ่ายเราและศัตรู
+        if getattr(self, 'current_dimension', '2D') != '2D':
+            self.refresh_banners()
+        
+        # If Black's turn in a PVE match...
         if (app.current_map_turn == 'black'
                 and getattr(app, 'match_type', '') == 'PVE'):
             self.ai_turn_active = True
@@ -921,3 +924,21 @@ class CampaignMapScreen(Screen):
             'weapon_t2': random.randint(16, 18), # อาวุธ Tier 2
             'weapon_t3': random.randint(22, 24)  # อาวุธ Tier 3
         }
+
+    # เพิ่มเมธอดนี้ในคลาส CampaignMapScreen 
+    def on_leave(self, *args):
+        # ล้างแบนเนอร์และปลดอีเวนต์เมาส์เมื่อออกจากหน้าจอ
+        if hasattr(self, 'active_banners'):
+            for banner in self.active_banners:
+                if hasattr(banner, 'destroy'):
+                    banner.destroy()
+            self.active_banners.clear()
+            
+        # ล้าง Layout ซ้ายขวาไม่ให้แสดงค้าง
+        if hasattr(self, 'left_box'):
+            self.left_box.clear_widgets()
+        if hasattr(self, 'right_box'):
+            self.right_box.clear_widgets()
+            
+        if hasattr(self, 'army_panel'):
+            self.army_panel.close_panel()
