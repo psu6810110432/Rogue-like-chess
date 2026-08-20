@@ -6,6 +6,7 @@ from kivy.graphics import Color, Rectangle, Line, Ellipse
 from kivy.metrics import dp
 from kivy.app import App
 from logic.campaign_helpers import generate_piece
+from kivy.uix.image import Image
 
 def roll_special_addon():
     roll = random.randint(1, 100)
@@ -131,16 +132,38 @@ class MapNode(Button):
         self.canvas.before.clear()
         self.addon_data = []
         main_addons = get_active_addons_list(self.addons)
-        a_step = 360 / max(1, len(main_addons))
+        
+        # --- 🟢 1. เช็คสถานะสิ่งปลูกสร้าง (Market, Makerspace, Wallbuilder) ---
+        b_state = getattr(self, 'building_state', None)
+        has_building = b_state in ['market', 'makerspace', 'wallbuilder']
+        
+        # คำนวณจำนวนเส้นทางทั้งหมด (Addon ปกติ + สิ่งปลูกสร้างใหม่ถ้ามี)
+        total_branches = len(main_addons) + (1 if has_building else 0)
+        a_step = 360 / max(1, total_branches)
         offset = 90 if self.node_type == 'castle' else 0
+        
+        # --- 🟢 2. เพิ่ม Addon ปกติลงในคิววาด ---
         for i, (a_name, a_lvl) in enumerate(main_addons):
             angle = math.radians(i * a_step + offset)
             dist = dp(90)
             self.addon_data.append({
                 'name': a_name, 'lvl': a_lvl,
-                'rel_pos': (math.cos(angle)*dist, math.sin(angle)*dist)
+                'rel_pos': (math.cos(angle)*dist, math.sin(angle)*dist),
+                'is_building': False # กำหนด Flag ว่านี่ไม่ใช่ Building จากโหมด Divide & Conquer
+            })
+            
+        # --- 🟢 3. เพิ่มสิ่งปลูกสร้างใหม่ (เส้นที่ 4) ลงในคิววาด ---
+        if has_building:
+            i = len(main_addons) # ต่อท้าย Index ของ Addon เดิม
+            angle = math.radians(i * a_step + offset)
+            dist = dp(90)
+            self.addon_data.append({
+                'name': b_state, 'lvl': 1,
+                'rel_pos': (math.cos(angle)*dist, math.sin(angle)*dist),
+                'is_building': True # Flag ว่าเป็น Building ใหม่
             })
 
+        # --- ส่วนของ Sub Villages (คงไว้เหมือนเดิม) ---
         for sv in self.sub_villages:
             sv['addon_data'] = []
             sv_addons = get_active_addons_list(sv['addons'])
@@ -148,7 +171,7 @@ class MapNode(Button):
             for i, (a_name, a_lvl) in enumerate(sv_addons):
                 sv_angle = math.atan2(sv['rel_pos'][1], sv['rel_pos'][0])
                 angle = sv_angle + math.radians(-90 + i * sv_step)
-                dist = dp(70) 
+                dist = dp(70)
                 sv['addon_data'].append({
                     'name': a_name, 'lvl': a_lvl,
                     'rel_pos': (math.cos(angle)*dist, math.sin(angle)*dist)
@@ -171,6 +194,7 @@ class MapNode(Button):
                     al = Line(width=dp(2))
                     sv['a_lines'].append((al, sv['rel_pos'], ad['rel_pos']))
 
+            # วาดเส้นของ Main Castle (รวมถึงสิ่งปลูกสร้างใหม่ด้วย)
             self.main_a_lines = []
             for ad in self.addon_data:
                 al = Line(width=dp(2.5))
@@ -192,8 +216,14 @@ class MapNode(Button):
 
             self.main_a_rects = []
             for ad in self.addon_data:
-                folder = "base1" if ad['lvl'] <= 1 else ("up1" if ad['lvl'] == 2 else "up2")
-                img_path = f"assets/structure/addon/{folder}/{ad['name']}.png"
+                # --- 🟢 4. กำหนด Path แยกกันระหว่าง Addon เก่า กับ Building ใหม่ ---
+                if ad.get('is_building', False):
+                    # โหลดภาพจาก /build/ ตามที่คุณต้องการ
+                    img_path = f"assets/structure/build/{ad['name']}.png"
+                else:
+                    folder = "base1" if ad['lvl'] <= 1 else ("up1" if ad['lvl'] == 2 else "up2")
+                    img_path = f"assets/structure/addon/{folder}/{ad['name']}.png"
+                    
                 rect = Rectangle(source=img_path, size=(dp(30), dp(30)))
                 self.main_a_rects.append((rect, ad['rel_pos']))
                 
@@ -290,3 +320,11 @@ class MapNode(Button):
             map_screen.army_panel.open_for_node(self)
         else:
             map_screen.status_lbl.text = "[color=ff0000]ENEMY TERRITORY. SELECT YOUR BASE TO ATTACK FROM.[/color]"
+
+    def update_building_visual(self):
+        """สั่งให้วาดกราฟิกใหม่ทั้งหมด (รวมถึงเส้นที่ 4 ของสิ่งปลูกสร้างถ้ามี)"""
+        self.update_graphics()
+
+    def remove_building_visual(self):
+        """อัปเดตกราฟิกใหม่เมื่อสิ่งปลูกสร้างถูกทำลาย (เส้นที่ 4 จะหายไปเอง)"""
+        self.update_graphics()

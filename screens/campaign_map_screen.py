@@ -363,17 +363,25 @@ class CampaignMapScreen(Screen):
                     if b_state == 'building_market':
                         node.building_state = 'market'
                         node.market_rates = self.generate_market_rates()
+                        if hasattr(node, 'update_building_visual'): node.update_building_visual() # ✨ วาดเมื่อสร้างเสร็จ
+                        
                     elif b_state == 'market':
                         node.market_rates = self.generate_market_rates() 
+                        
                     elif b_state == 'building_makerspace': 
                         node.building_state = 'makerspace'
-                    elif b_state == 'building_wallbuilder': # 🟢 อัปเดตสถานะสร้างกำแพงเสร็จ
+                        if hasattr(node, 'update_building_visual'): node.update_building_visual() # ✨ วาดเมื่อสร้างเสร็จ
+                        
+                    elif b_state == 'building_wallbuilder': 
                         node.building_state = 'wallbuilder'
                         node.wallbuilder_cooldown = 0
+                        if hasattr(node, 'update_building_visual'): node.update_building_visual() # ✨ วาดเมื่อสร้างเสร็จ
+                        
                     elif b_state == 'destroying':
                         node.building_state = None
                         if hasattr(node, 'market_rates'):
                             del node.market_rates
+                        if hasattr(node, 'remove_building_visual'): node.remove_building_visual() # ✨ ลบภาพออกเมื่อถูกทำลาย
                 
                 # --- 🔵 จัดการสิ่งปลูกสร้างใน หมู่บ้านย่อย (Sub-villages) ---
                 if node.node_type == 'castle': 
@@ -652,6 +660,11 @@ class CampaignMapScreen(Screen):
                     
             for node in self.nodes_list: 
                 self.map_content.add_widget(node)
+                
+                # ✨ ดึงภาพมาแสดงทันทีสำหรับโหมด 2D หากปราสาทนั้นเคยสร้างเสร็จไว้แล้ว
+                if hasattr(node, 'building_state') and node.building_state in ['market', 'makerspace', 'wallbuilder']:
+                    if hasattr(node, 'update_building_visual'):
+                        node.update_building_visual()
                 
             self.scroll_view.scroll_x, self.scroll_view.scroll_y = 0.5, 0.5
             self.jump_to_base(None)
