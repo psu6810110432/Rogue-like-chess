@@ -13,8 +13,8 @@ def init_db():
     """สร้างตารางที่จำเป็นหากยังไม่มีในระบบ"""
     conn = get_connection()
     cursor = conn.cursor()
-    
-    # 1. ตาราง World State (เก็บข้อมูลภาพรวมของ Save แต่ละช่อง)
+
+    # 1. ตาราง World State (เพิ่ม white_tribe และ black_tribe)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS worlds (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,9 +28,12 @@ def init_db():
             ai_difficulty TEXT DEFAULT 'normal',  
             is_autosave BOOLEAN DEFAULT 0,
             is_suspended BOOLEAN DEFAULT 0,
-            last_played TIMESTAMP
+            last_played TIMESTAMP,
+            white_tribe TEXT DEFAULT 'the knight company',
+            black_tribe TEXT DEFAULT 'the chaos mankind'
         )
     ''')
+    # ... โค้ดสร้างตารางอื่นๆ เหมือนเดิม ...
 
     # 2. ตาราง Factions (เก็บทรัพยากรของแต่ละสีใน World นั้น)
     cursor.execute('''
@@ -43,6 +46,11 @@ def init_db():
             weapon_t1 INTEGER DEFAULT 0,
             weapon_t2 INTEGER DEFAULT 0,
             weapon_t3 INTEGER DEFAULT 0,
+            wood_points INTEGER DEFAULT 0,     
+            iron_points INTEGER DEFAULT 0,     
+            coal_points INTEGER DEFAULT 0,     
+            silver_points INTEGER DEFAULT 0,   
+            gold_points INTEGER DEFAULT 0,     
             FOREIGN KEY(world_id) REFERENCES worlds(id) ON DELETE CASCADE
         )
     ''')
@@ -110,19 +118,19 @@ def save_game(app, map_screen, save_name, is_autosave=False, is_suspended=False)
     # ใช้ getattr ดึงค่า ถ้าไม่มีให้ใช้ 'Medium' เป็นค่าเริ่มต้น
     map_size = getattr(app, 'selected_map_size', 'Medium')
     
-    # ดึงค่าเลขเทิร์น (เผื่อคุณตั้งชื่อตัวแปรไว้ว่า turn_count แทน) ถ้าไม่มีเลยจะให้เริ่มที่ 1
-    current_turn = getattr(map_screen, 'current_turn', getattr(map_screen, 'turn_count', 1))
-    
-    # ดึงค่าสีที่กำลังเล่น (เผื่อตั้งชื่อไว้ว่า active_faction) ถ้าไม่มีให้เป็น 'white'
-    active_faction = getattr(map_screen, 'current_faction', getattr(map_screen, 'active_faction', 'white'))
-
-    # ดึงค่า Seed จาก App
+    # 🟢 เพิ่มการดึงค่าตัวแปรให้ครอบคลุมและตรงกับ App 100%
+    current_turn = getattr(app, 'turn_number', getattr(map_screen, 'current_turn', getattr(map_screen, 'turn_count', 1)))
+    active_faction = getattr(app, 'current_map_turn', getattr(map_screen, 'current_faction', getattr(map_screen, 'active_faction', 'white')))
     map_seed = getattr(app, 'current_map_seed', 0)
 
-    # 🟢 ดึงการตั้งค่าห้องจาก App
+    # ดึงการตั้งค่าห้องจาก App
     match_type = getattr(app, 'match_type', 'LOCAL_PVP')
     econ_system = 1 if getattr(app, 'selected_economic_system', False) else 0
     ai_diff = getattr(app, 'ai_difficulty', 'normal')
+
+    # 🟢 ดึงข้อมูลเผ่าของทั้ง 2 ฝ่าย (ถ้าหาไม่เจอให้ใช้ค่าเริ่มต้น)
+    w_tribe = getattr(app, 'white_tribe', 'the knight company')
+    b_tribe = getattr(app, 'black_tribe', 'the chaos mankind')
 
     cursor.execute('''
         INSERT INTO worlds (save_name, map_size, map_seed, current_turn, active_faction, match_type, economic_system, ai_difficulty, is_autosave, is_suspended, last_played)
@@ -131,18 +139,26 @@ def save_game(app, map_screen, save_name, is_autosave=False, is_suspended=False)
     
     world_id = cursor.lastrowid
 
+    # ✨ เพิ่มบรรทัดนี้เข้าไป! เพื่อบังคับให้เกมรู้ตัวว่า ID เซฟปัจจุบันถูกเปลี่ยนแล้ว
+    app.loaded_world_id = world_id
+
     # 2. บันทึกทรัพยากร (Factions)
     for faction in ['white', 'black', 'red']:
         cursor.execute('''
-            INSERT INTO factions (world_id, faction_name, tax_points, supplies_points, weapon_t1, weapon_t2, weapon_t3)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO factions (world_id, faction_name, tax_points, supplies_points, weapon_t1, weapon_t2, weapon_t3, wood_points, iron_points, coal_points, silver_points, gold_points)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             world_id, faction,
             app.tax_points.get(faction, 0),
             app.supplies_points.get(faction, 0),
             app.weapon_t1_points.get(faction, 0),
             app.weapon_t2_points.get(faction, 0),
-            app.weapon_t3_points.get(faction, 0)
+            app.weapon_t3_points.get(faction, 0),
+            getattr(app, 'wood_points', {}).get(faction, 0), 
+            getattr(app, 'iron_points', {}).get(faction, 0),
+            getattr(app, 'coal_points', {}).get(faction, 0),
+            getattr(app, 'silver_points', {}).get(faction, 0),
+            getattr(app, 'gold_points', {}).get(faction, 0)
         ))
 
     # 3. บันทึกแผนที่และสิ่งปลูกสร้าง (Nodes)

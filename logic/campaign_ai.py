@@ -359,28 +359,31 @@ class CampaignAI:
         owned_nodes = [n for n in map_screen.nodes_list if n.faction == faction]
         if not owned_nodes: return
 
+        # 🟢 ประเมินสถานะ End Game (มียึดปราสาทได้หลายเมือง หรือทรัพยากรล้นเหลือ)
+        owned_castles = len([n for n in owned_nodes if n.node_type == 'castle'])
+        wood = app.wood_points.get(faction, 0)
+        iron = app.iron_points.get(faction, 0)
+        is_endgame = (owned_castles >= 2) or (wood > 30 and iron > 20)
+
         upgraded = True
         while upgraded:
             upgraded = False
             candidates = []
             for node in owned_nodes:
-                candidates.extend(self._collect_upgrade_candidates(node, is_advanced))
+                # 🟢 ส่งค่า is_endgame เข้าไปให้ฟังก์ชันลูกตัดสินใจ
+                candidates.extend(self._collect_upgrade_candidates(node, is_advanced, is_endgame))
 
             if not candidates: break
 
-            # ✨ แก้ไข: เปลี่ยนไปใช้ .get('tax_points', 0) เพื่อป้องกัน Error ในกรณีที่ตึกนั้นใช้แต่ไม้ ไม่ใช้ภาษีเลย
             candidates.sort(key=lambda c: (c['priority'], c['cost_dict'].get('tax_points', 0)))
 
             for cand in candidates:
                 if not self._can_afford(app, faction, cand['cost_dict']):
                     continue
                 
-                # จ่ายทรัพยากร
                 self._pay_costs(app, faction, cand['cost_dict'])
                 
-                # 🟢 เช็คว่าเป็นการสร้างตึกใหม่ หรืออัปเกรดตึกเดิม
                 if cand['key'] == 'new_building':
-                    # เปลี่ยนสถานะเมืองเป็นกำลังก่อสร้าง (รอสร้างเสร็จตอนจบเทิร์น)
                     cand['node_ref'].building_state = f"building_{cand['b_name']}"
                 else:
                     cand['addons'][cand['key']] += 1
@@ -388,50 +391,50 @@ class CampaignAI:
                 upgraded = True
                 break
 
-    def _collect_upgrade_candidates(self, node, is_advanced):
+    def _collect_upgrade_candidates(self, node, is_advanced, is_endgame):
         results = []
 
         def _scan_addons(addons):
-            # Farm
             farm_lvl = addons.get('farm', 1)
             if farm_lvl < 3:
                 cost_dict = self._get_building_costs('farm', farm_lvl, farm_lvl * 5, is_advanced)
-                results.append({'key': 'farm', 'cost_dict': cost_dict, 'priority': 2, 'addons': addons}) # ถอย Priority ลงมา
+                results.append({'key': 'farm', 'cost_dict': cost_dict, 'priority': 2, 'addons': addons})
             
-            # Tavern
             tav_lvl = addons.get('tavern', 1)
             if tav_lvl < 3:
                 cost_dict = self._get_building_costs('tavern', tav_lvl, tav_lvl * 6, is_advanced)
                 results.append({'key': 'tavern', 'cost_dict': cost_dict, 'priority': 3, 'addons': addons})
             
-            # Special
             spec = addons.get('special')
             spec_lvl = addons.get('special_lvl', 0)
             if spec and spec not in ['mine'] and spec_lvl < 3:
                 cost_dict = self._get_building_costs('special_lvl', spec_lvl, spec_lvl * 8, is_advanced)
                 results.append({'key': 'special_lvl', 'cost_dict': cost_dict, 'priority': 4, 'addons': addons})
 
-        # --- 🟢 เริ่ม: ลอจิกให้ AI ตัดสินใจสร้างตึกใหม่ ---
+        # 🟢 ลอจิกการเลือกสร้างตึกอย่างมีชั้นเชิง
         if node.node_type == 'castle' and getattr(node, 'building_state', None) is None:
-            # AI จะสุ่มว่าอยากสร้างตึกอะไร เพื่อความหลากหลาย
-            new_buildings = [
-                ('market', 10),      # (ชื่อตึก, ราคาภาษีเริ่มต้น)
-                ('makerspace', 12),
-                ('wallbuilder', 15)
-            ]
-            import random
-            b_name, b_cost = random.choice(new_buildings)
-            
-            # ดึงราคาแบบตระกร้า และตั้ง Priority เป็น 1 (สำคัญสุด)
+            # เช็คว่าเมืองนี้ (หรือหมู่บ้านลูก) มีเหมือง (Mine) หรือไม่
+            has_mine = False
+            if getattr(node, 'addons', {}).get('special') == 'mine': has_mine = True
+            for sv in getattr(node, 'sub_villages', []):
+                if sv.get('addons', {}).get('special') == 'mine': has_mine = True
+                
+            # ตัดสินใจสร้างตึกตามสถานการณ์
+            if is_endgame:
+                b_name, b_cost = 'wallbuilder', 15    # ท้ายเกม: สร้างกำแพงเตรียมรับมือศัตรู
+            elif has_mine:
+                b_name, b_cost = 'makerspace', 12     # มีเหมือง: สร้างที่คราฟต์เพื่อแปรรูปแร่
+            else:
+                b_name, b_cost = 'market', 10         # ไม่มีเหมือง: สร้างตลาดเพื่อซื้อแร่มาทดแทน
+                
             cost_dict = self._get_building_costs(f"new_{b_name}", 1, b_cost, is_advanced)
             results.append({
                 'key': 'new_building', 
                 'b_name': b_name, 
                 'cost_dict': cost_dict, 
                 'priority': 1, 
-                'node_ref': node # ส่งอ้างอิงเมืองมาด้วยเพื่อเอาไปเปลี่ยนสถานะ
+                'node_ref': node 
             })
-        # --- จบ: ลอจิกตึกใหม่ ---
 
         main_addons = getattr(node, 'addons', {})
         if main_addons: _scan_addons(main_addons)
@@ -507,18 +510,24 @@ class CampaignAI:
         rates = getattr(market, 'market_rates', {})
         if not rates: return
 
-        # AI กำหนดเป้าหมายตุนทรัพยากร (ถ้าของเหลือน้อยกว่านี้จะพยายามซื้อ)
+        # 🟢 กำหนดเป้าหมายตุนทรัพยากรให้ AI (อิงจากคีย์ใน Maker Rate ของคุณ)
+        # รูปแบบ: 'ตัวแปรในกระเป๋า': ('คีย์ในตลาด', จำนวนที่อยากตุนไว้ในคลัง)
         target_stock = {
             'wood_points': ('wood', 15), 
             'iron_points': ('iron', 10),
-            'coal_points': ('coal', 5)
+            'coal_points': ('coal', 5),
+            'silver_points': ('silver', 3), # ตุนเงินไว้เผื่อหลอมเหล็ก
+            'gold_points': ('gold', 2),     # ตุนทองไว้เผื่อหลอมเหล็ก
+            'weapon_t1_points': ('weapon_t1', 3), 
+            'weapon_t2_points': ('weapon_t2', 2),
+            'weapon_t3_points': ('weapon_t3', 1)
         }
 
         budget = app.tax_points.get(faction, 0)
         
         for res_name, (rate_key, target_amount) in target_stock.items():
             current = getattr(app, res_name, {}).get(faction, 0)
-            cost_per_unit = rates.get(rate_key, 999) # ถ้าไม่มีของขายในตลาด ตั้งแพงๆ ไว้
+            cost_per_unit = rates.get(rate_key, 999) # ดึงราคาแบบสุ่ม (Swing) ที่คุณตั้งไว้
             
             while current < target_amount and budget >= cost_per_unit:
                 budget -= cost_per_unit
@@ -528,7 +537,7 @@ class CampaignAI:
         app.tax_points[faction] = budget
 
     def plan_crafting(self, map_screen, faction):
-        """ลอจิกสำหรับคราฟต์อาวุธที่ Makerspace"""
+        """ลอจิกสำหรับคราฟต์อาวุธที่ Makerspace ตามสูตรเป๊ะๆ"""
         app = App.get_running_app()
         owned_nodes = [n for n in map_screen.nodes_list if n.faction == faction]
         
@@ -536,12 +545,35 @@ class CampaignAI:
         makerspace_nodes = [n for n in owned_nodes if getattr(n, 'building_state', '') == 'makerspace']
         if not makerspace_nodes: return
 
-        # 🛠️ ตำราคราฟต์อาวุธของ AI (สามารถแก้ทรัพยากรที่ใช้ให้ตรงกับ UI ผู้เล่นได้เลย)
-        # รูปแบบ: ('ชื่อตัวแปรอาวุธ', {'ทรัพยากรที่ต้องใช้': จำนวน}, จำนวนชิ้นที่ AI อยากตุนไว้)
+        # 🟢 1. แปรรูปแร่ดิบเป็นเหล็ก (Iron) ถ้าเหล็กน้อยกว่า 15 และมีเงิน Tax พอจ่ายค่าคราฟต์
+        while app.iron_points.get(faction, 0) < 15 and app.tax_points.get(faction, 0) >= 2:
+            if getattr(app, 'gold_points', {}).get(faction, 0) >= 1:
+                # 1 Gold + 2 Tax -> 3 Iron
+                app.gold_points[faction] -= 1
+                app.tax_points[faction] -= 2
+                app.iron_points[faction] = app.iron_points.get(faction, 0) + 3
+            elif getattr(app, 'silver_points', {}).get(faction, 0) >= 1:
+                # 1 Silver + 2 Tax -> 1 Iron
+                app.silver_points[faction] -= 1
+                app.tax_points[faction] -= 2
+                app.iron_points[faction] = app.iron_points.get(faction, 0) + 1
+            elif getattr(app, 'coal_points', {}).get(faction, 0) >= 2:
+                # 2 Coal + 2 Tax -> 1 Iron
+                app.coal_points[faction] -= 2
+                app.tax_points[faction] -= 2
+                app.iron_points[faction] = app.iron_points.get(faction, 0) + 1
+            else:
+                break # วัตถุดิบในการหลอมเหล็กหมดแล้ว
+
+        # 🟢 2. คราฟต์อาวุธตามสูตรใหม่
+        # รูปแบบ: ('ชื่อตัวแปร', {'ทรัพยากรที่ต้องจ่าย': จำนวน}, จำนวนที่จะตุน)
         crafting_recipes = [
-            ('weapon_t1_points', {'wood_points': 2}, 5),               # ตุน T1 ไว้ 5 ชิ้น
-            ('weapon_t2_points', {'wood_points': 1, 'iron_points': 2}, 3), # ตุน T2 ไว้ 3 ชิ้น
-            ('weapon_t3_points', {'iron_points': 3, 'coal_points': 1}, 2)  # ตุน T3 ไว้ 2 ชิ้น
+            # 6 Wood + 4 Iron = Wep T3
+            ('weapon_t3_points', {'wood_points': 6, 'iron_points': 4}, 2),  
+            # 4 Wood + 3 Iron = Wep T2
+            ('weapon_t2_points', {'wood_points': 4, 'iron_points': 3}, 3),  
+            # 2 Wood + 3 Iron = Wep T1
+            ('weapon_t1_points', {'wood_points': 2, 'iron_points': 3}, 5)   
         ]
 
         for wp_name, cost_dict, target_amount in crafting_recipes:
@@ -559,17 +591,23 @@ class CampaignAI:
         if not is_advanced:
             return {'tax_points': base_cost}
             
-        # 🛠️ ราคาทหารโหมด Advanced (คุณสามารถปรับแก้ตัวเลขตรงนี้ให้ตรงกับหน้า UI ของคุณได้เลย)
-        costs = {'tax_points': base_cost, 'supplies_points': 2}
+        # 🟢 Pawn กับ Levies ใช้แค่เงิน (Tax) อย่างเดียว
+        costs = {'tax_points': base_cost}
         p_name = piece_name.lower()
         
         if p_name in ['levies', 'pawn']:
-            costs['weapon_t1_points'] = 1
-        elif p_name in ['menatarm', 'hastati', 'knight']:
+            return costs
+            
+        # 🟢 ทหารระดับสูงขึ้นไป ต้องกินเสบียงและใช้อาวุธ
+        costs['supplies_points'] = 2
+        
+        if p_name in ['menatarm', 'hastati', 'knight']:
             costs['weapon_t2_points'] = 1
         elif p_name in ['bishop', 'rook', 'queen', 'praetorian', 'royalguard']:
             costs['weapon_t3_points'] = 1
             costs['supplies_points'] = 4
+        else:
+            costs['weapon_t1_points'] = 1 # เผื่อคลาสอื่นๆ ที่หลุดมา
             
         return costs
 
@@ -619,8 +657,10 @@ class CampaignAI:
         wood = app.wood_points.get(faction, 0)
         iron = app.iron_points.get(faction, 0)
         
-        # ถ้าไม้หรือแร่น้อยเกินไป ให้เน้นฟาร์มทรัพยากร (Res) แทนภาษี (Tax)
-        need_resources = (wood < 15 or iron < 10)
+        # 🟢 ถ้าทรัพยากรมีเยอะพอสมควรแล้ว ให้บังคับกลับไปเก็บภาษี (Tax)
+        need_resources = True
+        if wood >= 25 and iron >= 15:
+            need_resources = False
         
         owned_nodes = [n for n in map_screen.nodes_list if n.faction == faction]
         for node in owned_nodes:

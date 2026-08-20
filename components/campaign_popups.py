@@ -486,9 +486,9 @@ class BuildPopup(ModalView):
                     grid_b = GridLayout(cols=2, spacing=dp(10), size_hint_y=None)
                     grid_b.bind(minimum_height=grid_b.setter('height'))
                     
-                    grid_b.add_widget(BuildCard("Market", "Trade items\nCost: 3 Wood", 3, "assets/icon_effect/tax.png", lambda: self.build_castle_structure('market', 3)))
-                    grid_b.add_widget(BuildCard("Makerspace", "Craft weapons\nCost: 4 Wood", 4, "assets/icon_effect/base_atk.png", lambda: self.build_castle_structure('makerspace', 4)))
-                    grid_b.add_widget(BuildCard("Wallbuilder", "70% Block Attack\nCost: 9 Wood", 9, "assets/icon_effect/buff_def.png", lambda: self.build_castle_structure('wallbuilder', 9)))
+                    grid_b.add_widget(BuildCard("Market", "Trade items\nCost: 3 Wood", 3, "assets/structure/build/market.png", lambda: self.build_castle_structure('market', 3)))
+                    grid_b.add_widget(BuildCard("Makerspace", "Craft weapons\nCost: 4 Wood", 4, "assets/structure/build/makerspace.png", lambda: self.build_castle_structure('makerspace', 4)))
+                    grid_b.add_widget(BuildCard("Wallbuilder", "70% Block Attack\nCost: 9 Wood", 9, "assets/structure/build/wallbuilder.png", lambda: self.build_castle_structure('wallbuilder', 9)))
                     
                     self.content_grid.add_widget(grid_b)
 

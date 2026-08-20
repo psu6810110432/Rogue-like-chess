@@ -495,7 +495,7 @@ class GameplayScreen(Screen):
             self.inv_toggle_btn = Button(
                 text="v", font_size='24sp', bold=True,
                 size_hint=(None, None), size=(dp(60), dp(30)),
-                pos_hint={'center_x': 0.5, 'y': 0.18}, 
+                pos_hint={'center_x': 0.5, 'y': 0}, # 🟢 เปลี่ยนเป็น 0 ให้อยู่ขอบล่างเสมอ
                 background_color=(0.1, 0.1, 0.1, 0.8)
             )
             self.inv_toggle_btn.bind(on_release=self.toggle_inventory)
@@ -540,16 +540,13 @@ class GameplayScreen(Screen):
             anim = Animation(y=-self.inventory_layout.height, duration=0.3, transition='out_expo')
             anim.start(self.inventory_layout)
             instance.text = "^"
-            anim_btn = Animation(y=0, duration=0.3, transition='out_expo')
-            anim_btn.start(instance)
+            # 🟢 เอาโค้ดแอนิเมชันขยับปุ่มออก ปล่อยให้ปุ่มอยู่ขอบล่างจอไปเลย
         else:
             # เลื่อนกลับขึ้นมา
             anim = Animation(y=0, duration=0.3, transition='out_expo') 
             anim.start(self.inventory_layout)
             instance.text = "v"
-            # ขยับปุ่มลูกศรให้อยู่เหนือกล่อง Inventory เล็กน้อย
-            anim_btn = Animation(y=self.inventory_layout.height, duration=0.3, transition='out_expo')
-            anim_btn.start(instance)
+            # 🟢 เอาโค้ดแอนิเมชันขยับปุ่มออกเช่นกัน
             
         self.inv_is_open = not self.inv_is_open
 
@@ -1243,6 +1240,34 @@ class GameplayScreen(Screen):
 
     def on_quit(self):
         app = App.get_running_app()
+        # =======================================================
+        # 🟢 ป้องกันผู้เล่นกด Retreat แทนบอทในเทิร์นของ AI
+        # =======================================================
+        is_bot_turn = False
+        game_mode = getattr(self, 'game_mode', 'PVP')
+        match_type = getattr(app, 'match_type', 'PVE')
+        
+        if game_mode == 'Divide_Conquer':
+            attacker_faction = getattr(app.combat_source, 'faction', 'white') if hasattr(app, 'combat_source') else 'white'
+            defender_faction = getattr(app.combat_target, 'faction', 'red') if hasattr(app, 'combat_target') else 'black'
+            current_faction = attacker_faction if self.game.current_turn == 'white' else defender_faction
+            
+            if match_type == 'PVE':
+                player_involved = (attacker_faction == 'white' or defender_faction == 'white')
+                if not player_involved:
+                    is_bot_turn = True
+                elif current_faction != 'white':
+                    is_bot_turn = True
+            elif match_type == 'LOCAL_PVP':
+                if current_faction == 'red':
+                    is_bot_turn = True
+        else:
+            if match_type == 'PVE' and self.game.current_turn == 'black':
+                is_bot_turn = True
+
+        if is_bot_turn:
+            return  # ❌ ถ้าเป็นเทิร์นบอท ห้ามกด Retreat เด็ดขาด!
+        # =======================================================
         # Bypass input locks so the player can retreat at any time
         if getattr(self.game, 'game_result', None):
             if hasattr(self, 'countdown_event') and self.countdown_event:

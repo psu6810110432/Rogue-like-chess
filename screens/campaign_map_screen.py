@@ -446,72 +446,79 @@ class CampaignMapScreen(Screen):
         self.switch_turn()
 
     def generate_procedural_map(self):
+        app = App.get_running_app()
         self.map_content.clear_widgets()
         self.map_content.canvas.before.clear()
         self.nodes_list.clear()
-        
-        app = App.get_running_app()
-        size_val = getattr(app, 'selected_board', 'Size_S')
-        map_w, map_h = 9600, 5400
-
-        self.current_dimension = getattr(app, 'selected_dimension', '2D')
 
         # ====================================================
-        # 🟢 ฝังระบบ SEED ตรงนี้ (ต้องทำก่อนสร้าง MapGenerator)
+        # 1. โหลดข้อมูลจาก Database ก่อนเป็นอันดับแรก
         # ====================================================
-        save_data = None  
+        save_data = None
         if hasattr(app, 'loaded_world_id') and app.loaded_world_id is not None:
-            # กรณี Load: ดึงข้อมูลจากฐานข้อมูล
             from logic.save_manager import load_game_data
             save_data = load_game_data(app.loaded_world_id)
-            if save_data and 'world' in save_data:
-                world_info = save_data['world']
-                seed_to_use = world_info.get('map_seed', random.randint(100000, 999999))
-                
-                # 🟢 โหลดโหมดเกม PVE, Economy และ AI Difficulty กลับมา
-                app.match_type = world_info.get('match_type', 'LOCAL_PVP')
-                app.selected_economic_system = bool(world_info.get('economic_system', 0))
-                app.ai_difficulty = world_info.get('ai_difficulty', 'normal')
-                
-                # 🟢 โหลดตาเดินปัจจุบัน
-                app.current_map_turn = world_info.get('active_faction', 'white')
-                app.turn_number = world_info.get('current_turn', 1)
-            else:
-                seed_to_use = random.randint(100000, 999999) 
-            print(f"Loading Map with Seed: {seed_to_use}")
+
+        # ====================================================
+        # 2. คืนค่าทรัพยากร App และเซ็ตระบบ Seed
+        # ====================================================
+        if save_data:
+            print("Loading Map from Save Data...")
+            world_info = save_data.get('world', {})
+            seed_to_use = world_info.get('map_seed', random.randint(100000, 999999))
             
-        # ✨ เพิ่ม else บล็อกนี้เข้าไป เพื่อให้มันสร้าง Seed ตอนกดเริ่มเกมใหม่
+            # โหลดการตั้งค่าห้อง
+            app.match_type = world_info.get('match_type', 'LOCAL_PVP')
+            app.selected_economic_system = bool(world_info.get('economic_system', 0))
+            app.ai_difficulty = world_info.get('ai_difficulty', 'normal')
+            app.current_map_turn = world_info.get('active_faction', 'white')
+            app.turn_number = world_info.get('current_turn', 1)
+
+            # 🟢 โหลดข้อมูลเผ่ากลับเข้าไปให้ตัวแปร App
+            app.white_tribe = world_info.get('white_tribe', 'human')
+            app.black_tribe = world_info.get('black_tribe', 'orc')
+
+            # คืนค่าทรัพยากรทั้งหมดให้ App
+            if 'factions' in save_data:
+                for f_data in save_data['factions']:
+                    fac = f_data['faction_name']
+                    app.tax_points[fac] = f_data['tax_points']
+                    app.supplies_points[fac] = f_data['supplies_points']
+                    app.weapon_t1_points[fac] = f_data['weapon_t1']
+                    app.weapon_t2_points[fac] = f_data['weapon_t2']
+                    app.weapon_t3_points[fac] = f_data['weapon_t3']
+                    
+                    if not hasattr(app, 'wood_points'): app.wood_points = {}
+                    if not hasattr(app, 'iron_points'): app.iron_points = {}
+                    if not hasattr(app, 'coal_points'): app.coal_points = {}
+                    if not hasattr(app, 'silver_points'): app.silver_points = {}
+                    if not hasattr(app, 'gold_points'): app.gold_points = {}
+                    
+                    app.wood_points[fac] = f_data.get('wood_points', 0)
+                    app.iron_points[fac] = f_data.get('iron_points', 0)
+                    app.coal_points[fac] = f_data.get('coal_points', 0)
+                    app.silver_points[fac] = f_data.get('silver_points', 0)
+                    app.gold_points[fac] = f_data.get('gold_points', 0)
         else:
             seed_to_use = random.randint(100000, 999999)
             print(f"Generating NEW Map with Seed: {seed_to_use}")
-            
-        # บันทึกเก็บไว้เพื่อตอนจบเทิร์น save_manager จะได้ดึงไปเซฟถูก
+
         app.current_map_seed = seed_to_use
-        
-        # ล็อคผลลัพธ์การสุ่มทั้งหมดต่อจากบรรทัดนี้!
         random.seed(seed_to_use)
+
         # ====================================================
-        
+        # 3. สร้าง Map และ Nodes (โค้ดดั้งเดิมของคุณ)
+        # ====================================================
+        size_val = getattr(app, 'selected_board', 'Size_S')
+        map_w, map_h = 9600, 5400
+        self.current_dimension = getattr(app, 'selected_dimension', '2D')
+
         map_data = MapGenerator.generate_data(size_val, map_w, map_h)
         nodes_data = map_data['w_nodes'] + map_data['b_nodes']
         all_edges = map_data['white_edges'] + map_data['black_edges']
         if map_data['cross_edge']:
             all_edges.append(map_data['cross_edge'])
-        self.current_all_edges = all_edges # ✨ บันทึกเส้นทางทั้งหมดไว้สำหรับรีเฟรช 3D
-
-        if hasattr(self, 'macro_3d') and self.macro_3d in self.children:
-            self.remove_widget(self.macro_3d)
-
-        # ✨ เพิ่มการเคลียร์ UI ของโหมด 3D เก่าทิ้งก่อนสร้างใหม่
-        if hasattr(self, 'left_panel') and self.left_panel in self.ui_layer.children:
-            self.ui_layer.remove_widget(self.left_panel)
-        if hasattr(self, 'right_panel') and self.right_panel in self.ui_layer.children:
-            self.ui_layer.remove_widget(self.right_panel)
-        if hasattr(self, 'banner_layer') and self.banner_layer in self.children:
-            self.remove_widget(self.banner_layer)
-        if hasattr(self, 'army_panel'):
-            self.army_panel.close_panel()
-
+        self.current_all_edges = all_edges
         # ====================================================
         # 🟢 กรณีเป็นโหมด 2D CLASSIC CAMPAIGN
         # ====================================================
@@ -787,12 +794,56 @@ class CampaignMapScreen(Screen):
             # ✨ 3. เรียกฟังก์ชันแสดงผลธงลงบนหน้าจอ!
             self.refresh_banners()
 
+        # ====================================================
+        # 4. คืนค่าสถานะตึก ทหาร และความเป็นเจ้าของให้แต่ละ Node
+        # ====================================================
+        if save_data:
+            if 'nodes' in save_data:
+                for i, n_data in enumerate(save_data['nodes']):
+                    if i < len(self.nodes_list):
+                        node = self.nodes_list[i]
+                        node.faction = n_data['faction']
+                        node.loyalty = n_data['loyalty']
+                        node.fatigue = n_data['fatigue']
+                        node.building_state = n_data['building_state']
+                        node.wallbuilder_cooldown = n_data['wallbuilder_cooldown']
+                        
+                        if not hasattr(node, 'addons'): node.addons = {}
+                        node.addons['farm'] = n_data['farm_lvl']
+                        node.addons['tavern'] = n_data['tavern_lvl']
+                        node.addons['special'] = n_data['special_type']
+                        node.addons['special_lvl'] = n_data['special_lvl']
+                        
+                        # ล้างทหารตั้งต้นที่สร้างมาจาก MapGenerator ทิ้ง เพื่อป้องกันการซ้อนทับ
+                        node.army_pieces = []
+
+                        # รีเฟรชภาพ UI หากเป็นโหมด 2D แล้วตึกเคยสร้างเสร็จ
+                        if self.current_dimension == '2D' and node.building_state in ['market', 'makerspace', 'wallbuilder']:
+                            if hasattr(node, 'update_building_visual'):
+                                node.update_building_visual()
+
+            if 'units' in save_data:
+                from logic.campaign_helpers import generate_piece
+                # สร้าง Map ระหว่าง id ของ DB กับ node_index
+                node_db_to_index = {n['id']: n['node_index'] for n in save_data['nodes']}
+                
+                for u_data in save_data['units']:
+                    n_idx = node_db_to_index.get(u_data['node_id'])
+                    if n_idx is not None and n_idx < len(self.nodes_list):
+                        target_node = self.nodes_list[n_idx]
+                        
+                        new_piece = generate_piece(u_data['piece_class'].lower(), target_node.faction, app)
+                        new_piece.upgrade_level = u_data['upgrade_level']
+                        if u_data['is_commander']:
+                            new_piece.is_header = True
+                            
+                        target_node.army_pieces.append(new_piece)
+
         self.hide_loading()
-        # 🟢 กระตุ้น AI ทันที หากโหลดเซฟมาแล้วเป็นตาของ AI พอดี
-        if hasattr(app, 'loaded_world_id') and app.loaded_world_id is not None:
-            if app.current_map_turn == 'black' and getattr(app, 'match_type', '') == 'PVE':
-                self.ai_turn_active = True
-                self.campaign_ai.execute_turn(self, 'black')
+        # กระตุ้น AI
+        if save_data and app.current_map_turn == 'black' and getattr(app, 'match_type', '') == 'PVE':
+            self.ai_turn_active = True
+            self.campaign_ai.execute_turn(self, 'black')
 
     def show_loading(self):
         self.loading_overlay.opacity = 1
