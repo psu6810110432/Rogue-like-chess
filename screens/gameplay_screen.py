@@ -710,18 +710,35 @@ class GameplayScreen(Screen):
                     
                     # --- ❄️ เริ่ม: เพิ่มระบบวางรูปแช่แข็งทับตัวละคร ---
                     # ลบรูปแช่แข็งเก่าออกก่อน (ถ้ามี) เพื่อป้องกันการซ้อนทับกันหลายชั้น
-                    if hasattr(sq, 'freeze_icon') and sq.freeze_icon in sq.children:
-                        sq.remove_widget(sq.freeze_icon)
+                    if hasattr(sq, 'freeze_icon') and sq.freeze_icon:
+                        if sq.freeze_icon.parent:
+                            sq.freeze_icon.parent.remove_widget(sq.freeze_icon)
+                        sq.freeze_icon = None
                         
-                    # ตรวจสอบสถานะการแช่แข็งจาก logic ของเกม
                     if p and getattr(p, 'freeze_timer', 0) > 0:
-                        # สร้าง Image widget วางทับด้วย Path ที่คุณระบุ
-                        sq.freeze_icon = Image(
-                            source=r"E:\game\Rogue-like-chess\assets\pieces\event\event4.png",
-                            size_hint=(0.9, 0.9), # ปรับขนาดให้พอดีกับช่อง (ไม่บังขอบช่องจนมิด)
-                            pos_hint={'center_x': 0.5, 'center_y': 0.5}
-                        )
-                        sq.add_widget(sq.freeze_icon)
+                        is_iso = getattr(self, 'current_dimension', '2D') == '2D iso'
+                        
+                        if is_iso:
+                            # โหมด ISO: ดึงภาพไปวางบน piece_layer เพื่อให้ทับตัวหมากได้
+                            # ปรับขนาด dp ให้ใหญ่ขึ้นเพื่อให้คลุมหมากมิด 
+                            icon_size = (dp(140), dp(140))
+                            sq.freeze_icon = Image(
+                                source=f"assets/pieces/event/event4.png",
+                                size_hint=(None, None),
+                                size=icon_size,
+                                # ขยับตำแหน่ง Y ขึ้น (dp(25)) เพื่อให้ภาพอยู่ตรงกลางตัวหมากพอดี (ไม่จมลงฐาน)
+                                pos=(sq.center_x - icon_size[0]/2, sq.center_y - icon_size[1]/2 + dp(25))
+                            )
+                            # ต้องเพิ่มลงใน piece_layer ภาพถึงจะทับตัวละครได้
+                            self.piece_layer.add_widget(sq.freeze_icon)
+                        else:
+                            # โหมด 2D ปกติ
+                            sq.freeze_icon = Image(
+                                source=f"assets/pieces/event/event4.png",
+                                size_hint=(1.2, 1.2), # ขยายจาก 0.9 เป็น 1.2 ให้ใหญ่ล้นกรอบนิดๆ
+                                pos_hint={'center_x': 0.5, 'center_y': 0.5}
+                            )
+                            sq.add_widget(sq.freeze_icon)
                     # --- จบ: ระบบแช่แข็ง ---
                 
                 self.highlight_headers()
@@ -737,6 +754,9 @@ class GameplayScreen(Screen):
         p_n = piece.__class__.__name__.lower()
         if p_n == 'obstacle':
             ot = piece.name.lower()
+            # ✨ เพิ่มเงื่อนไขเพื่อใช้รูปลูกบาศก์น้ำแข็ง (event5) สำหรับด่าน Tundra
+            if ot == 'ice':
+                return f"assets/pieces/event/event5.png"
             return f"assets/pieces/event/event{'1' if ot=='thorn' else '2' if ot=='sandstorm' else '3'}.png"
             
         # 1. ดึงสีและเผ่าดั้งเดิมของ Backend (ระบบจะมองเป็น white/black เสมอ)
