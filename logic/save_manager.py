@@ -20,6 +20,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             save_name TEXT NOT NULL,
             map_size TEXT,
+            map_seed INTEGER,
             current_turn INTEGER DEFAULT 1,
             active_faction TEXT,
             is_autosave BOOLEAN DEFAULT 0,
@@ -110,10 +111,13 @@ def save_game(app, map_screen, save_name, is_autosave=False, is_suspended=False)
     # ดึงค่าสีที่กำลังเล่น (เผื่อตั้งชื่อไว้ว่า active_faction) ถ้าไม่มีให้เป็น 'white'
     active_faction = getattr(map_screen, 'current_faction', getattr(map_screen, 'active_faction', 'white'))
 
+    # ดึงค่า Seed จาก App (ถ้าหาไม่เจอให้ใช้ค่า 0 ไว้ก่อน)
+    map_seed = getattr(app, 'current_map_seed', 0)
+
     cursor.execute('''
-        INSERT INTO worlds (save_name, map_size, current_turn, active_faction, is_autosave, is_suspended, last_played)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (final_save_name, map_size, current_turn, active_faction, is_autosave, is_suspended, timestamp))
+        INSERT INTO worlds (save_name, map_size, map_seed, current_turn, active_faction, is_autosave, is_suspended, last_played)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (final_save_name, map_size, map_seed, current_turn, active_faction, is_autosave, is_suspended, timestamp))
     
     world_id = cursor.lastrowid
 

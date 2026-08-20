@@ -442,6 +442,30 @@ class CampaignMapScreen(Screen):
         map_w, map_h = 9600, 5400
 
         self.current_dimension = getattr(app, 'selected_dimension', '2D')
+
+        # ====================================================
+        # 🟢 ฝังระบบ SEED ตรงนี้ (ต้องทำก่อนสร้าง MapGenerator)
+        # ====================================================
+        if hasattr(app, 'loaded_world_id') and app.loaded_world_id is not None:
+            # กรณี Load: ดึงข้อมูลจากฐานข้อมูล
+            from logic.save_manager import load_game_data
+            save_data = load_game_data(app.loaded_world_id)
+            if save_data and 'world' in save_data and 'map_seed' in save_data['world']:
+                seed_to_use = save_data['world']['map_seed']
+            else:
+                seed_to_use = random.randint(100000, 999999) # กันเหนียวเผื่อเซฟพัง
+            print(f"Loading Map with Seed: {seed_to_use}")
+        else:
+            # กรณีเล่นใหม่: สุ่ม Seed ชุดใหม่
+            seed_to_use = random.randint(100000, 999999)
+            print(f"Generating NEW Map with Seed: {seed_to_use}")
+            
+        # บันทึกเก็บไว้เพื่อตอนจบเทิร์น save_manager จะได้ดึงไปเซฟถูก
+        app.current_map_seed = seed_to_use
+        
+        # ล็อคผลลัพธ์การสุ่มทั้งหมดต่อจากบรรทัดนี้!
+        random.seed(seed_to_use)
+        # ====================================================
         
         map_data = MapGenerator.generate_data(size_val, map_w, map_h)
         nodes_data = map_data['w_nodes'] + map_data['b_nodes']
@@ -480,9 +504,6 @@ class CampaignMapScreen(Screen):
             tile_size = 200  # ปรับขนาดความละเอียดของช่อง ยิ่งน้อยยิ่งเนียนแต่โหลดนานขึ้น
             cols = int(map_w / tile_size)
             rows = int(map_h / tile_size)
-            
-            random.seed(app.turn_number) # หรือใช้ self.seed ถ้ามีการกำหนดไว้
-            
             total_area = rows * cols
             r_snow = math.sqrt((0.18 * total_area) / (2 * math.pi))
             r_desert = math.sqrt((0.18 * total_area) / (3 * math.pi))
