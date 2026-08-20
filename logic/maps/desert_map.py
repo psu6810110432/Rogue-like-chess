@@ -17,22 +17,37 @@ class DesertMap(ChessBoard):
             
             # พายุจะทำงานทุกๆ 3 เทิร์น (เทิร์น 3, 6, 9, ...)
             if self.desert_turn_count > 0 and self.desert_turn_count % 3 == 0:
-                # โอกาส 50% ที่จะเกิดพายุทราย (เพิ่มจาก 25% เพราะไม่ได้เกิดทุกเทิร์นแล้ว)
+                # โอกาส 50% ที่จะเกิดพายุทราย 
                 if random.random() < 0.50:
                     
-                    # หาช่องว่างทั้งหมดบนกระดาน
-                    empty_squares = []
-                    for r in range(8):
-                        for c in range(8):
-                            if self.board[r][c] is None:
-                                empty_squares.append((r, c))
+                    valid_lines = []
+                    storm_length = random.choice([3, 4]) # สุ่มความยาวพายุ 3 หรือ 4 ช่อง
                     
-                    # สุ่มเกิดพายุ 2-4 ช่อง เพื่อไม่ให้เกะกะการเดินมากเกินไป
-                    if empty_squares:
-                        # หาจำนวนที่จะเสก โดยไม่เกินจำนวนช่องว่างที่มี
-                        num_storms = min(random.randint(2, 4), len(empty_squares))
-                        storm_locations = random.sample(empty_squares, num_storms)
-                        
-                        for r, c in storm_locations:
-                            # เสกพายุทราย ซึ่งจะคงอยู่เป็นเวลา 3 เทิร์น
+                    # ฟังก์ชันช่วยหาพื้นที่ว่างที่เรียงติดกัน
+                    def find_contiguous_empty(length):
+                        lines = []
+                        # 1. ค้นหาแนวนอน
+                        for r in range(8):
+                            for c in range(8 - length + 1):
+                                if all(self.board[r][c+i] is None for i in range(length)):
+                                    lines.append([(r, c+i) for i in range(length)])
+                        # 2. ค้นหาแนวตั้ง
+                        for c in range(8):
+                            for r in range(8 - length + 1):
+                                if all(self.board[r+i][c] is None for i in range(length)):
+                                    lines.append([(r+i, c) for i in range(length)])
+                        return lines
+
+                    valid_lines = find_contiguous_empty(storm_length)
+                    
+                    # ถ้าสุ่มได้ 4 ช่อง แต่กระดานไม่มีที่ว่างติดกัน 4 ช่องเลย ให้ลองหาแบบ 3 ช่องแทน
+                    if not valid_lines and storm_length == 4:
+                        storm_length = 3
+                        valid_lines = find_contiguous_empty(storm_length)
+
+                    # ถ้าเจอพื้นที่ที่ลงได้ ให้ทำการเสกพายุทราย
+                    if valid_lines:
+                        chosen_line = random.choice(valid_lines)
+                        for r, c in chosen_line:
+                            # เสกพายุทราย ซึ่งจะคงอยู่เป็นเวลา 3 เทิร์น[cite: 3]
                             self.board[r][c] = Obstacle('Sandstorm', 3)
