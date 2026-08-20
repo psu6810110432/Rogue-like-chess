@@ -195,6 +195,10 @@ class Board3D(Widget):
                     if it and hasattr(it, 'image_path'): 
                         icons_to_draw.append(it.image_path)
 
+                    # ✨ 1. เพิ่มไอคอนน้ำแข็งเข้าไปในคอลัมน์ไอคอน 3D
+                    if getattr(piece, 'freeze_timer', 0) > 0:
+                        icons_to_draw.append(f"assets/pieces/event/event4.png")
+
                 if not img_path or not os.path.exists(img_path): continue
                 
                 try:

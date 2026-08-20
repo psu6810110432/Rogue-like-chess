@@ -68,7 +68,13 @@ class PieceCard(ButtonBehavior, FloatLayout):
         if item_obj and hasattr(item_obj, 'image_path') and os.path.exists(item_obj.image_path):
             icon_box.add_widget(Image(source=item_obj.image_path, size_hint_y=None, height=dp(25)))
             
-        # ใส่กล่องเปล่าด้านล่างสุด ดันให้ไอคอนทั้งหมดไปชิดขอบบน
+        # ✨ 2. เพิ่มไอคอนสถานะแช่แข็งลงในคอลัมน์
+        if getattr(piece, 'freeze_timer', 0) > 0:
+            freeze_path = f"assets/pieces/event/event4.png"
+            if os.path.exists(freeze_path):
+                icon_box.add_widget(Image(source=freeze_path, size_hint_y=None, height=dp(25)))
+            
+        # ใส่กล่องเปล่าด้านล่างสุด ดันให้ไอคอนทั้งหมดไปชิดขอบบน (โค้ดเดิม)
         icon_box.add_widget(Widget(size_hint_y=1))
         self.add_widget(icon_box)
         
