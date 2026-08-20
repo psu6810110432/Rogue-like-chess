@@ -459,18 +459,29 @@ class CampaignMapScreen(Screen):
         # ====================================================
         # 🟢 ฝังระบบ SEED ตรงนี้ (ต้องทำก่อนสร้าง MapGenerator)
         # ====================================================
-        save_data = None  # <-- ✨ เพิ่มบรรทัดนี้กัน Error
+        save_data = None  
         if hasattr(app, 'loaded_world_id') and app.loaded_world_id is not None:
             # กรณี Load: ดึงข้อมูลจากฐานข้อมูล
             from logic.save_manager import load_game_data
             save_data = load_game_data(app.loaded_world_id)
-            if save_data and 'world' in save_data and 'map_seed' in save_data['world']:
-                seed_to_use = save_data['world']['map_seed']
+            if save_data and 'world' in save_data:
+                world_info = save_data['world']
+                seed_to_use = world_info.get('map_seed', random.randint(100000, 999999))
+                
+                # 🟢 โหลดโหมดเกม PVE, Economy และ AI Difficulty กลับมา
+                app.match_type = world_info.get('match_type', 'LOCAL_PVP')
+                app.selected_economic_system = bool(world_info.get('economic_system', 0))
+                app.ai_difficulty = world_info.get('ai_difficulty', 'normal')
+                
+                # 🟢 โหลดตาเดินปัจจุบัน
+                app.current_map_turn = world_info.get('active_faction', 'white')
+                app.turn_number = world_info.get('current_turn', 1)
             else:
-                seed_to_use = random.randint(100000, 999999) # กันเหนียวเผื่อเซฟพัง
+                seed_to_use = random.randint(100000, 999999) 
             print(f"Loading Map with Seed: {seed_to_use}")
+            
+        # ✨ เพิ่ม else บล็อกนี้เข้าไป เพื่อให้มันสร้าง Seed ตอนกดเริ่มเกมใหม่
         else:
-            # กรณีเล่นใหม่: สุ่ม Seed ชุดใหม่
             seed_to_use = random.randint(100000, 999999)
             print(f"Generating NEW Map with Seed: {seed_to_use}")
             
@@ -777,6 +788,11 @@ class CampaignMapScreen(Screen):
             self.refresh_banners()
 
         self.hide_loading()
+        # 🟢 กระตุ้น AI ทันที หากโหลดเซฟมาแล้วเป็นตาของ AI พอดี
+        if hasattr(app, 'loaded_world_id') and app.loaded_world_id is not None:
+            if app.current_map_turn == 'black' and getattr(app, 'match_type', '') == 'PVE':
+                self.ai_turn_active = True
+                self.campaign_ai.execute_turn(self, 'black')
 
     def show_loading(self):
         self.loading_overlay.opacity = 1

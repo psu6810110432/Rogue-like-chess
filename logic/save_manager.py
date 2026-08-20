@@ -13,7 +13,7 @@ def init_db():
     """สร้างตารางที่จำเป็นหากยังไม่มีในระบบ"""
     conn = get_connection()
     cursor = conn.cursor()
-
+    
     # 1. ตาราง World State (เก็บข้อมูลภาพรวมของ Save แต่ละช่อง)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS worlds (
@@ -23,6 +23,9 @@ def init_db():
             map_seed INTEGER,
             current_turn INTEGER DEFAULT 1,
             active_faction TEXT,
+            match_type TEXT DEFAULT 'LOCAL_PVP',  
+            economic_system BOOLEAN DEFAULT 0,    
+            ai_difficulty TEXT DEFAULT 'normal',  
             is_autosave BOOLEAN DEFAULT 0,
             is_suspended BOOLEAN DEFAULT 0,
             last_played TIMESTAMP
@@ -113,13 +116,18 @@ def save_game(app, map_screen, save_name, is_autosave=False, is_suspended=False)
     # ดึงค่าสีที่กำลังเล่น (เผื่อตั้งชื่อไว้ว่า active_faction) ถ้าไม่มีให้เป็น 'white'
     active_faction = getattr(map_screen, 'current_faction', getattr(map_screen, 'active_faction', 'white'))
 
-    # ดึงค่า Seed จาก App (ถ้าหาไม่เจอให้ใช้ค่า 0 ไว้ก่อน)
+    # ดึงค่า Seed จาก App
     map_seed = getattr(app, 'current_map_seed', 0)
 
+    # 🟢 ดึงการตั้งค่าห้องจาก App
+    match_type = getattr(app, 'match_type', 'LOCAL_PVP')
+    econ_system = 1 if getattr(app, 'selected_economic_system', False) else 0
+    ai_diff = getattr(app, 'ai_difficulty', 'normal')
+
     cursor.execute('''
-        INSERT INTO worlds (save_name, map_size, map_seed, current_turn, active_faction, is_autosave, is_suspended, last_played)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (final_save_name, map_size, map_seed, current_turn, active_faction, is_autosave, is_suspended, timestamp))
+        INSERT INTO worlds (save_name, map_size, map_seed, current_turn, active_faction, match_type, economic_system, ai_difficulty, is_autosave, is_suspended, last_played)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (final_save_name, map_size, map_seed, current_turn, active_faction, match_type, econ_system, ai_diff, is_autosave, is_suspended, timestamp))
     
     world_id = cursor.lastrowid
 
