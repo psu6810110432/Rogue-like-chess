@@ -188,7 +188,6 @@ class CampaignMapScreen(Screen):
         # ข้อยกเว้น: ไม่ทำงานกับกบฏ (red faction) เพราะกบฏเกิดจากในเมืองเอง
         # --- 🏰 ระบบกำแพงเมือง (Wallbuilder) ---
         if getattr(target_node, 'building_state', None) == 'wallbuilder' and getattr(target_node, 'wallbuilder_cooldown', 0) == 0 and source_node.faction != 'red':
-            import random
             if random.random() < 0.70: # 70% โอกาสป้องกันสำเร็จ
                 if hasattr(app, 'play_click_sound'): app.play_click_sound()
                 self.status_lbl.text = f"[color=ff0000]ATTACK ON {getattr(target_node, 'city_name', 'CASTLE').upper()} REPELLED BY WALL![/color]"
@@ -912,7 +911,6 @@ class CampaignMapScreen(Screen):
             self.resource_lbl.text = f"[color=d4af37]Tax: {t}[/color]"
 
     def generate_market_rates(self):
-        import random
         # ใช้ random.randint เพื่อสุ่มค่าเป็น int ล้วนๆ
         return {
             'wood': random.randint(1, 2),     # ปรับจาก 0.5-1.5

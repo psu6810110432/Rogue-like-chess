@@ -8,6 +8,9 @@ class AIController:
         self.screen = screen
 
     def check_ai_turn(self):
+        if getattr(self.screen, 'battle_phase', 'playing') != 'playing':
+            self.screen.is_input_locked = False
+            return
         app = App.get_running_app()
         is_bot_turn = False
         game_mode = getattr(self.screen, 'game_mode', 'PVP')
@@ -47,6 +50,8 @@ class AIController:
     def trigger_ai_move(self, dt):
         if self.screen.game.game_result:
             return
+        # เพิ่มบรรทัดนี้ดักไว้
+        if getattr(self.screen, 'battle_phase', 'playing') != 'playing': return
 
         game_mode = getattr(self.screen, 'game_mode', 'PVP')
         difficulty = getattr(App.get_running_app(), 'ai_difficulty', 'normal')

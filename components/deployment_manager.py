@@ -63,7 +63,9 @@ class DeploymentManager:
         
         app = App.get_running_app()
         attacker_faction = getattr(app.combat_source, 'faction', 'red') if hasattr(app, 'combat_source') else 'white'
-        is_ai_attacker = attacker_faction in ['black', 'red']
+        match_type = getattr(app, 'match_type', 'PVE')
+        # สีดำจะเป็น AI แค่ในโหมด PVE เท่านั้น ส่วนสีแดงเป็น AI เสมอ
+        is_ai_attacker = (attacker_faction == 'black' and match_type == 'PVE') or (attacker_faction == 'red')
         
         if not is_ai_attacker:
             btn_retreat = Button(text="[b]RETREAT[/b]", markup=True, background_color=(0.8, 0.2, 0.2, 1), font_size='18sp')
@@ -91,8 +93,9 @@ class DeploymentManager:
         app = App.get_running_app()
         if hasattr(app, 'play_click_sound'): app.play_click_sound()
         target_faction = getattr(app.combat_target, 'faction', 'black') if hasattr(app, 'combat_target') else 'black'
-        
-        is_ai_defender = target_faction in ['black', 'red']
+        match_type = getattr(app, 'match_type', 'PVE')
+        # สีดำจะเป็น AI แค่ในโหมด PVE เท่านั้น ส่วนสีแดงเป็น AI เสมอ
+        is_ai_defender = (target_faction == 'black' and match_type == 'PVE') or (target_faction == 'red')
         
         if target_faction in ['white', 'black', 'red'] and getattr(self.screen, 'game_mode', '') == 'Divide_Conquer':
             self.screen.battle_phase = 'deployment_arrange_def'
