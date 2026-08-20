@@ -785,7 +785,8 @@ class GameplayScreen(Screen):
             if piece.color == 'white':
                 real_faction = getattr(app.combat_source, 'faction', 'white') if hasattr(app, 'combat_source') else 'white'
                 display_color = real_faction
-                tf = getattr(piece, 'tribe', self.get_tribe_name(real_faction))
+                # ✨ แก้ไข: บังคับหาชื่อเผ่าจาก Faction จริง ห้ามดึงของเก่ามาใช้
+                tf = self.get_tribe_name(real_faction) 
                 
             # ถ้าหมากเป็นสีดำ (หมายถึงฝ่ายกัน) ให้ดึงสีและเผ่าจริงจาก combat_target
             elif piece.color == 'black':
@@ -793,9 +794,11 @@ class GameplayScreen(Screen):
                 display_color = real_faction
                 # จัดการกรณีสีแดง (หมู่บ้าน/Rebel)
                 if display_color == 'red':
-                    tf = getattr(piece, 'tribe', 'bandit')
+                    # ✨ แก้ไข: บังคับเผ่าโจร 100% ถ้าเป็นฝั่งสีแดง
+                    tf = 'bandit' 
                 else:
-                    tf = getattr(piece, 'tribe', self.get_tribe_name(real_faction))
+                    # ✨ แก้ไข: บังคับหาชื่อเผ่าจาก Faction จริง ห้ามดึงของเก่ามาใช้
+                    tf = self.get_tribe_name(real_faction)
 
         return safe_piece_path(piece, tf, display_color)
 
@@ -1393,7 +1396,7 @@ class GameplayScreen(Screen):
             else:
                 # สั่งลบสีม่วง
                 self.board_3d.clear_purple_highlight()
-                
+
     def toggle_fast_forward(self, instance):
         """สลับสถานะโหมดเร่งความเร็ว AI"""
         self.fast_forward_ai = not self.fast_forward_ai
