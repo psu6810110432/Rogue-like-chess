@@ -184,11 +184,11 @@ class CrashOverlay(FloatLayout):
 
         # Portrait images — use safe helper so missing upgrade folders
         # never produce an "[ERROR] [Image] Not found" log line.
-        a_folder = self._get_level_folder(self.attacker)
+        a_folder = self._get_level_folder(self.attacker, self.a_faction)
         a_name = self._get_piece_filename(self.attacker)
         self.ids.left_char.source = safe_char_crash_path(self.attacker, self.a_faction)
 
-        d_folder = self._get_level_folder(self.defender)
+        d_folder = self._get_level_folder(self.defender, self.d_faction)
         d_name = self._get_piece_filename(self.defender)
         self.ids.right_char.source = safe_char_crash_path(self.defender, self.d_faction)
 
@@ -198,10 +198,16 @@ class CrashOverlay(FloatLayout):
     def _update_bg(self, instance, value):
         self.bg_rect.pos, self.bg_rect.size = instance.pos, instance.size
 
-    def _get_level_folder(self, piece):
+    def _get_level_folder(self, piece, faction):
         lvl = getattr(piece, 'upgrade_level', 0)
         path = getattr(piece, 'upgrade_path', 'standard')
+        
         if lvl == 0: return "1base"
+        
+        # Fallback: บังคับให้โจร (red) ใช้ภาพ 2upATK เสมอถ้าอัปเกรดเกิน
+        if faction == 'red' and lvl >= 1:
+            return "2upATK"
+            
         if path == 'standard': return "2upATK" if lvl == 1 else "3upDEF"
         if path == 'special': return "4up_rehidden" if lvl == 1 else "5up_reroll_ATK_DEF"
         return "1base"
@@ -419,12 +425,12 @@ class CrashOverlay(FloatLayout):
         self.ids.right_ui.opacity = 0
         
         # จัดเตรียมภาพยืนนิ่ง (Frame 1) ให้ทั้งคู่แสดงขึ้นมาก่อนเพื่อป้องกันภาพแหว่ง
-        a_folder = self._get_level_folder(self.attacker)
+        a_folder = self._get_level_folder(self.attacker, self.a_faction)
         a_name = self._get_piece_filename(self.attacker)
         a_base_name = self.attacker.__class__.__name__.lower()
         if getattr(self.attacker, 'name', '') == 'Prince': a_base_name = 'prince'
         
-        d_folder = self._get_level_folder(self.defender)
+        d_folder = self._get_level_folder(self.defender, self.d_faction)
         d_name = self._get_piece_filename(self.defender)
         d_base_name = self.defender.__class__.__name__.lower()
         if getattr(self.defender, 'name', '') == 'Prince': d_base_name = 'prince'
@@ -463,7 +469,7 @@ class CrashOverlay(FloatLayout):
                 faction = self.d_faction
                 img_widget = self.ids.fighter_right
                 
-            folder = self._get_level_folder(piece)
+            folder = self._get_level_folder(piece, faction)
             name = self._get_piece_filename(piece) # e.g., pawn3
             
             # ดึงชื่อ Base Class มาเป็นคำนำหน้าไฟล์รูปเฟรม (แก้บัค Not found)
