@@ -362,11 +362,11 @@ class CampaignMapScreen(Screen):
                     
                     if b_state == 'building_market':
                         node.building_state = 'market'
-                        node.market_rates = self.generate_market_rates()
+                        node.market_rates = self.generate_market_rates(node)
                         if hasattr(node, 'update_building_visual'): node.update_building_visual() # ✨ วาดเมื่อสร้างเสร็จ
                         
                     elif b_state == 'market':
-                        node.market_rates = self.generate_market_rates() 
+                        node.market_rates = self.generate_market_rates(node)
                         
                     elif b_state == 'building_makerspace': 
                         node.building_state = 'makerspace'
@@ -807,6 +807,12 @@ class CampaignMapScreen(Screen):
                         node.fatigue = n_data['fatigue']
                         node.building_state = n_data['building_state']
                         node.wallbuilder_cooldown = n_data['wallbuilder_cooldown']
+
+                        import json
+                        if n_data.get('market_trend'): node.market_trend = json.loads(n_data['market_trend'])
+                        if n_data.get('market_activity'): node.market_activity = json.loads(n_data['market_activity'])
+                        if n_data.get('market_timer'): node.market_timer = json.loads(n_data['market_timer'])
+                        if n_data.get('market_rates'): node.market_rates = json.loads(n_data['market_rates'])
                         
                         if not hasattr(node, 'addons'): node.addons = {}
                         node.addons['farm'] = n_data['farm_lvl']
@@ -1035,18 +1041,83 @@ class CampaignMapScreen(Screen):
         else:
             self.resource_lbl.text = f"[color=d4af37]Tax: {t}[/color]"
 
-    def generate_market_rates(self):
-        # ใช้ random.randint เพื่อสุ่มค่าเป็น int ล้วนๆ
-        return {
-            'wood': random.randint(1, 2),     # ปรับจาก 0.5-1.5
-            'coal': random.randint(2, 5),     # 2-5
-            'silver': random.randint(3, 9),   # ปรับจาก 2.5-9
-            'iron': random.randint(4, 7),     # ปรับจาก 3.5-7
-            'gold': random.randint(7, 12),    # ปรับจาก 6.5-12
-            'weapon_t1': random.randint(14, 16), # อาวุธ Tier 1
-            'weapon_t2': random.randint(16, 18), # อาวุธ Tier 2
-            'weapon_t3': random.randint(22, 24)  # อาวุธ Tier 3
+    def generate_market_rates(self, node=None):
+        rates = {
+            'wood': random.randint(1, 2),
+            'coal': random.randint(2, 5),
+            'silver': random.randint(3, 9),
+            'iron': random.randint(4, 7),
+            'gold': random.randint(7, 12),
+            'weapon_t1': random.randint(14, 16),
+            'weapon_t2': random.randint(16, 18),
+            'weapon_t3': random.randint(22, 24)
         }
+        
+        if node is None:
+            return rates
+            
+        # สร้างตัวแปรเก็บ Trend, ประวัติการซื้อขาย และ Timer นับเทิร์น[cite: 2]
+        if not hasattr(node, 'market_trend'):
+            node.market_trend = {k: 0 for k in rates.keys()}
+        if not hasattr(node, 'market_activity'):
+            node.market_activity = {k: 0 for k in rates.keys()}
+        if not hasattr(node, 'market_timer'):
+            node.market_timer = {k: 0 for k in rates.keys()} 
+            
+        dynamic_items = ['wood', 'coal', 'silver', 'iron', 'gold']
+        
+        for item in dynamic_items:
+            activity = node.market_activity.get(item, 0)
+            current_trend = node.market_trend.get(item, 0)
+            timer = node.market_timer.get(item, 0)
+            
+            # --- อัปเดต Trend และ ตัวนับเวลา ---
+            if activity >= 5: 
+                # ซื้อเยอะ ดันราคาขึ้น 1 ขั้น
+                new_trend = current_trend + 1 if current_trend < 1 else 1
+                node.market_trend[item] = new_trend
+                
+                # ✨ แก้ไขจาก 1 เป็น 2 เพื่อให้ Rate คงอยู่ต่อไปอีก 2 เทิร์น
+                node.market_timer[item] = 2 if new_trend != 0 else 0 
+            
+            elif activity <= -5: 
+                # ขายเยอะ ดันราคาลง 1 ขั้น
+                new_trend = current_trend - 1 if current_trend > -1 else -1
+                node.market_trend[item] = new_trend
+                
+                # ✨ แก้ไขจาก 1 เป็น 2 เพื่อให้ Rate คงอยู่ต่อไปอีก 2 เทิร์น
+                node.market_timer[item] = 2 if new_trend != 0 else 0
+            
+            else:
+                # กรณีซื้อขายไม่ถึง 5 ชิ้น (ไม่มีการกระแทกตลาด)
+                if current_trend != 0:
+                    if timer > 0:
+                        node.market_timer[item] -= 1 # นับถอยหลังไปเรื่อยๆ (เทิร์นที่ 1 และ 2)
+                    else:
+                        node.market_trend[item] = 0 # ครบกำหนด (เทิร์นที่ 3) Rate กลับเป็นปกติ
+                else:
+                    node.market_timer[item] = 0
+            
+            # --- ปรับราคาสุดท้ายตาม Trend ---[cite: 2]
+            final_trend = node.market_trend[item]
+            
+            if final_trend == 1: # เรทแพง[cite: 2]
+                if item == 'wood': rates[item] = random.randint(2, 4)
+                elif item == 'coal': rates[item] = random.randint(5, 7)
+                elif item == 'silver': rates[item] = random.randint(9, 10)
+                elif item == 'iron': rates[item] = random.randint(6, 8)
+                elif item == 'gold': rates[item] = random.randint(12, 16)
+            elif final_trend == -1: # เรทถูก[cite: 2]
+                if item == 'wood': rates[item] = random.randint(1, 1)
+                elif item == 'coal': rates[item] = random.randint(1, 2)
+                elif item == 'silver': rates[item] = random.randint(1, 4)
+                elif item == 'iron': rates[item] = random.randint(2, 5)
+                elif item == 'gold': rates[item] = random.randint(6, 7)
+                
+            # เคลียร์ยอดซื้อขายประจำเทิร์นทิ้ง[cite: 2]
+            node.market_activity[item] = 0
+            
+        return rates
 
     # เพิ่มเมธอดนี้ในคลาส CampaignMapScreen 
     def on_leave(self, *args):

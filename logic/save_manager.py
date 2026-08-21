@@ -2,6 +2,7 @@
 import sqlite3
 import os
 import datetime
+import json
 
 DB_PATH = 'rogue_chess_save.db'
 
@@ -70,7 +71,11 @@ def init_db():
             special_type TEXT,
             special_lvl INTEGER DEFAULT 0,
             building_state TEXT,               
-            wallbuilder_cooldown INTEGER DEFAULT 0, 
+            wallbuilder_cooldown INTEGER DEFAULT 0,
+            market_trend TEXT,      
+            market_activity TEXT,   
+            market_timer TEXT,      
+            market_rates TEXT,      
             FOREIGN KEY(world_id) REFERENCES worlds(id) ON DELETE CASCADE
         )
     ''')
@@ -164,20 +169,26 @@ def save_game(app, map_screen, save_name, is_autosave=False, is_suspended=False)
     # 3. บันทึกแผนที่และสิ่งปลูกสร้าง (Nodes)
     for index, node in enumerate(map_screen.nodes_list):
         addons = getattr(node, 'addons', {})
-        
-        # ดึงสถานะตึกที่สร้างระหว่างเกม
         b_state = getattr(node, 'building_state', None)
         wb_cd = getattr(node, 'wallbuilder_cooldown', 0)
 
+        # ✨ 3. แปลง Dictionary ของระบบตลาดเป็น JSON String
+        m_trend = json.dumps(getattr(node, 'market_trend', {}))
+        m_activity = json.dumps(getattr(node, 'market_activity', {}))
+        m_timer = json.dumps(getattr(node, 'market_timer', {}))
+        m_rates = json.dumps(getattr(node, 'market_rates', {}))
+
+        # ✨ 4. บันทึกข้อมูลตลาดลง Database
         cursor.execute('''
-            INSERT INTO nodes (world_id, node_index, faction, node_type, loyalty, fatigue, farm_lvl, tavern_lvl, special_type, special_lvl, building_state, wallbuilder_cooldown)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO nodes (world_id, node_index, faction, node_type, loyalty, fatigue, farm_lvl, tavern_lvl, special_type, special_lvl, building_state, wallbuilder_cooldown, market_trend, market_activity, market_timer, market_rates)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             world_id, index, node.faction, node.node_type, 
             getattr(node, 'loyalty', 100), getattr(node, 'fatigue', 0),
             addons.get('farm', 1), addons.get('tavern', 1),
             addons.get('special', None), addons.get('special_lvl', 0),
-            b_state, wb_cd  # 🟢 ยัดค่าที่ดึงมาลง Database
+            b_state, wb_cd, 
+            m_trend, m_activity, m_timer, m_rates  # ใส่ค่า JSON ลงไป
         ))
         
         node_id = cursor.lastrowid
